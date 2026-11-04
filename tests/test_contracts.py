@@ -42,7 +42,15 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
     actual = operations(generated)
     identifiers = [op["operationId"] for op in actual.values()]
     assert len(identifiers) == len(set(identifiers))
-    extensions = {("/api/v1/auth/reauth", "post"): "reauthenticate"}
+    extensions = {
+        ("/api/v1/auth/reauth", "post"): "reauthenticate",
+        ("/api/v1/exchanges", "get"): "list_exchanges",
+        ("/api/v1/securities/{id}/identifiers/{mapping_id}", "patch"): "correct_identifier_period",
+        (
+            "/api/v1/securities/{id}/provider-symbols/{mapping_id}",
+            "patch",
+        ): "correct_provider_symbol_period",
+    }
     for route, operation in actual.items():
         if route in extensions:
             assert operation["operationId"] == extensions[route]

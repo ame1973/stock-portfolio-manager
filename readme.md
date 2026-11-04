@@ -40,7 +40,7 @@ Before a schema change, the migration command checks integrity and retains a mod
 
 ## Owner authentication
 
-The authentication API and browser initialization/login/logout are implemented. Portfolio master-data workflows and the remaining financial features are still under development.
+The authentication API and browser initialization/login/logout are implemented. Browser master-data workflows and the remaining financial features are still under development.
 
 After migration, explicitly issue a cryptographically random setup token from a trusted local terminal. It is valid for ten minutes, consumed once, and never returned by an HTTP endpoint or automatically written to service/container logs. To create or replace it locally:
 
@@ -62,6 +62,21 @@ Authenticated mutations require `X-CSRF-Token` (obtained from `/api/v1/auth/csrf
 - `POST /auth/change-password`: confirm the old password, set a new one, and revoke **all** existing sessions.
 
 All paths above have the `/api/v1` prefix. Full generated request/response types are in `packages/contracts/`. Development-only interactive API documentation is at the API server's `/docs`; it is disabled in production.
+
+## Master data API
+
+Portfolios, brokers, accounts, securities, identifiers, and provider symbols have authenticated create/list/update workflows. Lists use bounded keyset pagination (`limit` 1–100, `cursor`) and literal-text search (`q`). Record updates use `If-Match: "<version>"` and return a new version/ETag. An outdated version returns 412; an idempotency key reused with different input returns 409.
+
+- Reporting currency is **HKD only**. Trading/cash currencies are HKD/USD, with distinct exchange identities. `0005` stays a string, and `BRK.B` keeps its dot.
+- Supported exchanges are listed at `/api/v1/exchanges`. No arbitrary unsupported exchange or currency is created automatically.
+- Brokers/accounts are owner-scoped. Deletion endpoints archive them; dependent accounts, financial history, identifiers, and evidence are not hard-deleted.
+- Exchange/security metadata is an installation-wide catalogue for the single-owner product. This is not a multi-tenant authorization model.
+- New securities are unverified. Manual verification requires an explanation. Creating a security does not guess provider aliases, contact a provider, or promise live coverage.
+- Identifier and provider-alias periods cannot overlap ambiguously. Audited period corrections use the nested mapping PATCH endpoints with `If-Match` and an explanation. Ticker validity defaults to the exchange-local creation date unless explicitly supplied; historical validity is not invented.
+
+Account creation can optionally post an initial cash balance. Supply `opening_cash` as a decimal string and an explicit non-future `opening_cash_date`; USD also requires a locked `opening_fx_rate_hkd`. This creates one audited starting-balance adjustment atomically, **not** an external deposit. Completeness defaults to UNKNOWN and must be asserted separately after reconciliation. Opening cash metadata is never added a second time to ledger balances. Corrections to an existing starting balance use ledger adjustment workflows, not account metadata edits.
+
+All monetary inputs reject floats, scientific notation, excessive fractional digits, and INT64 overflow. SQLite guards reject REAL values in scaled financial columns even on a direct SQL path. No input is silently rounded.
 
 ## Trusted HTTPS proxy
 

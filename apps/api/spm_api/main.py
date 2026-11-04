@@ -16,6 +16,7 @@ from spm_api.auth_routes import router as auth_router
 from spm_api.config import Settings
 from spm_api.db import check_database, make_engine
 from spm_api.errors import ApiError, Error, Status, error_response
+from spm_api.master_routes import router as master_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -91,6 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Status(status="ready")
 
     app.include_router(auth_router)
+    app.include_router(master_router)
     return app
 
 
