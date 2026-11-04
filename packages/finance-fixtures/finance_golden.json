@@ -1,0 +1,85 @@
+{
+  "contract_version": "1.0.0",
+  "numeric_mode": "DECIMAL_ONLY",
+  "currency_base": "HKD",
+  "scale": {"money": 6, "quantity": 8, "price": 8, "fx": 12},
+  "rounding": "ROUND_HALF_UP_AT_PERSISTED_MONEY_MICRO",
+  "cases": [
+    {
+      "id": "FIN-001",
+      "name": "Independent account moving-average buy/sell, expenses not double counted",
+      "initial": {"account": "A", "quantity": "0.00000000", "cost_hkd": "0.000000"},
+      "steps": [
+        {"type": "BUY", "qty": "10.00000000", "price_usd": "100.00000000", "fee_usd": "1.000000", "tax_usd": "0.000000", "fx_hkd_per_usd": "7.800000000000"},
+        {"type": "SELL", "qty": "4.00000000", "price_usd": "120.00000000", "fee_usd": "2.000000", "tax_usd": "0.000000", "fx_hkd_per_usd": "7.800000000000"}
+      ],
+      "expected": {"buy_settlement_usd": "1001.000000", "buy_booked_cost_hkd": "7807.800000", "sell_settlement_usd": "478.000000", "sell_cash_in_hkd": "3728.400000", "allocated_cost_hkd": "3123.120000", "realized_hkd": "605.280000", "quantity": "6.00000000", "remaining_cost_hkd": "4684.680000"}
+    },
+    {
+      "id": "FIN-002",
+      "name": "Transfer 4 shares retains costs and does not realize gain",
+      "initial": {"account_A": {"qty": "10.00000000", "cost_hkd": "7807.800000"}, "account_B": {"qty": "0.00000000", "cost_hkd": "0.000000"}},
+      "action": {"type": "TRANSFER", "qty": "4.00000000", "from": "A", "to": "B"},
+      "expected": {"moved_cost_hkd": "3123.120000", "account_A_qty": "6.00000000", "account_A_cost_hkd": "4684.680000", "account_B_qty": "4.00000000", "account_B_cost_hkd": "3123.120000", "realized_hkd": "0.000000"}
+    },
+    {
+      "id": "FIN-003",
+      "name": "3-for-2 stock split and cost continuity",
+      "initial": {"qty": "10.00000000", "cost_hkd": "7807.800000"},
+      "action": {"type": "SPLIT", "numerator": 3, "denominator": 2},
+      "expected": {"qty": "15.00000000", "cost_hkd": "7807.800000", "avg_cost_hkd_per_share": "520.520000"}
+    },
+    {
+      "id": "FIN-004",
+      "name": "Ex-date eligibility excludes same-day trades",
+      "trades": [
+        {"date": "2026-09-01", "type": "BUY", "qty": "10.00000000"},
+        {"date": "2026-10-01", "type": "SELL", "qty": "4.00000000"},
+        {"date": "2026-10-01", "type": "BUY", "qty": "3.00000000"}
+      ],
+      "event": {"ex_date": "2026-10-01", "dps": "1.00000000"},
+      "expected": {"eligible_qty": "10.00000000", "gross_currency": "10.000000"}
+    },
+    {
+      "id": "FIN-005",
+      "name": "USD dividend local net and locked historical FX",
+      "event": {"eligible_qty": "10.00000000", "dps_usd": "1.00000000", "withholding_rate": "0.300000", "fee_usd": "1.000000", "fx_hkd_per_usd": "7.800000000000"},
+      "expected": {"gross_usd": "10.000000", "tax_usd": "3.000000", "fee_usd": "1.000000", "expected_net_usd": "6.000000", "expected_hkd": "46.800000", "receipt_state": "NOT_RECEIVED"}
+    },
+    {
+      "id": "FIN-006",
+      "name": "Current FX update must not change historical posted HKD",
+      "old": {"usd_amount": "100.000000", "booked_fx": "7.800000000000", "booked_hkd": "780.000000"},
+      "new_current_fx": "7.900000000000",
+      "expected": {"booked_hkd_after_refresh": "780.000000"}
+    },
+    {
+      "id": "FIN-007",
+      "name": "Missing quote means no aggregate valuation, not zero",
+      "position": {"qty": "10.00000000", "cost_hkd": "1000.000000", "quote": null},
+      "expected": {"market_value_hkd": null, "unrealized_hkd": null, "total_pnl_hkd": null, "quality": "MISSING_QUOTE"}
+    },
+    {
+      "id": "FIN-008",
+      "name": "Sell more than account holdings must reject atomically",
+      "initial": {"qty": "2.00000000", "cost_hkd": "100.000000"},
+      "action": {"type": "SELL", "qty": "3.00000000"},
+      "expected": {"error": "INSUFFICIENT_SHARES", "mutated_rows": 0, "remaining_qty": "2.00000000"}
+    },
+    {
+      "id": "FIN-009",
+      "name": "Incomplete cash ledger cannot compute NAV or TWR",
+      "portfolio": {"cash_completeness": "PARTIAL", "securities_market_value_hkd": "1200.000000", "cash_balance_hkd": "100.000000"},
+      "expected": {"nav_hkd": null, "twr": null, "quality": "NOT_COMPUTABLE"}
+    },
+    {
+      "id": "FIN-010",
+      "name": "Special and regular same ex-date remain separate",
+      "events": [
+        {"identity": "event-A", "event_type": "REGULAR", "ex_date": "2026-10-10", "dps_usd": "0.25000000"},
+        {"identity": "event-B", "event_type": "SPECIAL", "ex_date": "2026-10-10", "dps_usd": "0.05000000"}
+      ],
+      "expected": {"events_count": 2, "eligible_qty_each": "10.00000000", "gross_total_usd": "3.000000"}
+    }
+  ]
+}

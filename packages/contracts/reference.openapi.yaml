@@ -1,0 +1,4615 @@
+openapi: 3.1.0
+info:
+  title: Stock Portfolio Manager 2.0 API
+  version: 1.0.0-spec
+  description: Greenfield source-of-truth HTTP contract. All monetary/quantity values are decimal strings;
+    live provider coverage not guaranteed.
+servers:
+- url: /
+  description: Same-origin NAS reverse proxy
+security:
+- cookieAuth: []
+paths:
+  /api/v1/setup/status:
+    get:
+      tags:
+      - Setup
+      operationId: get_setup_status
+      summary: Get Setup Status
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatus'
+        '400': &id001
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': &id002
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403': &id003
+          description: Forbidden/CSRF
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409': &id004
+          description: Business conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412': &id005
+          description: Version mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422': &id006
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429': &id007
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503': &id008
+          description: Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters: []
+      security: []
+  /api/v1/setup/initialize:
+    post:
+      tags:
+      - Setup
+      operationId: initialize_owner
+      summary: Initialize Owner
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupInitialize'
+      security: []
+      description: Requires one-time secret issued via NAS CLI/log; Origin and rate limiting required.
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Auth
+      operationId: login
+      summary: Login
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+      security: []
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Auth
+      operationId: get_me
+      summary: Get Me
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - Auth
+      operationId: logout
+      summary: Logout
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /api/v1/auth/csrf:
+    get:
+      tags:
+      - Auth
+      operationId: get_csrf_token
+      summary: Get Csrf Token
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsrfToken'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+  /api/v1/auth/change-password:
+    post:
+      tags:
+      - Auth
+      operationId: change_password
+      summary: Change Password
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+  /api/v1/auth/sessions:
+    get:
+      tags:
+      - Auth
+      operationId: list_sessions
+      summary: List Sessions
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Session'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+  /api/v1/auth/sessions/{id}:
+    delete:
+      tags:
+      - Auth
+      operationId: revoke_session
+      summary: Revoke Session
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /api/v1/portfolios:
+    get:
+      tags:
+      - Portfolios
+      operationId: list_portfolios
+      summary: List Portfolios
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Portfolio'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+    post:
+      tags:
+      - Portfolios
+      operationId: create_portfolio
+      summary: Create Portfolio
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortfolioCreate'
+  /api/v1/portfolios/{id}:
+    get:
+      tags:
+      - Portfolios
+      operationId: get_portfolio
+      summary: Get Portfolio
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+    patch:
+      tags:
+      - Portfolios
+      operationId: update_portfolio
+      summary: Update Portfolio
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortfolioUpdate'
+  /api/v1/portfolios/{id}/dashboard:
+    get:
+      tags:
+      - Portfolios
+      operationId: get_portfolio_dashboard
+      summary: Get Portfolio Dashboard
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+  /api/v1/portfolios/{id}/holdings:
+    get:
+      tags:
+      - Portfolios
+      operationId: get_portfolio_holdings
+      summary: Get Portfolio Holdings
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Position'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/brokers:
+    get:
+      tags:
+      - Brokers
+      operationId: list_brokers
+      summary: List Brokers
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Broker'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+    post:
+      tags:
+      - Brokers
+      operationId: create_broker
+      summary: Create Broker
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Broker'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrokerCreate'
+  /api/v1/brokers/{id}:
+    patch:
+      tags:
+      - Brokers
+      operationId: update_broker
+      summary: Update Broker
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Broker'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrokerUpdate'
+    delete:
+      tags:
+      - Brokers
+      operationId: archive_broker
+      summary: Archive Broker
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      description: Hard delete blocked if linked financial facts exist.
+  /api/v1/accounts:
+    get:
+      tags:
+      - Accounts
+      operationId: list_accounts
+      summary: List Accounts
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/PortfolioId'
+    post:
+      tags:
+      - Accounts
+      operationId: create_account
+      summary: Create Account
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreate'
+  /api/v1/accounts/{id}:
+    get:
+      tags:
+      - Accounts
+      operationId: get_account
+      summary: Get Account
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+    patch:
+      tags:
+      - Accounts
+      operationId: update_account
+      summary: Update Account
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountUpdate'
+    delete:
+      tags:
+      - Accounts
+      operationId: archive_account
+      summary: Archive Account
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+  /api/v1/securities:
+    get:
+      tags:
+      - Securities
+      operationId: list_securities
+      summary: List Securities
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Security'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      tags:
+      - Securities
+      operationId: create_security
+      summary: Create Security
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Security'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecurityCreate'
+  /api/v1/securities/{id}:
+    get:
+      tags:
+      - Securities
+      operationId: get_security
+      summary: Get Security
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Security'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+    patch:
+      tags:
+      - Securities
+      operationId: update_security
+      summary: Update Security
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Security'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecurityUpdate'
+  /api/v1/securities/{id}/identifiers:
+    get:
+      tags:
+      - Securities
+      operationId: list_identifiers
+      summary: List Identifiers
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Identifier'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+    post:
+      tags:
+      - Securities
+      operationId: add_identifier
+      summary: Add Identifier
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identifier'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentifierCreate'
+  /api/v1/trades:
+    get:
+      tags:
+      - Trades
+      operationId: list_trades
+      summary: List Trades
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Trade'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/PortfolioId'
+      - $ref: '#/components/parameters/AccountId'
+      - $ref: '#/components/parameters/SecurityId'
+      - $ref: '#/components/parameters/FromDate'
+      - $ref: '#/components/parameters/ToDate'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      tags:
+      - Trades
+      operationId: create_trade
+      summary: Create Trade
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trade'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeCreate'
+  /api/v1/trades/{id}:
+    get:
+      tags:
+      - Trades
+      operationId: get_trade
+      summary: Get Trade
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trade'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+    patch:
+      tags:
+      - Trades
+      operationId: revise_trade
+      summary: Revise Trade
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trade'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeCreate'
+    delete:
+      tags:
+      - Trades
+      operationId: void_trade
+      summary: Void Trade
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+  /api/v1/cash-entries:
+    get:
+      tags:
+      - Cash
+      operationId: list_cash_entries
+      summary: List Cash Entries
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CashEntry'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/AccountId'
+      - $ref: '#/components/parameters/FromDate'
+      - $ref: '#/components/parameters/ToDate'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      tags:
+      - Cash
+      operationId: create_cash_entry
+      summary: Create Cash Entry
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashEntry'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashEntryCreate'
+  /api/v1/expenses:
+    get:
+      tags:
+      - Cash
+      operationId: list_expenses
+      summary: List Expenses
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Expense'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/AccountId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      tags:
+      - Cash
+      operationId: create_expense
+      summary: Create Expense
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseCreate'
+  /api/v1/expenses/{id}:
+    patch:
+      tags:
+      - Cash
+      operationId: revise_expense
+      summary: Revise Expense
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseCreate'
+    delete:
+      tags:
+      - Cash
+      operationId: void_expense
+      summary: Void Expense
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+  /api/v1/security-transfers:
+    post:
+      tags:
+      - Cash
+      operationId: create_security_transfer
+      summary: Create Security Transfer
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityTransfer'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+  /api/v1/corporate-actions:
+    get:
+      tags:
+      - CorporateActions
+      operationId: list_corporate_actions
+      summary: List Corporate Actions
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CorporateAction'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/SecurityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      tags:
+      - CorporateActions
+      operationId: create_corporate_action
+      summary: Create Corporate Action
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorporateAction'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorporateActionCreate'
+  /api/v1/dividends/events:
+    get:
+      tags:
+      - Dividends
+      operationId: list_dividend_events
+      summary: List Dividend Events
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DividendEvent'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/SecurityId'
+      - $ref: '#/components/parameters/FromDate'
+      - $ref: '#/components/parameters/ToDate'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      tags:
+      - Dividends
+      operationId: create_manual_dividend_event
+      summary: Create Manual Dividend Event
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendEvent'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DividendEventCreate'
+  /api/v1/dividends/events/{id}:
+    get:
+      tags:
+      - Dividends
+      operationId: get_dividend_event
+      summary: Get Dividend Event
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendEvent'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+    patch:
+      tags:
+      - Dividends
+      operationId: revise_dividend_event
+      summary: Revise Dividend Event
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendEvent'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DividendEventCreate'
+  /api/v1/dividends/{event_id}/verify:
+    post:
+      tags:
+      - Dividends
+      operationId: verify_dividend_event
+      summary: Verify Dividend Event
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendEvent'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/EventId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyDividend'
+  /api/v1/dividends/observations:
+    get:
+      tags:
+      - Dividends
+      operationId: list_dividend_observations
+      summary: List Dividend Observations
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DividendObservation'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/SecurityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/dividends/conflicts:
+    get:
+      tags:
+      - Dividends
+      operationId: list_dividend_conflicts
+      summary: List Dividend Conflicts
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReviewItem'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/PortfolioId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/dividends/entitlements:
+    get:
+      tags:
+      - Dividends
+      operationId: list_dividend_entitlements
+      summary: List Dividend Entitlements
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DividendEntitlement'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/AccountId'
+      - $ref: '#/components/parameters/SecurityId'
+      - $ref: '#/components/parameters/FromDate'
+      - $ref: '#/components/parameters/ToDate'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/dividends/receipts:
+    get:
+      tags:
+      - Dividends
+      operationId: list_dividend_receipts
+      summary: List Dividend Receipts
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DividendReceipt'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/AccountId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      tags:
+      - Dividends
+      operationId: create_dividend_receipt
+      summary: Create Dividend Receipt
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendReceipt'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DividendReceiptCreate'
+  /api/v1/dividends/sync:
+    post:
+      tags:
+      - Dividends
+      operationId: start_dividend_sync
+      summary: Start Dividend Sync
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreated'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncDividendRequest'
+  /api/v1/quotes:
+    get:
+      tags:
+      - MarketData
+      operationId: list_quotes
+      summary: List Quotes
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Quote'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/SecurityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/fx-rates:
+    get:
+      tags:
+      - MarketData
+      operationId: list_fx_rates
+      summary: List Fx Rates
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Fx'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/FromDate'
+      - $ref: '#/components/parameters/ToDate'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/analytics/performance:
+    get:
+      tags:
+      - Analytics
+      operationId: get_performance
+      summary: Get Performance
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analytics'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/PortfolioId'
+      - $ref: '#/components/parameters/FromDate'
+      - $ref: '#/components/parameters/ToDate'
+  /api/v1/analytics/dividends:
+    get:
+      tags:
+      - Analytics
+      operationId: get_dividend_analytics
+      summary: Get Dividend Analytics
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analytics'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/PortfolioId'
+      - $ref: '#/components/parameters/FromDate'
+      - $ref: '#/components/parameters/ToDate'
+  /api/v1/analytics/allocation:
+    get:
+      tags:
+      - Analytics
+      operationId: get_allocation
+      summary: Get Allocation
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analytics'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/PortfolioId'
+  /api/v1/imports:
+    post:
+      tags:
+      - ImportExport
+      operationId: upload_import
+      summary: Upload Import
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportBatch'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+  /api/v1/imports/{id}:
+    get:
+      tags:
+      - ImportExport
+      operationId: get_import
+      summary: Get Import
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportBatch'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+  /api/v1/imports/{id}/preview:
+    post:
+      tags:
+      - ImportExport
+      operationId: preview_import
+      summary: Preview Import
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportPreview'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportPreviewRequest'
+  /api/v1/imports/{id}/commit:
+    post:
+      tags:
+      - ImportExport
+      operationId: commit_import
+      summary: Commit Import
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreated'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportCommit'
+  /api/v1/exports:
+    post:
+      tags:
+      - ImportExport
+      operationId: create_export
+      summary: Create Export
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreated'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+  /api/v1/jobs:
+    get:
+      tags:
+      - Jobs
+      operationId: list_jobs
+      summary: List Jobs
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Job'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/jobs/{id}:
+    get:
+      tags:
+      - Jobs
+      operationId: get_job
+      summary: Get Job
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+  /api/v1/jobs/{id}/cancel:
+    post:
+      tags:
+      - Jobs
+      operationId: cancel_job
+      summary: Cancel Job
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /api/v1/backups:
+    get:
+      tags:
+      - Backups
+      operationId: list_backups
+      summary: List Backups
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Backup'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+    post:
+      tags:
+      - Backups
+      operationId: create_backup
+      summary: Create Backup
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreated'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /api/v1/backups/{id}/download:
+    get:
+      tags:
+      - Backups
+      operationId: download_backup
+      summary: Download Backup
+      responses:
+        '200':
+          description: Success
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+  /api/v1/backups/restore/validate:
+    post:
+      tags:
+      - Backups
+      operationId: validate_backup_restore
+      summary: Validate Backup Restore
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupRestoreResult'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackupRestoreValidate'
+  /api/v1/backups/restore:
+    post:
+      tags:
+      - Backups
+      operationId: restore_backup
+      summary: Restore Backup
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreated'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackupRestore'
+  /api/v1/providers:
+    get:
+      tags:
+      - Providers
+      operationId: list_providers
+      summary: List Providers
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Provider'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+  /api/v1/providers/{provider_id}/health:
+    get:
+      tags:
+      - Providers
+      operationId: get_provider_health
+      summary: Get Provider Health
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderHealth'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/ProviderId'
+  /api/v1/providers/coverage:
+    get:
+      tags:
+      - Providers
+      operationId: get_provider_coverage
+      summary: Get Provider Coverage
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProviderCoverage'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/SecurityId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/health/live:
+    get:
+      tags:
+      - Health
+      operationId: health_live
+      summary: Health Live
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+      security: []
+  /api/v1/health/ready:
+    get:
+      tags:
+      - Health
+      operationId: health_ready
+      summary: Health Ready
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+  /api/v1/system/info:
+    get:
+      tags:
+      - System
+      operationId: get_system_info
+      summary: Get System Info
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemInfo'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters: []
+  /api/v1/audit-events:
+    get:
+      tags:
+      - System
+      operationId: list_audit_events
+      summary: List Audit Events
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEvent'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/FromDate'
+      - $ref: '#/components/parameters/ToDate'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/securities/{id}/provider-symbols:
+    get:
+      tags:
+      - Securities
+      operationId: list_provider_symbols
+      summary: List Provider Symbols
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProviderSymbol'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                required:
+                - items
+                - next_cursor
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+    post:
+      tags:
+      - Securities
+      operationId: add_provider_symbol
+      summary: Add Provider Symbol
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderSymbol'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderSymbolCreate'
+  /api/v1/cash-entries/{id}:
+    patch:
+      tags:
+      - Cash
+      operationId: revise_cash_entry
+      summary: Revise Cash Entry
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashEntry'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashEntryCreate'
+      description: Append reversal and new cash entry; never delete ledger history.
+    delete:
+      tags:
+      - Cash
+      operationId: void_cash_entry
+      summary: Void Cash Entry
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      description: Append compensating cash ledger reversal, never SQL hard delete.
+  /api/v1/corporate-actions/{id}:
+    patch:
+      tags:
+      - CorporateActions
+      operationId: revise_corporate_action
+      summary: Revise Corporate Action
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorporateAction'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorporateActionCreate'
+    delete:
+      tags:
+      - CorporateActions
+      operationId: void_corporate_action
+      summary: Void Corporate Action
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+  /api/v1/dividends/events/{id}/withdraw:
+    post:
+      tags:
+      - Dividends
+      operationId: withdraw_dividend_event
+      summary: Withdraw Dividend Event
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendEvent'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+  /api/v1/dividends/receipts/{id}/void:
+    post:
+      tags:
+      - Dividends
+      operationId: void_dividend_receipt
+      summary: Void Dividend Receipt
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+      description: Void with immutable reversing ledger entry and audit; posted receipt never physically deleted.
+  /api/v1/quotes/refresh:
+    post:
+      tags:
+      - MarketData
+      operationId: refresh_quotes
+      summary: Refresh Quotes
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreated'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /api/v1/fx-rates/refresh:
+    post:
+      tags:
+      - MarketData
+      operationId: refresh_fx_rates
+      summary: Refresh Fx Rates
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreated'
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/CsrfTokenHeader'
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /api/v1/exports/{id}/download:
+    get:
+      tags:
+      - ImportExport
+      operationId: download_export
+      summary: Download Export
+      responses:
+        '200':
+          description: Success
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400': *id001
+        '401': *id002
+        '403': *id003
+        '409': *id004
+        '412': *id005
+        '422': *id006
+        '429': *id007
+        '503': *id008
+      parameters:
+      - $ref: '#/components/parameters/UuidId'
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: spm_session
+      description: HttpOnly/Secure/SameSite cookie; state changes require CSRF header.
+  schemas:
+    Money:
+      type: string
+      pattern: ^-?\d+(\.\d{1,6})?$
+      example: '123.450000'
+      description: Decimal string in currency units, never binary float.
+    Quantity:
+      type: string
+      pattern: ^\d+(\.\d{1,8})?$
+      example: '10.00000000'
+      description: Decimal shares string, max 8 fractional digits.
+    Price:
+      type: string
+      pattern: ^\d+(\.\d{1,8})?$
+      example: '1.25000000'
+    FxRate:
+      type: string
+      pattern: ^\d+(\.\d{1,12})?$
+      example: '7.812345678901'
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+      required:
+      - code
+      - message
+      - request_id
+    Status:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+        request_id:
+          type: string
+      required:
+      - status
+    Success:
+      type: object
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+      required:
+      - ok
+    Id:
+      type: object
+      additionalProperties: false
+      properties:
+        id: &id009
+          type: string
+          format: uuid
+      required:
+      - id
+    Owner:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        created_at: &id010
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+      required:
+      - id
+      - created_at
+      - is_active
+    SetupStatus:
+      type: object
+      additionalProperties: false
+      properties:
+        initialized:
+          type: boolean
+        requires_token:
+          type: boolean
+      required:
+      - initialized
+      - requires_token
+    SetupInitialize:
+      type: object
+      additionalProperties: false
+      properties:
+        setup_token:
+          type: string
+          minLength: 12
+        password:
+          type: string
+          minLength: 12
+          maxLength: 200
+      required:
+      - setup_token
+      - password
+    Login:
+      type: object
+      additionalProperties: false
+      properties:
+        password:
+          type: string
+          minLength: 1
+      required:
+      - password
+    ChangePassword:
+      type: object
+      additionalProperties: false
+      properties:
+        old_password:
+          type: string
+          minLength: 1
+        new_password:
+          type: string
+          minLength: 12
+          maxLength: 200
+      required:
+      - old_password
+      - new_password
+    Session:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        created_at: *id010
+        last_seen_at: *id010
+        expires_at: *id010
+        revoked_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - created_at
+      - expires_at
+    CsrfToken:
+      type: object
+      additionalProperties: false
+      properties:
+        csrf_token:
+          type: string
+        expires_at: *id010
+      required:
+      - csrf_token
+      - expires_at
+    PortfolioCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        base_currency: &id011
+          type: string
+          enum:
+          - HKD
+          - USD
+      required:
+      - name
+    Portfolio:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        name:
+          type: string
+        base_currency: *id011
+        cash_completeness:
+          type: string
+          enum:
+          - UNKNOWN
+          - PARTIAL
+          - COMPLETE
+        data_revision:
+          type: integer
+        active_projection_version:
+          type: integer
+        version:
+          type: integer
+      required:
+      - id
+      - name
+      - base_currency
+      - cash_completeness
+      - data_revision
+      - version
+    PortfolioUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        cash_completeness:
+          type: string
+          enum:
+          - UNKNOWN
+          - PARTIAL
+          - COMPLETE
+      required: []
+    BrokerCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        dividend_fee:
+          $ref: '#/components/schemas/Money'
+        dividend_fee_currency: *id011
+      required:
+      - name
+    Broker:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        name:
+          type: string
+        dividend_fee:
+          $ref: '#/components/schemas/Money'
+        dividend_fee_currency: *id011
+        version:
+          type: integer
+      required:
+      - id
+      - name
+      - dividend_fee
+      - dividend_fee_currency
+      - version
+    AccountCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        portfolio_id: *id009
+        broker_id: *id009
+        name:
+          type: string
+          minLength: 1
+        default_currency: *id011
+        opening_cash:
+          $ref: '#/components/schemas/Money'
+        cash_completeness:
+          type: string
+          enum:
+          - UNKNOWN
+          - PARTIAL
+          - COMPLETE
+      required:
+      - portfolio_id
+      - broker_id
+      - name
+      - default_currency
+    Account:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        portfolio_id: *id009
+        broker_id: *id009
+        name:
+          type: string
+        default_currency: *id011
+        status: &id012
+          type: string
+          enum:
+          - ACTIVE
+          - ARCHIVED
+        opening_cash:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        cash_completeness:
+          type: string
+          enum:
+          - UNKNOWN
+          - PARTIAL
+          - COMPLETE
+        version:
+          type: integer
+      required:
+      - id
+      - portfolio_id
+      - broker_id
+      - name
+      - default_currency
+      - status
+      - cash_completeness
+      - version
+    AccountUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+        status: *id012
+        cash_completeness:
+          type: string
+          enum:
+          - UNKNOWN
+          - PARTIAL
+          - COMPLETE
+      required: []
+    Identifier:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        security_id: *id009
+        exchange_code:
+          type: string
+        identifier_type:
+          type: string
+          enum:
+          - TICKER
+          - ISIN
+          - MIC
+          - OTHER
+        identifier_value:
+          type: string
+        effective_from: &id013
+          type: string
+          format: date
+        effective_to:
+          type:
+          - string
+          - 'null'
+          format: date
+      required:
+      - id
+      - security_id
+      - exchange_code
+      - identifier_type
+      - identifier_value
+      - effective_from
+    IdentifierCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        exchange_code:
+          type: string
+        identifier_type:
+          type: string
+          enum:
+          - TICKER
+          - ISIN
+          - MIC
+          - OTHER
+        identifier_value:
+          type: string
+        effective_from: *id013
+        effective_to: *id013
+      required:
+      - exchange_code
+      - identifier_type
+      - identifier_value
+      - effective_from
+    SecurityCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        exchange_code:
+          type: string
+        display_ticker:
+          type: string
+          minLength: 1
+        name:
+          type: string
+        security_type:
+          type: string
+          enum:
+          - EQUITY
+          - ETF
+          - REIT
+          - ADR
+          - FUND
+          - OTHER
+        quote_currency: *id011
+        isin:
+          type: string
+      required:
+      - exchange_code
+      - display_ticker
+      - name
+      - quote_currency
+    Security:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        exchange_code:
+          type: string
+        display_ticker:
+          type: string
+        name:
+          type: string
+        security_type:
+          type: string
+        quote_currency: *id011
+        isin:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+        verified:
+          type: boolean
+      required:
+      - id
+      - exchange_code
+      - display_ticker
+      - name
+      - security_type
+      - quote_currency
+      - status
+      - verified
+    SecurityUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - SUSPENDED
+          - DELISTED
+          - UNKNOWN
+        verified:
+          type: boolean
+      required: []
+    TradeCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        portfolio_id: *id009
+        account_id: *id009
+        security_id: *id009
+        side:
+          type: string
+          enum:
+          - BUY
+          - SELL
+        trade_date: *id013
+        executed_at_utc: *id010
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        price:
+          $ref: '#/components/schemas/Price'
+        fee:
+          $ref: '#/components/schemas/Money'
+        tax:
+          $ref: '#/components/schemas/Money'
+        currency: *id011
+        fx_rate_hkd:
+          $ref: '#/components/schemas/FxRate'
+        fx_source:
+          type: string
+        note: &id014
+          type: string
+          maxLength: 1000
+      required:
+      - portfolio_id
+      - account_id
+      - security_id
+      - side
+      - trade_date
+      - quantity
+      - price
+      - currency
+    Trade:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        portfolio_id: *id009
+        account_id: *id009
+        security_id: *id009
+        side:
+          type: string
+          enum:
+          - BUY
+          - SELL
+        trade_date: *id013
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        price:
+          $ref: '#/components/schemas/Price'
+        fee:
+          $ref: '#/components/schemas/Money'
+        tax:
+          $ref: '#/components/schemas/Money'
+        currency: *id011
+        fx_rate_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/FxRate'
+          - type: 'null'
+        settlement:
+          $ref: '#/components/schemas/Money'
+        booked_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - DRAFT_SCHEDULED
+          - PENDING_FX
+          - SUPERSEDED
+          - VOID
+        revision:
+          type: integer
+        supersedes_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+      required:
+      - id
+      - account_id
+      - security_id
+      - side
+      - trade_date
+      - quantity
+      - price
+      - currency
+      - settlement
+      - status
+      - revision
+    CashEntryCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        account_id: *id009
+        effective_date: *id013
+        kind:
+          type: string
+          enum:
+          - DEPOSIT
+          - WITHDRAW
+          - TRANSFER_IN
+          - TRANSFER_OUT
+          - ADJUSTMENT
+        currency: *id011
+        amount:
+          $ref: '#/components/schemas/Money'
+        external_flow:
+          type: boolean
+        note: *id014
+      required:
+      - account_id
+      - effective_date
+      - kind
+      - currency
+      - amount
+    CashEntry:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        account_id: *id009
+        effective_date: *id013
+        kind:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        currency: *id011
+        external_flow:
+          type: boolean
+        source_type:
+          type: string
+      required:
+      - id
+      - account_id
+      - effective_date
+      - kind
+      - amount
+      - currency
+      - external_flow
+    ExpenseCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        account_id: *id009
+        date: *id013
+        category:
+          type: string
+          minLength: 1
+        amount:
+          $ref: '#/components/schemas/Money'
+        currency: *id011
+        fx_rate_hkd:
+          $ref: '#/components/schemas/FxRate'
+        note: *id014
+      required:
+      - account_id
+      - date
+      - category
+      - amount
+      - currency
+    Expense:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        account_id: *id009
+        date: *id013
+        category:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        currency: *id011
+        hkd_amount:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        status:
+          type: string
+        version:
+          type: integer
+      required:
+      - id
+      - account_id
+      - date
+      - category
+      - amount
+      - currency
+      - status
+      - version
+    TransferCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        portfolio_id: *id009
+        source_account_id: *id009
+        target_account_id: *id009
+        security_id: *id009
+        transfer_date: *id013
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        note: *id014
+      required:
+      - portfolio_id
+      - source_account_id
+      - target_account_id
+      - security_id
+      - transfer_date
+      - quantity
+    SecurityTransfer:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        portfolio_id: *id009
+        source_account_id: *id009
+        target_account_id: *id009
+        security_id: *id009
+        transfer_date: *id013
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        cost_moved_hkd:
+          $ref: '#/components/schemas/Money'
+      required:
+      - id
+      - portfolio_id
+      - source_account_id
+      - target_account_id
+      - security_id
+      - transfer_date
+      - quantity
+      - cost_moved_hkd
+    CorporateActionCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        security_id: *id009
+        action_type:
+          type: string
+          enum:
+          - SPLIT
+          - REVERSE_SPLIT
+          - SYMBOL_CHANGE
+          - CASH_IN_LIEU
+          - MERGER
+          - SPIN_OFF
+        effective_date: *id013
+        ratio_numerator:
+          type: integer
+          minimum: 1
+        ratio_denominator:
+          type: integer
+          minimum: 1
+        evidence_url:
+          type: string
+          format: uri
+        new_symbol:
+          type: string
+      required:
+      - security_id
+      - action_type
+      - effective_date
+    CorporateAction:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        security_id: *id009
+        action_type:
+          type: string
+        effective_date: *id013
+        ratio_numerator:
+          type: integer
+        ratio_denominator:
+          type: integer
+        status:
+          type: string
+          enum:
+          - CONFIRMED
+          - NEEDS_REVIEW
+          - VOID
+      required:
+      - id
+      - security_id
+      - action_type
+      - effective_date
+      - status
+    DividendEventCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        security_id: *id009
+        event_type:
+          type: string
+          enum:
+          - REGULAR
+          - SPECIAL
+          - INTERIM
+          - FINAL
+          - SUPPLEMENTAL
+          - ETF_DISTRIBUTION
+          - REIT_DISTRIBUTION
+          - UNKNOWN
+        ex_date: *id013
+        announce_date: *id013
+        record_date: *id013
+        pay_date: *id013
+        dps:
+          $ref: '#/components/schemas/Price'
+        currency: *id011
+        adjustment_basis:
+          type: string
+          enum:
+          - AS_DECLARED
+          - SPLIT_ADJUSTED
+          - UNKNOWN
+        source_url:
+          type: string
+          format: uri
+        reason: *id014
+      required:
+      - security_id
+      - event_type
+      - ex_date
+      - dps
+      - currency
+      - adjustment_basis
+    DividendEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        security_id: *id009
+        event_type:
+          type: string
+        ex_date: *id013
+        announce_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        record_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        pay_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        dps:
+          $ref: '#/components/schemas/Price'
+        currency: *id011
+        adjustment_basis:
+          type: string
+        workflow_status:
+          type: string
+          enum:
+          - PROVISIONAL
+          - CORROBORATED
+          - VERIFIED
+          - CONFLICT
+          - INCOMPLETE
+          - WITHDRAWN
+        current_revision_id: *id009
+        version:
+          type: integer
+        independent_origin_groups:
+          type: integer
+      required:
+      - id
+      - security_id
+      - event_type
+      - ex_date
+      - dps
+      - currency
+      - adjustment_basis
+      - workflow_status
+      - version
+    DividendObservation:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        security_id: *id009
+        provider_id:
+          type: string
+        origin_group:
+          type: string
+        provider_symbol:
+          type: string
+        ex_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        dps:
+          oneOf:
+          - $ref: '#/components/schemas/Price'
+          - type: 'null'
+        currency:
+          oneOf:
+          - *id011
+          - type: 'null'
+        adjustment_basis:
+          type: string
+        retrieved_at: *id010
+        source_url:
+          type:
+          - string
+          - 'null'
+          format: uri
+        normalized_sha256:
+          type: string
+      required:
+      - id
+      - security_id
+      - provider_id
+      - origin_group
+      - provider_symbol
+      - adjustment_basis
+      - retrieved_at
+      - normalized_sha256
+    VerifyDividend:
+      type: object
+      additionalProperties: false
+      properties:
+        revision_id: *id009
+        decision:
+          type: string
+          enum:
+          - ACCEPT_REVISION
+          - REJECT_REVISION
+          - MANUAL_OVERRIDE
+        reason:
+          type: string
+          minLength: 10
+        evidence_url:
+          type: string
+          format: uri
+      required:
+      - revision_id
+      - decision
+      - reason
+    DividendEntitlement:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        revision_id: *id009
+        account_id: *id009
+        eligible_shares:
+          $ref: '#/components/schemas/Quantity'
+        gross:
+          $ref: '#/components/schemas/Money'
+        tax:
+          $ref: '#/components/schemas/Money'
+        fee:
+          $ref: '#/components/schemas/Money'
+        expected_net:
+          $ref: '#/components/schemas/Money'
+        currency: *id011
+        fx_rate_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/FxRate'
+          - type: 'null'
+        expected_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        quality:
+          type: string
+          enum:
+          - ESTIMATED
+          - ACCRUED
+          - NEEDS_REVIEW
+          - CONFIRMED
+          - MISSING_FX
+      required:
+      - id
+      - revision_id
+      - account_id
+      - eligible_shares
+      - gross
+      - tax
+      - fee
+      - expected_net
+      - currency
+      - quality
+    DividendReceiptCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        entitlement_id: *id009
+        account_id: *id009
+        received_date: *id013
+        received_amount:
+          $ref: '#/components/schemas/Money'
+        currency: *id011
+        tax:
+          $ref: '#/components/schemas/Money'
+        fee:
+          $ref: '#/components/schemas/Money'
+        fx_rate_hkd:
+          $ref: '#/components/schemas/FxRate'
+        note: *id014
+      required:
+      - entitlement_id
+      - account_id
+      - received_date
+      - received_amount
+      - currency
+    DividendReceipt:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        entitlement_id: *id009
+        account_id: *id009
+        received_date: *id013
+        received_amount:
+          $ref: '#/components/schemas/Money'
+        currency: *id011
+        tax:
+          $ref: '#/components/schemas/Money'
+        fee:
+          $ref: '#/components/schemas/Money'
+        received_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+      required:
+      - id
+      - entitlement_id
+      - account_id
+      - received_date
+      - received_amount
+      - currency
+      - tax
+      - fee
+    Quality:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+          - COMPLETE
+          - PARTIAL
+          - ESTIMATED
+          - STALE
+          - UNKNOWN
+          - MISSING_QUOTE
+          - MISSING_FX
+          - NOT_COMPUTABLE
+          - NEEDS_REVIEW
+        reasons:
+          type: array
+          items:
+            type: string
+        as_of:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - status
+      - reasons
+    Position:
+      type: object
+      additionalProperties: false
+      properties:
+        account_id: *id009
+        security_id: *id009
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        cost_hkd:
+          $ref: '#/components/schemas/Money'
+        market_value_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        realized_hkd:
+          $ref: '#/components/schemas/Money'
+        unrealized_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        quality:
+          $ref: '#/components/schemas/Quality'
+      required:
+      - account_id
+      - security_id
+      - quantity
+      - cost_hkd
+      - realized_hkd
+      - quality
+    Dashboard:
+      type: object
+      additionalProperties: false
+      properties:
+        portfolio_id: *id009
+        market_value_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        cash_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        nav_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        total_pnl_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        realized_hkd:
+          $ref: '#/components/schemas/Money'
+        dividends_accrued_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        dividends_received_hkd:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'
+        quality:
+          $ref: '#/components/schemas/Quality'
+        as_of: *id010
+      required:
+      - portfolio_id
+      - realized_hkd
+      - quality
+      - as_of
+    Analytics:
+      type: object
+      additionalProperties: false
+      properties:
+        portfolio_id: *id009
+        metric:
+          type: string
+        currency: *id011
+        points:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              date: *id013
+              value:
+                oneOf:
+                - $ref: '#/components/schemas/Money'
+                - type: 'null'
+              quality:
+                $ref: '#/components/schemas/Quality'
+            required:
+            - date
+            - quality
+        quality:
+          $ref: '#/components/schemas/Quality'
+      required:
+      - portfolio_id
+      - metric
+      - currency
+      - points
+      - quality
+    Quote:
+      type: object
+      additionalProperties: false
+      properties:
+        security_id: *id009
+        price:
+          $ref: '#/components/schemas/Price'
+        currency: *id011
+        provider_id:
+          type: string
+        quote_as_of: *id010
+        fetched_at: *id010
+        quality:
+          type: string
+          enum:
+          - DELAYED
+          - EOD
+          - REALTIME
+          - STALE
+          - UNKNOWN
+      required:
+      - security_id
+      - price
+      - currency
+      - provider_id
+      - quote_as_of
+      - fetched_at
+      - quality
+    Fx:
+      type: object
+      additionalProperties: false
+      properties:
+        base_currency: *id011
+        quote_currency: *id011
+        as_of_date: *id013
+        rate:
+          $ref: '#/components/schemas/FxRate'
+        provider_id:
+          type: string
+        quality:
+          type: string
+      required:
+      - base_currency
+      - quote_currency
+      - as_of_date
+      - rate
+      - provider_id
+      - quality
+    SyncDividendRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        security_ids:
+          type: array
+          items: *id009
+        from_date: *id013
+        to_date: *id013
+        provider_ids:
+          type: array
+          items:
+            type: string
+        force:
+          type: boolean
+      required: []
+    JobCreated:
+      type: object
+      additionalProperties: false
+      properties:
+        job_id: *id009
+        status:
+          type: string
+          enum:
+          - QUEUED
+          - RUNNING
+      required:
+      - job_id
+      - status
+    Job:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        kind:
+          type: string
+        status:
+          type: string
+          enum:
+          - QUEUED
+          - LEASED
+          - RUNNING
+          - RETRYING
+          - PARTIAL
+          - SUCCEEDED
+          - FAILED
+          - CANCEL_REQUESTED
+          - CANCELLED
+        progress_done:
+          type: integer
+        progress_total:
+          type: integer
+        attempt_count:
+          type: integer
+        last_error_code:
+          type:
+          - string
+          - 'null'
+        result:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+      required:
+      - id
+      - kind
+      - status
+      - progress_done
+      - attempt_count
+    ImportBatch:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        file_name:
+          type: string
+        file_sha256:
+          type: string
+        format:
+          type: string
+          enum:
+          - XLSX
+          - CSV
+          - JSON
+        status:
+          type: string
+          enum:
+          - UPLOADED
+          - PREVIEWED
+          - COMMITTED
+          - PARTIAL
+          - FAILED
+          - ROLLED_BACK
+        summary:
+          type: object
+          additionalProperties: true
+      required:
+      - id
+      - file_name
+      - file_sha256
+      - format
+      - status
+    ImportPreviewRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        mapping:
+          type: object
+          additionalProperties:
+            type: string
+        mode:
+          type: string
+          enum:
+          - ALL_OR_NOTHING
+          - PARTIAL_CONFIRMED
+      required:
+      - mapping
+      - mode
+    ImportPreview:
+      type: object
+      additionalProperties: false
+      properties:
+        import_id: *id009
+        valid_rows:
+          type: integer
+        invalid_rows:
+          type: integer
+        duplicate_rows:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+        preview_rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      required:
+      - import_id
+      - valid_rows
+      - invalid_rows
+      - duplicate_rows
+      - warnings
+      - preview_rows
+    ImportCommit:
+      type: object
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum:
+          - ALL_OR_NOTHING
+          - PARTIAL_CONFIRMED
+        accept_errors:
+          type: boolean
+      required:
+      - mode
+      - accept_errors
+    ExportRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        format:
+          type: string
+          enum:
+          - XLSX
+          - CSV
+          - JSON
+        portfolio_id: *id009
+        from_date: *id013
+        to_date: *id013
+        include_evidence:
+          type: boolean
+      required:
+      - format
+    Backup:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        file_name:
+          type: string
+        schema_revision:
+          type: string
+        created_at: *id010
+        size_bytes:
+          type: integer
+        sha256:
+          type: string
+        encrypted:
+          type: boolean
+        verified:
+          type: boolean
+      required:
+      - id
+      - file_name
+      - schema_revision
+      - created_at
+      - size_bytes
+      - sha256
+      - encrypted
+      - verified
+    BackupRestoreValidate:
+      type: object
+      additionalProperties: false
+      properties:
+        backup_id: *id009
+        passphrase:
+          type: string
+      required:
+      - backup_id
+    BackupRestoreResult:
+      type: object
+      additionalProperties: false
+      properties:
+        ready:
+          type: boolean
+        backup_id: *id009
+        schema_compatible:
+          type: boolean
+        foreign_keys_valid:
+          type: boolean
+        integrity_ok:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+      required:
+      - ready
+      - backup_id
+      - schema_compatible
+      - foreign_keys_valid
+      - integrity_ok
+      - warnings
+    BackupRestore:
+      type: object
+      additionalProperties: false
+      properties:
+        backup_id: *id009
+        confirm_text:
+          type: string
+          enum:
+          - RESTORE
+        passphrase:
+          type: string
+      required:
+      - backup_id
+      - confirm_text
+    Provider:
+      type: object
+      additionalProperties: false
+      properties:
+        provider_id:
+          type: string
+        origin_group:
+          type: string
+        markets:
+          type: array
+          items:
+            type: string
+        configured:
+          type: boolean
+        capabilities:
+          type: array
+          items:
+            type: string
+      required:
+      - provider_id
+      - origin_group
+      - markets
+      - configured
+    ProviderHealth:
+      type: object
+      additionalProperties: false
+      properties:
+        provider_id:
+          type: string
+        state:
+          type: string
+          enum:
+          - OK_WITH_DATA
+          - NO_DATA
+          - EMPTY_CONFIRMED
+          - UNSUPPORTED
+          - UNCONFIGURED
+          - RATE_LIMITED
+          - AUTH_ERROR
+          - TRANSIENT_ERROR
+          - PARSE_ERROR
+          - STALE
+        last_success_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        last_error_code:
+          type:
+          - string
+          - 'null'
+        quota_remaining:
+          type:
+          - integer
+          - 'null'
+      required:
+      - provider_id
+      - state
+    ProviderCoverage:
+      type: object
+      additionalProperties: false
+      properties:
+        security_id: *id009
+        provider_id:
+          type: string
+        origin_group:
+          type: string
+        provider_symbol:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+        coverage_start:
+          type:
+          - string
+          - 'null'
+          format: date
+        coverage_end:
+          type:
+          - string
+          - 'null'
+          format: date
+        last_success_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - security_id
+      - provider_id
+      - origin_group
+      - status
+    ReviewItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        kind:
+          type: string
+        severity:
+          type: string
+          enum:
+          - INFO
+          - WARNING
+          - CRITICAL
+        status:
+          type: string
+          enum:
+          - OPEN
+          - ACKNOWLEDGED
+          - RESOLVED
+          - DISMISSED
+        reason_code:
+          type: string
+        created_at: *id010
+      required:
+      - id
+      - kind
+      - severity
+      - status
+      - reason_code
+      - created_at
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        owner_id: *id009
+        entity_type:
+          type: string
+        entity_id: *id009
+        action:
+          type: string
+        reason:
+          type: string
+        created_at: *id010
+      required:
+      - id
+      - owner_id
+      - entity_type
+      - entity_id
+      - action
+      - created_at
+    SystemInfo:
+      type: object
+      additionalProperties: false
+      properties:
+        app_version:
+          type: string
+        schema_version:
+          type: string
+        server_time_utc: *id010
+        data_revision:
+          type: integer
+        pwa_offline_schema:
+          type: integer
+        job_worker_alive:
+          type: boolean
+      required:
+      - app_version
+      - schema_version
+      - server_time_utc
+      - data_revision
+      - pwa_offline_schema
+      - job_worker_alive
+    SecurityId:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+      required:
+      - id
+    BrokerUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        dividend_fee:
+          $ref: '#/components/schemas/Money'
+        dividend_fee_currency: *id011
+      required: []
+    ProviderSymbolCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        provider_id:
+          type: string
+          minLength: 1
+        provider_symbol:
+          type: string
+          minLength: 1
+        effective_from: *id013
+        effective_to: *id013
+        verified:
+          type: boolean
+      required:
+      - provider_id
+      - provider_symbol
+      - effective_from
+    ProviderSymbol:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id009
+        security_id: *id009
+        provider_id:
+          type: string
+        provider_symbol:
+          type: string
+        effective_from: *id013
+        effective_to:
+          type:
+          - string
+          - 'null'
+          format: date
+        verified:
+          type: boolean
+      required:
+      - id
+      - security_id
+      - provider_id
+      - provider_symbol
+      - effective_from
+      - verified
+    Reason:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 10
+      required:
+      - reason
+  parameters:
+    UuidId:
+      name: id
+      in: path
+      required: true
+      schema: *id009
+    EventId:
+      name: event_id
+      in: path
+      required: true
+      schema: *id009
+    ProviderId:
+      name: provider_id
+      in: path
+      required: true
+      schema:
+        type: string
+    AccountId:
+      name: account_id
+      in: query
+      schema: *id009
+    PortfolioId:
+      name: portfolio_id
+      in: query
+      schema: *id009
+    SecurityId:
+      name: security_id
+      in: query
+      schema: *id009
+    FromDate:
+      name: from_date
+      in: query
+      schema: *id013
+    ToDate:
+      name: to_date
+      in: query
+      schema: *id013
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 200
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: ^"[1-9][0-9]*"$
+    CsrfTokenHeader:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
