@@ -1,8 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@spm/contracts";
 import { Button } from "./components/ui/button";
+import { AuthGate, type AuthSession } from "./features/auth/AuthGate";
 
 export function App() {
+  return <AuthGate>{session => <SignedInApp session={session} />}</AuthGate>;
+}
+
+function SignedInApp({ session }: { session: AuthSession }) {
   const health = useQuery({
     queryKey: ["health", "ready"],
     queryFn: async () => {
@@ -20,7 +25,11 @@ export function App() {
           <p className="text-xl font-semibold">持倉簿</p>
           <p className="text-sm text-secondary">Stock Portfolio Manager</p>
         </div>
+        <Button className="ml-auto" variant="outline" onClick={() => void session.logout()} disabled={session.loggingOut}>
+          {session.loggingOut ? "正在登出…" : "登出"}
+        </Button>
       </header>
+      {session.logoutError && <p role="alert" className="mt-4 text-sm text-danger">{session.logoutError}</p>}
       <section className="my-auto grid gap-10 py-14 md:grid-cols-[1.2fr_1fr] md:gap-16">
         <div>
           <h1 className="text-3xl leading-tight font-semibold sm:text-4xl">每一筆紀錄，<br />都有依據。</h1>

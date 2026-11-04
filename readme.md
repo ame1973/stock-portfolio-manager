@@ -40,7 +40,7 @@ Before a schema change, the migration command checks integrity and retains a mod
 
 ## Owner authentication
 
-The authentication API is implemented; the browser onboarding screen and portfolio master-data workflows are still under development.
+The authentication API and browser initialization/login/logout are implemented. Portfolio master-data workflows and the remaining financial features are still under development.
 
 After migration, explicitly issue a cryptographically random setup token from a trusted local terminal. It is valid for ten minutes, consumed once, and never returned by an HTTP endpoint or automatically written to service/container logs. To create or replace it locally:
 
@@ -63,6 +63,10 @@ Authenticated mutations require `X-CSRF-Token` (obtained from `/api/v1/auth/csrf
 
 All paths above have the `/api/v1` prefix. Full generated request/response types are in `packages/contracts/`. Development-only interactive API documentation is at the API server's `/docs`; it is disabled in production.
 
+## Trusted HTTPS proxy
+
+For production, the NAS proxy must terminate TLS and **overwrite** `X-Forwarded-Proto` with `https` before forwarding to the loopback-only web port. Never publish the API port or attach untrusted containers to the application's private Compose network. Uvicorn trusts only the gateway's reserved internal IP (`WEB_INTERNAL_IP`, default `172.30.93.10`); Nginx overwrites `X-Forwarded-For` rather than accepting a caller-selected rate-limit address. `APP_SUBNET` defaults to `172.30.93.0/24`. Change both network settings together if they overlap a LAN/VPN/Docker network, or when running multiple instances concurrently. When a NAS proxy is present, the default login limit may therefore group devices behind that proxy into one bucket. The application also validates the exact public Origin and rejects insecure authentication requests.
+
 ## Checks
 
 ```sh
@@ -70,6 +74,20 @@ make check
 ```
 
 Tests use disposable databases. The checked-in reference contract and golden fixtures do not depend on private specification files. The executable OpenAPI and generated TypeScript describe only implemented operations; CI verifies generation drift.
+
+For browser onboarding tests, use a **fresh isolated** Compose project and loopback address; never point tests at a real installation. The test captures its one-time token directly into process memory and disables traces/videos so credentials are not printed in test output.
+
+```sh
+npx playwright install chromium
+# Choose a new project name each run; existing named volumes are not silently erased.
+WEB_PORT=18083 PUBLIC_ORIGIN=http://localhost:18083 \
+  docker compose -p spm-e2e-local-001 up -d --build --wait
+SPM_E2E_COMPOSE_PROJECT=spm-e2e-local-001 \
+SPM_E2E_BASE_URL=http://localhost:18083 npm run test:e2e
+docker compose -p spm-e2e-local-001 down
+```
+
+The browser test verifies initialization, authenticated rendering at 360/768/1440px, dark mode, logout revocation, and login. Screenshots after token consumption are local artifacts under `.local/`, excluded from Git. Additional financial/offline workflows will be implemented and tested in later stages.
 
 ## Data and privacy
 

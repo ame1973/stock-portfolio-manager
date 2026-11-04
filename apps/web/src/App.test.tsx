@@ -3,6 +3,15 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { api } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import type { ReactNode } from "react";
+import type { AuthSession } from "./features/auth/AuthGate";
+
+vi.mock("./features/auth/AuthGate", () => ({
+  AuthGate: ({ children }: { children: (session: AuthSession) => ReactNode }) => children({
+    owner: { id: "11111111-1111-4111-8111-111111111111", created_at: "2026-11-04T00:00:00Z", is_active: true },
+    logout: vi.fn(), loggingOut: false, logoutError: null,
+  }),
+}));
 
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -37,7 +46,7 @@ describe("service status", () => {
 
   it("does not treat an HTTP error as successful readiness", async () => {
     vi.spyOn(api, "GET").mockResolvedValue({
-      error: { code: "NOT_READY", message: "Database is not ready", request_id: "test" },
+      error: { code: "NOT_READY", message: "Database is not ready", request_id: "test", details: {} },
       response: new Response(null, { status: 503 }),
     });
     renderApp();

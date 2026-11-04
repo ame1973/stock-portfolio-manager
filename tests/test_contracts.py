@@ -55,6 +55,39 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
         Draft202012Validator.check_schema(schema)
 
 
+def test_authentication_and_write_security_are_declared_in_the_contract() -> None:
+    public = {
+        ("/api/v1/setup/status", "get"),
+        ("/api/v1/setup/initialize", "post"),
+        ("/api/v1/auth/login", "post"),
+        ("/api/v1/health/live", "get"),
+        ("/api/v1/health/ready", "get"),
+    }
+    for route, operation in operations(create_app().openapi()).items():
+        if route in public:
+            assert not operation.get("security")
+            continue
+        assert operation["security"] == [{"cookieAuth": []}]
+        if route[1] != "get":
+            headers = {
+                item["name"]: item for item in operation["parameters"] if item["in"] == "header"
+            }
+            for name in ("X-CSRF-Token", "Idempotency-Key"):
+                assert headers[name]["required"] is True
+
+
+def test_compose_trusts_only_the_reserved_gateway_ip() -> None:
+    compose = yaml.safe_load((ROOT / "compose.yaml").read_text())
+    services = compose["services"]
+    address = services["web"]["networks"]["app"]["ipv4_address"]
+    assert services["api"]["environment"]["FORWARDED_ALLOW_IPS"] == address
+    assert "*" not in address
+    assert not services["api"].get("ports")
+    assert not services["worker"].get("ports")
+    assert services["web"]["ports"][0].startswith("127.0.0.1:")
+    assert compose["networks"]["app"]["ipam"]["config"][0]["subnet"]
+
+
 def test_reference_baseline_has_expected_scope() -> None:
     reference = yaml.safe_load((ROOT / "packages/contracts/reference.openapi.yaml").read_text())
     assert len(operations(reference)) == 91

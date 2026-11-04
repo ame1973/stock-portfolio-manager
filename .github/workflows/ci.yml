@@ -27,15 +27,22 @@ jobs:
       - run: git diff --exit-code
       - name: Verify Docker topology
         run: docker compose config --quiet
+      - name: Install browser test runtime
+        run: npx playwright install --with-deps chromium
       - name: Build containers
-        run: docker compose build
+        run: docker compose -p spm-e2e-ci build
       - name: Smoke test containers
         run: |
-          docker compose up -d --wait --wait-timeout 120
+          docker compose -p spm-e2e-ci up -d --wait --wait-timeout 120
           curl --fail http://127.0.0.1:8080/api/v1/health/ready
+      - name: Browser onboarding and session revocation
+        env:
+          SPM_E2E_COMPOSE_PROJECT: spm-e2e-ci
+          SPM_E2E_BASE_URL: http://localhost:8080
+        run: npm run test:e2e
       - name: Container logs on failure
         if: failure()
-        run: docker compose logs --no-color
+        run: docker compose -p spm-e2e-ci logs --no-color
       - name: Stop isolated CI containers
         if: always()
-        run: docker compose down
+        run: docker compose -p spm-e2e-ci down
