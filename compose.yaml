@@ -1,0 +1,78 @@
+name: stock-portfolio-manager
+services:
+  api:
+    build:
+      context: .
+      dockerfile: infra/api.Dockerfile
+    image: spm-api:local
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      DATA_DIR: /data
+      BACKUP_DIR: /backups
+      TZ: ${TZ:-Asia/Hong_Kong}
+    volumes:
+      - data:/data
+      - backups:/backups
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -m, spm_api.healthcheck]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    mem_limit: 512m
+  worker:
+    image: spm-api:local
+    command: [python, -m, spm_worker.main]
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      DATA_DIR: /data
+      BACKUP_DIR: /backups
+      TZ: ${TZ:-Asia/Hong_Kong}
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - data:/data
+      - backups:/backups
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -m, spm_api.healthcheck, --worker]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    mem_limit: 512m
+  web:
+    build:
+      context: .
+      dockerfile: infra/web.Dockerfile
+    image: spm-web:local
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/healthz]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    mem_limit: 128m
+volumes:
+  data:
+  backups:

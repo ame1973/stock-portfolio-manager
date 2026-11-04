@@ -8,6 +8,7 @@
 /docs/IMPLEMENTATION_STATUS.md
 /docs/16_ADRS_AND_OPEN_QUESTIONS.md
 /.local/
+/.playwright-mcp/
 
 # Credentials and private financial data.
 .env
