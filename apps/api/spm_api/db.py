@@ -13,6 +13,7 @@ from sqlalchemy.engine import URL
 from sqlalchemy.pool import ConnectionPoolEntry
 
 from spm_api.config import ROOT, Settings
+from spm_api.errors import ApiError
 
 
 def migration_config() -> Config:
@@ -63,6 +64,12 @@ def make_engine(path: Path) -> Engine:
 def unit_of_work(engine: Engine, *, write: bool = False) -> Iterator[Connection]:
     """Commit facts, cash effects, audit, and invalidations together or roll everything back."""
     with engine.connect().execution_options(writer=write) as connection, connection.begin():
+        if (
+            write
+            and connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
+            != schema_head()
+        ):
+            raise ApiError(503, "MIGRATION_REQUIRED", "Apply database migrations before writing")
         yield connection
 
 

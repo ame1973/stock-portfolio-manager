@@ -63,7 +63,7 @@ def _upgrade(engine: Engine) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stock Portfolio Manager administration")
-    parser.add_argument("command", choices=["migrate", "check"])
+    parser.add_argument("command", choices=["migrate", "check", "setup-token"])
     args = parser.parse_args()
     settings = Settings()
     if args.command == "migrate":
@@ -73,7 +73,15 @@ def main() -> None:
         engine = make_engine(settings.database_path)
         try:
             check_database(engine, settings)
-            print("Database ready.")
+            if args.command == "setup-token":
+                from spm_api.security import issue_setup_token
+
+                token = issue_setup_token(engine, rotate=True)
+                if token is None:
+                    raise SystemExit("An owner already exists; setup is disabled")
+                print(f"One-time setup token (expires in 10 minutes): {token}")
+            else:
+                print("Database ready.")
         finally:
             engine.dispose()
 

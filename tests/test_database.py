@@ -1,15 +1,15 @@
 """Migration, transaction, and database-enforced invariants (T-019, T-025..T-027)."""
 
 import sqlite3
-from pathlib import Path
 
 import pytest
+from alembic import command
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 
 from spm_api.cli import migrate
 from spm_api.config import Settings
-from spm_api.db import check_database, schema_head, unit_of_work
+from spm_api.db import check_database, make_engine, migration_config, schema_head, unit_of_work
 
 NOW = "2026-11-04T00:00:00Z"
 
@@ -85,7 +85,7 @@ def test_empty_and_repeat_upgrade(engine: Engine, settings: Settings) -> None:
                 "SELECT count(*) FROM sqlite_master WHERE type='table' "
                 "AND name NOT LIKE 'sqlite_%' AND name != 'alembic_version'"
             ).scalar()
-            == 36
+            == 38
         )
     assert not list(settings.data_dir.glob("pre-migration-*"))
 
@@ -190,13 +190,26 @@ def test_corrupted_database_migration_is_non_destructive(settings: Settings) -> 
     assert settings.database_path.read_bytes() == corrupt
 
 
-def test_migration_preserves_existing_database(engine: Engine, settings: Settings) -> None:
-    seed(engine)
-    with unit_of_work(engine, write=True) as con:
-        con.exec_driver_sql("DELETE FROM alembic_version")
-    migrate(settings)
-    snapshots = list(settings.data_dir.glob("pre-migration-*.sqlite3"))
-    assert len(snapshots) == 1
-    assert Path(snapshots[0]).stat().st_mode & 0o777 == 0o600
-    with engine.connect() as con:
-        assert con.exec_driver_sql("SELECT count(*) FROM owners").scalar() == 1
+def test_migration_preserves_existing_database(settings: Settings) -> None:
+    engine = make_engine(settings.database_path)
+    try:
+        with engine.connect() as con:
+            config = migration_config()
+            config.attributes["connection"] = con
+            command.upgrade(config, "0001_baseline")
+        with engine.begin() as con:
+            con.exec_driver_sql(
+                "INSERT INTO owners VALUES ('owner','synthetic-hash',?,?,1)", (NOW, NOW)
+            )
+        migrate(settings)
+        snapshots = list(settings.data_dir.glob("pre-migration-*.sqlite3"))
+        assert len(snapshots) == 1
+        assert snapshots[0].stat().st_mode & 0o777 == 0o600
+        with engine.connect() as con:
+            assert con.exec_driver_sql("SELECT count(*) FROM owners").scalar() == 1
+            assert (
+                con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
+                == schema_head()
+            )
+    finally:
+        engine.dispose()

@@ -7,33 +7,15 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
 
 from spm_api import __version__
+from spm_api.auth_routes import router as auth_router
 from spm_api.config import Settings
 from spm_api.db import check_database, make_engine
-
-
-class Status(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    status: str
-
-
-class Error(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    code: str
-    message: str
-    request_id: str
-
-
-def error_response(request: Request, status: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse(
-        status_code=status,
-        content=Error(code=code, message=message, request_id=request.state.request_id).model_dump(),
-    )
+from spm_api.errors import ApiError, Error, Status, error_response
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -68,6 +50,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["X-Request-ID"] = request.state.request_id
         return response
 
+    @app.exception_handler(ApiError)
+    async def application_error(request: Request, exc: ApiError) -> JSONResponse:
+        return error_response(request, exc.status, exc.code, exc.message)
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
+        return error_response(request, 409, "CONFLICT", "The change violates a data constraint")
+
+    @app.exception_handler(SQLAlchemyError)
+    async def database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+        return error_response(request, 503, "DATABASE_UNAVAILABLE", "The database is unavailable")
+
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
         code = "NOT_FOUND" if exc.status_code == 404 else "REQUEST_ERROR"
@@ -96,6 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return error_response(request, 503, "NOT_READY", "Database is not ready")
         return Status(status="ready")
 
+    app.include_router(auth_router)
     return app
 
 

@@ -34,9 +34,34 @@ docker compose down
 
 Only the web gateway is bound to loopback. API and worker run separately, share the local SQLite volume, and use non-root containers with read-only root filesystems. Base images are pinned by digest. Named `data` and `backups` volumes survive `down`; do not use `down --volumes` for data you need to retain. The worker currently provides leadership and heartbeat supervision; market synchronization is not implemented yet.
 
-For a different web port, set both `WEB_PORT` and `PUBLIC_ORIGIN`. When using the sample `.env` for Compose, change `PUBLIC_ORIGIN` to `http://localhost:8080` (the local Vite default is port 5173). Production requires `APP_ENV=production` and an HTTPS public origin behind a trusted reverse proxy; authentication and full production deployment instructions are still being implemented.
+For a different web port, set both `WEB_PORT` and `PUBLIC_ORIGIN`. When using the sample `.env` for Compose, change `PUBLIC_ORIGIN` to `http://localhost:8080` (the local Vite default is port 5173). Production requires `APP_ENV=production` and an HTTPS public origin behind a trusted reverse proxy; browser workflows and full production deployment instructions are still being implemented.
 
 Before a schema change, the migration command checks integrity and retains a mode-0600 local SQLite rollback snapshot in the data directory. This snapshot is sensitive and **not** an encrypted disaster-recovery backup. Encrypted portable backups and safe full restore are later implementation stages.
+
+## Owner authentication
+
+The authentication API is implemented; the browser onboarding screen and portfolio master-data workflows are still under development.
+
+After migration, explicitly issue a cryptographically random setup token from a trusted local terminal. It is valid for ten minutes, consumed once, and never returned by an HTTP endpoint or automatically written to service/container logs. To create or replace it locally:
+
+```sh
+uv run spm-manage setup-token
+# Or, for the container deployment:
+docker compose exec api spm-manage setup-token
+```
+
+`POST /api/v1/setup/initialize` accepts `setup_token` and a unique password/passphrase of 12–200 characters. Setup is permanently disabled once an owner exists. `POST /api/v1/auth/login` accepts the password; it does not return a bearer token. Both requests require an `Origin` header matching `PUBLIC_ORIGIN`.
+
+Authentication uses revocable, HttpOnly, SameSite=Strict session cookies, with Secure required for an HTTPS public origin. Session maximum age is 30 days and idle expiry is seven days. Passwords use Argon2id (64 MiB, three iterations, parallelism four); concurrent hashing is bounded to two operations per API process. Persistent per-client and global attempt limits and increasing failure backoff apply before password verification.
+
+Authenticated mutations require `X-CSRF-Token` (obtained from `/api/v1/auth/csrf`) and an `Idempotency-Key` of 16–200 characters. Session secrets and CSRF secrets are independently random and stored only as hashes. Password-change and reauthentication request fingerprints are keyed with the session secret; no fast unkeyed password-verification hash is retained. Never put credentials in a URL or browser storage.
+
+- `/auth/me`, `/auth/sessions`: inspect the current owner and paginated sessions.
+- `DELETE /auth/sessions/{id}`: revoke a session; `POST /auth/logout`: revoke the current session and clear its cookies.
+- `POST /auth/reauth`: confirm the password for sensitive operations; confirmation is valid for five minutes.
+- `POST /auth/change-password`: confirm the old password, set a new one, and revoke **all** existing sessions.
+
+All paths above have the `/api/v1` prefix. Full generated request/response types are in `packages/contracts/`. Development-only interactive API documentation is at the API server's `/docs`; it is disabled in production.
 
 ## Checks
 

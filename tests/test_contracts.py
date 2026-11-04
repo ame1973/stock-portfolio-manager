@@ -42,7 +42,11 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
     actual = operations(generated)
     identifiers = [op["operationId"] for op in actual.values()]
     assert len(identifiers) == len(set(identifiers))
+    extensions = {("/api/v1/auth/reauth", "post"): "reauthenticate"}
     for route, operation in actual.items():
+        if route in extensions:
+            assert operation["operationId"] == extensions[route]
+            continue
         assert operation["operationId"] == baseline[route]["operationId"]
         assert {code for code in operation["responses"] if code.startswith("2")} <= set(
             baseline[route]["responses"]
