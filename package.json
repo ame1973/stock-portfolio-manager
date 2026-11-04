@@ -1,0 +1,35 @@
+{
+  "name": "stock-portfolio-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/web",
+    "packages/contracts"
+  ],
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @spm/web",
+    "build": "npm run build --workspace @spm/web",
+    "typecheck": "npm run typecheck --workspace @spm/web",
+    "lint": "eslint apps/web packages/contracts/src",
+    "test": "npm run test --workspace @spm/web",
+    "generate:contracts": "uv run python scripts/export_openapi.py && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",
+    "check:contracts": "uv run python scripts/export_openapi.py --check && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts --check"
+  },
+  "overrides": {
+    "minimatch": "11.0.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "globals": "17.14.0",
+    "openapi-typescript": "7.13.0",
+    "typescript-eslint": "8.72.1"
+  }
+}
