@@ -277,19 +277,30 @@ async def test_active_session_touches_idle_timestamp(
 async def test_failed_login_backoff_is_persistent(
     client: httpx.AsyncClient, engine: Engine
 ) -> None:
-    await initialize(client, engine)
-    wrong = {"password": "incorrect-synthetic-password"}
-    first = await client.post("/api/v1/auth/login", json=wrong)
-    assert first.status_code == 401
-    with patch("spm_api.auth_routes.verify_password") as verify:
-        limited = await client.post("/api/v1/auth/login", json=wrong)
-        assert limited.status_code == 429
-        verify.assert_not_called()
-    assert int(limited.headers["Retry-After"]) > 0
-    with unit_of_work(engine) as con:
-        assert con.execute(text("SELECT max(failures) FROM auth_rate_limits")).scalar_one() == 1
-    client.cookies.clear()
-    assert (await client.post("/api/v1/auth/login", json=wrong)).status_code == 429
+    with patch("spm_api.security.now", return_value=now()) as clock:
+        await initialize(client, engine)
+        wrong = {"password": "incorrect-synthetic-password"}
+        first = await client.post("/api/v1/auth/login", json=wrong)
+        assert first.status_code == 401
+        with patch("spm_api.auth_routes.verify_password") as verify:
+            limited = await client.post("/api/v1/auth/login", json=wrong)
+            assert limited.status_code == 429
+            verify.assert_not_called()
+        assert int(limited.headers["Retry-After"]) > 0
+        with unit_of_work(engine) as con:
+            assert con.execute(text("SELECT max(failures) FROM auth_rate_limits")).scalar_one() == 1
+        client.cookies.clear()
+        assert (await client.post("/api/v1/auth/login", json=wrong)).status_code == 429
+        clock.return_value += timedelta(seconds=1)
+        assert (await client.post("/api/v1/auth/login", json=wrong)).status_code == 401
+        with unit_of_work(engine) as con:
+            row = (
+                con.execute(text("SELECT * FROM auth_rate_limits ORDER BY failures DESC"))
+                .mappings()
+                .first()
+            )
+            assert row is not None and row["failures"] == 2
+            assert row["blocked_until"] == int(clock.return_value.timestamp()) + 2
 
 
 async def test_parallel_attempt_reservations_are_atomic(settings: Settings, engine: Engine) -> None:
