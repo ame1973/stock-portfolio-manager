@@ -15,6 +15,7 @@ from spm_api.finance import (
     Position,
     apply_trade,
     lock_money,
+    native_settlement,
     net_asset_value,
     round_money,
     settle_trade,
@@ -63,6 +64,15 @@ def test_calculations_are_independent_of_the_ambient_decimal_context() -> None:
         assert cash.cash.hkd == D("7829.767210")
         assert round_money(D("1.0000005")) == D("1.000001")
         assert round_money(D("-1.0000005")) == D("-1.000001")
+
+
+def test_native_draft_amounts_do_not_invent_an_fx_rate_or_hkd_booking() -> None:
+    native = native_settlement("BUY", D("10"), D("100"), D("1"), ZERO, "USD")
+    assert native.gross_local == D("1000")
+    assert native.amount == D("1001.000000")
+    with pytest.raises(FinanceError) as missing:
+        settle_trade("BUY", D("10"), D("100"), D("1"), ZERO, "USD")
+    assert missing.value.code == "MISSING_FX"
 
 
 def test_settlement_defaults_to_cents_but_actual_broker_cash_is_not_rounded() -> None:

@@ -105,6 +105,51 @@ class Settlement:
     override_reason: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class NativeSettlement:
+    gross_local: Decimal
+    theoretical_local: Decimal
+    amount: Decimal
+    rounding_delta_local: Decimal
+    override_reason: str | None
+
+
+def native_settlement(
+    side: Side,
+    quantity: Decimal,
+    price: Decimal,
+    fee: Decimal,
+    tax: Decimal,
+    currency: Currency,
+    *,
+    actual_local: Decimal | None = None,
+    reason: str | None = None,
+) -> NativeSettlement:
+    """Calculate native cash without inventing FX for an unposted scheduled draft."""
+    if side not in {"BUY", "SELL"}:
+        raise FinanceError("INVALID_SIDE", "Select BUY or SELL")
+    if currency not in {"HKD", "USD"}:
+        raise FinanceError("UNSUPPORTED_CURRENCY", "Only HKD and USD are supported")
+    quantity = exact_decimal(quantity, 8, positive=True)
+    price = exact_decimal(price, 8, nonnegative=True)
+    fee = exact_decimal(fee, 6, nonnegative=True)
+    tax = exact_decimal(tax, 6, nonnegative=True)
+    if actual_local is not None and (reason is None or len(reason.strip()) < 10):
+        raise FinanceError("REASON_REQUIRED", "An actual settlement override needs evidence")
+    with localcontext(prec=64, rounding=ROUND_HALF_UP):
+        gross = quantity * price
+        theoretical = gross + fee + tax if side == "BUY" else gross - fee - tax
+        # HKD/USD cash settles to cents by default; explicit broker actuals retain their precision.
+        local = (
+            theoretical.quantize(Decimal("0.01"))
+            if actual_local is None
+            else exact_decimal(actual_local, 6)
+        )
+        if side == "BUY" and local < ZERO:
+            raise FinanceError("INVALID_FINANCIAL_VALUE", "Buy settlement cost cannot be negative")
+        return NativeSettlement(gross, theoretical, round_money(local), local - theoretical, reason)
+
+
 def settle_trade(
     side: Side,
     quantity: Decimal,
@@ -118,29 +163,17 @@ def settle_trade(
     actual_hkd: Decimal | None = None,
     reason: str | None = None,
 ) -> Settlement:
-    if side not in {"BUY", "SELL"}:
-        raise FinanceError("INVALID_SIDE", "Select BUY or SELL")
-    quantity = exact_decimal(quantity, 8, positive=True)
-    price = exact_decimal(price, 8, nonnegative=True)
-    fee = exact_decimal(fee, 6, nonnegative=True)
-    tax = exact_decimal(tax, 6, nonnegative=True)
-    if (actual_local is not None or actual_hkd is not None) and (
-        reason is None or len(reason.strip()) < 10
-    ):
-        raise FinanceError("REASON_REQUIRED", "An actual settlement override needs evidence")
-    with localcontext(prec=64, rounding=ROUND_HALF_UP):
-        gross = quantity * price
-        theoretical = gross + fee + tax if side == "BUY" else gross - fee - tax
-        # HKD/USD cash settles to cents by default; explicit broker actuals retain their precision.
-        local = (
-            theoretical.quantize(Decimal("0.01"))
-            if actual_local is None
-            else exact_decimal(actual_local, 6)
-        )
-        if side == "BUY" and local < ZERO:
-            raise FinanceError("INVALID_FINANCIAL_VALUE", "Buy settlement cost cannot be negative")
-        cash = lock_money(local, currency, rate, actual_hkd=actual_hkd, reason=reason)
-        return Settlement(gross, theoretical, cash, local - theoretical, reason)
+    native = native_settlement(
+        side, quantity, price, fee, tax, currency, actual_local=actual_local, reason=reason
+    )
+    cash = lock_money(native.amount, currency, rate, actual_hkd=actual_hkd, reason=reason)
+    return Settlement(
+        native.gross_local,
+        native.theoretical_local,
+        cash,
+        native.rounding_delta_local,
+        native.override_reason,
+    )
 
 
 @dataclass(frozen=True, slots=True)
