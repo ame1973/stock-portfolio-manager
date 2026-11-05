@@ -24,6 +24,8 @@ const messages: Record<string, string> = {
   IMMUTABLE_IDENTITY: "此修訂不能改變穩定身分，請核對原始事件。",
   INVALID_FINANCIAL_VALUE: "數值不符合財務規則，請核對正負號、數量及實際交收依據。",
   EXECUTION_DATE_MISMATCH: "成交時間的交易所當地日期與交易日期不符，請核對時區與日期。",
+  PORTFOLIO_MISMATCH: "來源與目標帳戶必須屬於同一所選組合；請重新核對，不能藉轉倉跨組合換幣。",
+  FUTURE_TRANSFER: "股票轉倉只記錄證券交易所當地日期已發生的移動；未來日期不會建立自動生效草稿。",
   ARCHIVED: "這項紀錄已封存，請先重新啟用。",
   EXCHANGE_MISMATCH: "識別碼必須屬於同一交易所。",
   CURRENCY_MISMATCH: "此市場與報價幣別不符，請重新核對。",

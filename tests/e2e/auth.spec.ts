@@ -840,6 +840,7 @@ test("financial browser forms preserve exact facts, conflicts, reversals and ope
   await page.screenshot({ path: ".local/screenshots/trade-history-360.png", fullPage: true });
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
   await test.step("cash, expenses, wallets and opening: unknown is not known zero", () => cashBrowserForms(page));
+  await test.step("paired cash and stock transfers: preserve both legs, cost and dependencies", () => transferBrowserForms(page));
   expect(errors).toEqual([]);
   await page.getByRole("button", { name: "登出", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
@@ -1020,4 +1021,153 @@ async function cashBrowserForms(page: Page) {
   expect(expenses.items.filter(row => row.amount === "2.000001").every(row => row.hkd_amount === "15.600008")).toBe(true);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
   expect(errors).toEqual([]);
+}
+
+async function transferBrowserForms(page: Page) {
+  type CashTransfer = components["schemas"]["CashTransfer"];
+  type StockTransfer = components["schemas"]["SecurityTransfer"];
+  type Balances = components["schemas"]["AccountCashBalances"];
+  await page.goto("/settings/accounts");
+  const { headers, post } = await signedRequests(page);
+  const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E transfer form portfolio" });
+  const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E transfer form broker" });
+  const accounts = [];
+  for (const name of ["E2E transfer form source", "E2E transfer form target"]) accounts.push(await post<components["schemas"]["Account"]>("accounts", {
+    portfolio_id: portfolio.id, broker_id: broker.id, name, default_currency: "USD", opening_cash: "2000", opening_cash_date: "2026-01-01", opening_fx_rate_hkd: "7.8", cash_completeness: "COMPLETE",
+  }));
+  const [source, target] = [accounts[0]!, accounts[1]!];
+  const security = await post<components["schemas"]["Security"]>("securities", { exchange_code: "NASDAQ", display_ticker: "UXFR", name: "E2E transfer form security", quote_currency: "USD" });
+  async function selectPortfolioFilter(mode: "cash" | "security") {
+    const title = mode === "cash" ? "成對現金轉帳" : "股票轉倉";
+    await expect(page.getByRole("heading", { name: title, level: 1, exact: true })).toBeVisible();
+    await page.getByText(`篩選${title}`, { exact: true }).click();
+    await page.getByLabel("轉倉篩選組合", { exact: true }).selectOption(portfolio.id);
+    await page.getByText(`篩選${title}`, { exact: true }).click();
+  }
+  async function enterTransfer(mode: "cash" | "security", targetId = target.id) {
+    const title = `新增${mode === "cash" ? "成對現金轉帳" : "股票轉倉"}`;
+    await page.getByRole("button", { name: title, exact: true }).click();
+    const form = page.getByRole("form", { name: title, exact: true });
+    await form.getByLabel("轉倉組合", { exact: true }).selectOption(portfolio.id);
+    await form.getByLabel("來源帳戶", { exact: true }).selectOption(source.id);
+    await form.getByLabel("目標帳戶", { exact: true }).selectOption(targetId);
+    await form.getByLabel("轉倉生效日期").fill("2026-01-03");
+    return form;
+  }
+  async function voidTransfer(mode: "cash" | "security") {
+    const title = mode === "cash" ? "成對現金轉帳" : "股票轉倉";
+    await page.getByLabel("轉倉作廢依據").fill("Void reviewed synthetic transfer evidence");
+    await page.getByRole("button", { name: `確認作廢${title}`, exact: true }).click();
+    await expect(page.getByRole("alertdialog").getByRole("button", { name: "取消", exact: true })).toBeFocused();
+    await page.getByRole("alertdialog").getByRole("button", { name: "確認", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  }
+  await page.goto("/cash/transfers");
+  await selectPortfolioFilter("cash");
+  let form = await enterTransfer("cash");
+  await form.getByLabel("來源實際幣別").selectOption("USD");
+  await form.getByLabel("目標實際幣別").selectOption("USD");
+  await form.getByLabel("來源本金").fill("100.000001");
+  await form.getByLabel("目標本金").fill("99");
+  await form.getByLabel("轉倉依據").fill("Synthetic reviewed internal cash principal");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("同幣本金必須相等");
+  await form.getByLabel("目標本金").fill("100.000001");
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `.local/screenshots/paired-transfer-form-${width}.png`, fullPage: true });
+  }
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  const original = page.getByRole("article", { name: "2026-01-03 USD 100.000001 USD 100.000001", exact: true });
+  await expect(original).toContainText("歷史 FX／HKD 未知");
+  await original.getByRole("button", { name: "更正成對現金轉帳", exact: true }).click();
+  form = page.getByRole("form", { name: "更正成對現金轉帳", exact: true });
+  await form.getByLabel("來源本金").fill("120.000001");
+  await form.getByLabel("目標本金").fill("120.000001");
+  await form.getByLabel("轉帳歷史匯率（1 USD = HKD）").fill("7.9");
+  await form.getByLabel("轉倉依據").fill("Adopt synthetic reviewed paired cash evidence");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  const pair = page.getByRole("article", { name: "2026-01-03 USD 120.000001 USD 120.000001", exact: true });
+  await expect(pair).toContainText("948.000008");
+  await pair.getByRole("button", { name: "查看轉倉修訂鏈", exact: true }).click();
+  await expect(page.getByRole("article")).toHaveCount(2);
+  await expect(original).toContainText("已被新修訂取代");
+  await expect(original.getByRole("button", { name: "作廢成對現金轉帳", exact: true })).toHaveCount(0);
+  await pair.getByRole("button", { name: "作廢成對現金轉帳", exact: true }).click();
+  await voidTransfer("cash");
+  await page.getByRole("button", { name: "顯示全部轉倉事件", exact: true }).click();
+  form = await enterTransfer("cash", source.id);
+  await form.getByLabel("來源實際幣別").selectOption("USD");
+  await form.getByLabel("目標實際幣別").selectOption("HKD");
+  await form.getByLabel("來源本金").fill("1");
+  await form.getByLabel("目標本金").fill("7.81");
+  await form.getByLabel("轉帳歷史匯率（1 USD = HKD）").fill("7.8");
+  await form.getByLabel("轉倉依據").fill("Synthetic explicit same-account currency conversion");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  const conversion = page.getByRole("article", { name: "2026-01-03 USD 1.000000 HKD 7.810000", exact: true });
+  await expect(conversion).toContainText("歷史入帳差額需要覆核，不是已確認匯兌損益");
+  await expect(conversion).toContainText("HKD 0.010000");
+  await conversion.getByRole("button", { name: "作廢成對現金轉帳", exact: true }).click();
+  await voidTransfer("cash");
+
+  await post<components["schemas"]["TradeRecord"]>("trades", { portfolio_id: portfolio.id, account_id: source.id, security_id: security.id, side: "BUY", trade_date: "2026-01-02", quantity: "10", price: "100", fee: "1", currency: "USD", fx_rate_hkd: "7.8" });
+  const before = await (await page.request.get(`/api/v1/accounts/${source.id}/cash-balances`)).json() as Balances;
+  await page.goto("/transfers");
+  await selectPortfolioFilter("security");
+  form = await enterTransfer("security");
+  await form.getByLabel("轉倉證券", { exact: true }).selectOption(security.id);
+  await form.getByLabel("轉倉股數").fill("4");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.screenshot({ path: ".local/screenshots/security-transfer-form-dark.png", fullPage: true });
+  await page.emulateMedia({ colorScheme: "light" });
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  const originalStock = page.getByRole("article", { name: "2026-01-03 4.00000000 股轉倉", exact: true });
+  await expect(originalStock).toContainText("3123.120000");
+  const after = await (await page.request.get(`/api/v1/accounts/${source.id}/cash-balances`)).json() as Balances;
+  expect(after).toEqual(before);
+  const sale = await post<components["schemas"]["TradeRecord"]>("trades", { portfolio_id: portfolio.id, account_id: target.id, security_id: security.id, side: "SELL", trade_date: "2026-01-04", quantity: "2", price: "120", fee: "1", currency: "USD", fx_rate_hkd: "7.8" });
+  await originalStock.getByRole("button", { name: "作廢股票轉倉", exact: true }).click();
+  await page.getByLabel("轉倉作廢依據").fill("Synthetic orphaned destination sale test");
+  await page.getByRole("button", { name: "確認作廢股票轉倉", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "確認", exact: true }).click();
+  await expect(page.getByRole("alertdialog").getByRole("alert")).toContainText("持倉不足");
+  await page.getByRole("alertdialog").getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "取消操作", exact: true }).click();
+  await originalStock.getByRole("button", { name: "更正股票轉倉", exact: true }).click();
+  form = page.getByRole("form", { name: "更正股票轉倉", exact: true });
+  await form.getByLabel("轉倉股數").fill("5");
+  await form.getByLabel("轉倉依據").fill("Synthetic corrected custodian movement");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  const revisedStock = page.getByRole("article", { name: "2026-01-03 5.00000000 股轉倉", exact: true });
+  await expect(revisedStock).toContainText("3903.900000");
+  await revisedStock.getByRole("button", { name: "查看轉倉修訂鏈", exact: true }).click();
+  await expect(page.getByRole("article")).toHaveCount(2);
+  await expect(originalStock).toContainText("3123.120000");
+  await expect(originalStock).toContainText("已被新修訂取代");
+  const saleVoid = await page.request.delete(`/api/v1/trades/${sale.id}`, { headers: headers(1), data: { reason: "Void synthetic destination sale before reversing transfer" } });
+  expect(saleVoid.status()).toBe(200);
+  await revisedStock.getByRole("button", { name: "作廢股票轉倉", exact: true }).click();
+  await voidTransfer("security");
+  await page.setViewportSize({ width: 360, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: ".local/screenshots/security-transfer-history-360.png", fullPage: true });
+  const cashHistory = await (await page.request.get("/api/v1/cash-transfers", { params: { portfolio_id: portfolio.id, include_history: true } })).json() as { items: CashTransfer[] };
+  expect(cashHistory.items).toHaveLength(3);
+  expect(cashHistory.items.some(row => row.source_amount === "100.000001" && row.fx_rate_hkd === null && row.source_booked_hkd === null)).toBe(true);
+  const stockHistory = await (await page.request.get("/api/v1/security-transfers", { params: { portfolio_id: portfolio.id, include_history: true } })).json() as { items: StockTransfer[] };
+  expect(stockHistory.items).toHaveLength(2);
+  expect(stockHistory.items[0]!.root_id).toBe(stockHistory.items[1]!.root_id);
+  expect(stockHistory.items[0]!.created_sequence).toBe(stockHistory.items[1]!.created_sequence);
+  const currentSource = await (await page.request.get(`/api/v1/accounts/${source.id}/cash-balances`)).json() as Balances;
+  const currentTarget = await (await page.request.get(`/api/v1/accounts/${target.id}/cash-balances`)).json() as Balances;
+  expect(currentSource.balances.find(row => row.currency === "USD")!.balance).toBe("999.000000");
+  expect(currentSource.balances.find(row => row.currency === "HKD")!.balance).toBe("0.000000");
+  expect(currentTarget.balances[0]!.balance).toBe("2000.000000");
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 }

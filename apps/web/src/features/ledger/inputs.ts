@@ -3,6 +3,11 @@ import { z } from "zod";
 const MAX = (1n << 63n) - 1n;
 const MIN = -(1n << 63n);
 
+function scaled(value: string, scale: number) {
+  const [whole, fraction = ""] = value.replace(/^-/, "").split(".");
+  return BigInt(whole + fraction.padEnd(scale, "0")) * (value.startsWith("-") ? -1n : 1n);
+}
+
 function decimal(scale: number, minimum: bigint) {
   const pattern = new RegExp(`^${minimum < 0n ? "-?" : ""}[0-9]+(\\.[0-9]{1,${scale}})?$`);
   return z.string().max(80, "輸入過長，請核對數值。").superRefine((value, context) => {
@@ -11,14 +16,16 @@ function decimal(scale: number, minimum: bigint) {
       context.addIssue({ code: "custom", message: `請輸入十進位字串，最多 ${scale} 位小數；不能使用科學記號。` });
       return;
     }
-    const [whole, fraction = ""] = value.replace(/^-/, "").split(".");
-    const scaled = BigInt(whole + fraction.padEnd(scale, "0")) * (value.startsWith("-") ? -1n : 1n);
-    if (scaled < minimum || scaled > MAX) context.addIssue({ code: "custom", message: minimum === 1n && scaled === 0n ? "數值必須大於零。" : "數值超出允許範圍，請核對原始資料。" });
+    const integer = scaled(value, scale);
+    if (integer < minimum || integer > MAX) context.addIssue({ code: "custom", message: minimum === 1n && integer === 0n ? "數值必須大於零。" : "數值超出允許範圍，請核對原始資料。" });
   });
 }
 
 // Keep the original string: validation never rounds, coerces or calculates a financial result.
 export const money = decimal(6, 0n);
+export function sameMoney(left: string, right: string) {
+  return money.safeParse(left).success && money.safeParse(right).success && scaled(left, 6) === scaled(right, 6);
+}
 export const signedMoney = decimal(6, MIN);
 export const quantity = decimal(8, 1n);
 export const price = decimal(8, 0n);

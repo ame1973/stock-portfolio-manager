@@ -5,6 +5,10 @@ import { checked } from "../../lib/api";
 export type Cash = components["schemas"]["CashEntry"];
 export type Expense = components["schemas"]["Expense"];
 export type Opening = components["schemas"]["OpeningCashRecord"];
+export type CashTransfer = components["schemas"]["CashTransfer"];
+export type StockTransfer = components["schemas"]["SecurityTransfer"];
+export type Transfer = CashTransfer | StockTransfer;
+export const isCashTransfer = (record: Transfer): record is CashTransfer => "source_currency" in record;
 export type Booking = Cash | Expense;
 export const isCash = (record: Booking): record is Cash => "entry_role" in record;
 

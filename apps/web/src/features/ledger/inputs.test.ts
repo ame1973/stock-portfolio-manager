@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { date, fx, money, price, quantity, signedMoney } from "./inputs";
+import { date, fx, money, price, quantity, sameMoney, signedMoney } from "./inputs";
 
 describe("exact string-only financial input", () => {
+  it("compares same-currency principal exactly without normalizing the wire strings", () => {
+    expect(sameMoney("000100.000001", "100.000001")).toBe(true);
+    expect(sameMoney("100", "100.000000")).toBe(true);
+    expect(sameMoney("9007199254.740992", "9007199254.740993")).toBe(false);
+    expect(sameMoney("1e3", "1000")).toBe(false);
+    expect(sameMoney("1.0000001", "1")).toBe(false);
+  });
+
   it.each([0.1, 1, true, null, "", "NaN", "Infinity", "1e3", " 1", "1 ", "1,000", "+1", ".1", "1.", "0.0000001", "-1", "9223372036854.775808", "0".repeat(81)])("rejects money %s without rounding or coercion", value => {
     expect(money.safeParse(value).success).toBe(false);
   });
