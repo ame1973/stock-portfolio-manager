@@ -21,6 +21,8 @@ const messages: Record<string, string> = {
   NEEDS_REVIEW: "財務歷史含未分配的企業行動、零碎股或不完整來源，請先核對；不會猜測金額或股數。",
   INACTIVE_FACT: "此版本已作廢或被新修訂取代，請重新載入目前版本。",
   SOURCE_MANAGED: "此現金項目由來源交易或期初流程管理，不能直接改寫。",
+  SYMBOL_HISTORY_DEPENDENCY: "後面已有採納的顯示代號變更，請先核對及處理較後事件，不能倒退覆寫。",
+  FUTURE_SYMBOL_CHANGE: "未來的顯示代號只能保留待覆核；到交易所生效日期後再明確採納。",
   IMMUTABLE_IDENTITY: "此修訂不能改變穩定身分，請核對原始事件。",
   INVALID_FINANCIAL_VALUE: "數值不符合財務規則，請核對正負號、數量及實際交收依據。",
   EXECUTION_DATE_MISMATCH: "成交時間的交易所當地日期與交易日期不符，請核對時區與日期。",

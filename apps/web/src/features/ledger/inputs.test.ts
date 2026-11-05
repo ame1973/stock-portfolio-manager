@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { date, fx, money, price, quantity, sameMoney, signedMoney } from "./inputs";
+import { date, fx, money, price, quantity, ratio, sameMoney, signedMoney } from "./inputs";
 
 describe("exact string-only financial input", () => {
+  it.each([3, 3.5, true, null, "", "0", "-1", "3.0", "3e0", "+3", " 3", "9223372036854775808", "12345678901234567890"])("rejects an inexact/out-of-range ratio %s", value => {
+    expect(ratio.safeParse(value).success).toBe(false);
+  });
+
+  it("keeps every integer ratio digit beyond Number-safe precision", () => {
+    expect(ratio.parse("9007199254740993")).toBe("9007199254740993");
+    expect(ratio.parse("9223372036854775807")).toBe("9223372036854775807");
+    expect(ratio.parse("0003")).toBe("0003");
+  });
+
   it("compares same-currency principal exactly without normalizing the wire strings", () => {
     expect(sameMoney("000100.000001", "100.000001")).toBe(true);
     expect(sameMoney("100", "100.000000")).toBe(true);

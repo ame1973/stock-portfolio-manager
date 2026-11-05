@@ -27,6 +27,8 @@ export function sameMoney(left: string, right: string) {
   return money.safeParse(left).success && money.safeParse(right).success && scaled(left, 6) === scaled(right, 6);
 }
 export const signedMoney = decimal(6, MIN);
+export const ratio = z.string().max(19, "比例必須符合正數 INT64 範圍。").regex(/^[0-9]+$/, "比例只接受正整數字串，不可使用小數或科學記號。")
+  .refine(value => /^[0-9]{1,19}$/.test(value) && BigInt(value) >= 1n && BigInt(value) <= MAX, "比例必須介乎 1 與 9223372036854775807。");
 export const quantity = decimal(8, 1n);
 export const price = decimal(8, 0n);
 export const fx = decimal(12, 1n);
