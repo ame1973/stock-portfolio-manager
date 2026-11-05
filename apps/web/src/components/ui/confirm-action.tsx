@@ -3,8 +3,8 @@ import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { Button } from "./button";
 import { failureMessage } from "../../lib/api";
 
-export function ConfirmAction({ label, title, description, onConfirm }: {
-  label: string; title: string; description: string; onConfirm: (key: string) => Promise<void>;
+export function ConfirmAction({ label, title, description, onConfirm, disabled = false }: {
+  label: string; title: string; description: string; onConfirm: (key: string) => Promise<void>; disabled?: boolean;
 }) {
   const key = useRef(crypto.randomUUID());
   const [open, setOpen] = useState(false);
@@ -16,7 +16,7 @@ export function ConfirmAction({ label, title, description, onConfirm }: {
       setOpen(value); setError(null);
     }
   }}>
-    <AlertDialog.Trigger asChild><Button variant="outline">{label}</Button></AlertDialog.Trigger>
+    <AlertDialog.Trigger asChild><Button variant="outline" disabled={disabled}>{label}</Button></AlertDialog.Trigger>
     <AlertDialog.Portal>
       {/* Radix Overlay injects scroll-lock CSS; external CSS keeps our strict CSP intact. */}
       <div aria-hidden="true" className="pointer-events-auto fixed inset-0 z-40 bg-black/50" />

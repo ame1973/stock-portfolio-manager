@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router";
 import { api } from "@spm/contracts";
@@ -7,6 +7,8 @@ import { AuthGate, type AuthSession } from "./features/auth/AuthGate";
 import { AccountsPage, BrokersPage, PortfoliosPage, SecuritiesPage } from "./features/settings/MasterPages";
 import { SecurityDetailPage } from "./features/settings/SecurityDetailPage";
 import { SecuritySettingsPage } from "./features/settings/SecuritySettingsPage";
+
+const TradesPage = lazy(() => import("./features/ledger/TradesPage").then(module => ({ default: module.TradesPage })));
 
 export function App() {
   return <AuthGate>{session => <SignedInApp session={session} />}</AuthGate>;
@@ -25,6 +27,7 @@ function SignedInApp({ session }: { session: AuthSession }) {
       </Link>
       <nav aria-label="主要導覽" className="order-3 flex w-full flex-wrap gap-2 sm:order-none sm:w-auto">
         <NavLink to="/" end className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">服務連線</NavLink>
+        <NavLink to="/transactions" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">交易紀錄</NavLink>
         <NavLink to="/settings" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">管理設定</NavLink>
       </nav>
       <Button className="ml-auto" variant="outline" onClick={() => void session.logout()} disabled={session.loggingOut}>{session.loggingOut ? "正在登出…" : "登出"}</Button>
@@ -33,6 +36,7 @@ function SignedInApp({ session }: { session: AuthSession }) {
     <main id="content" ref={main} tabIndex={-1} className="min-w-0 flex-1 py-8 focus:outline-none sm:py-10">
       <Routes>
         <Route path="/" element={<ServiceStatus />} />
+        <Route path="/transactions" element={<Suspense fallback={<p role="status">正在載入交易介面…</p>}><TradesPage /></Suspense>} />
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<Navigate to="portfolios" replace />} />
           <Route path="portfolios" element={<PortfoliosPage />} />
@@ -78,7 +82,7 @@ function ServiceStatus() {
       <h2 id="status-title" className="text-lg font-semibold">服務連線</h2>
       {health.isPending ? <p role="status" className="my-5 text-secondary">正在檢查服務狀態…</p>
         : health.isError ? <div role="alert" className="my-5 text-danger"><p>暫時無法使用</p><p className="mt-2 text-sm leading-6">{health.error.message}</p></div>
-          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供主檔與帳戶安全設定；投資記錄功能仍在開發。</p></div>}
+          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供交易紀錄、主檔及帳戶安全設定；其餘財務介面與估值功能仍在開發。</p></div>}
       <Button variant="outline" onClick={() => void health.refetch()} disabled={health.isFetching}>重新檢查</Button>
     </section>
   </div>;

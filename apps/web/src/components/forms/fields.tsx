@@ -6,7 +6,7 @@ export function Field({ label, error, help, id, ...props }: ComponentProps<"inpu
 }) {
   const generated = useId();
   const identifier = id ?? generated;
-  return <div className="grid gap-2">
+  return <div className="grid content-start gap-2">
     <label htmlFor={identifier} className="text-sm font-medium">{label}</label>
     <input {...props} id={identifier} className="field" aria-invalid={!!error}
       aria-describedby={error ? `${identifier}-error` : help ? `${identifier}-help` : undefined} />
@@ -20,7 +20,7 @@ export function SelectField({ label, error, help, id, children, ...props }: Comp
 }) {
   const generated = useId();
   const identifier = id ?? generated;
-  return <div className="grid gap-2">
+  return <div className="grid content-start gap-2">
     <label htmlFor={identifier} className="text-sm font-medium">{label}</label>
     <select {...props} id={identifier} className="field" aria-invalid={!!error}
       aria-describedby={error ? `${identifier}-error` : help ? `${identifier}-help` : undefined}>{children}</select>

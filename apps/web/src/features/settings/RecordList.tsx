@@ -5,8 +5,8 @@ import { failureMessage } from "../../lib/api";
 import { usePageState } from "./data";
 
 type Page<T> = { items: T[]; next_cursor?: string | null };
-export function RecordList<T extends { id: string }>({ title, result, page, children, searchable = true }: {
-  title: string; result: UseQueryResult<Page<T>>; page: ReturnType<typeof usePageState>; searchable?: boolean;
+export function RecordList<T extends { id: string }>({ title, result, page, children, searchable = true, filtered = false }: {
+  title: string; result: UseQueryResult<Page<T>>; page: ReturnType<typeof usePageState>; searchable?: boolean; filtered?: boolean;
   children: (record: T) => ReactNode;
 }) {
   return <section aria-label={`${title}列表`} className="grid min-w-0 gap-4">
@@ -26,7 +26,7 @@ export function RecordList<T extends { id: string }>({ title, result, page, chil
     </div>}
     {result.data && <>
       {result.data.items.length === 0 ? <div className="panel text-sm leading-7 text-secondary">
-        {page.q ? "沒有符合搜尋的紀錄；請縮短名稱或清除搜尋。" : `尚未建立${title}；請使用新增按鈕開始。`}
+        {filtered ? "這個篩選範圍沒有紀錄；請調整日期、搜尋或清除篩選。" : page.q ? "沒有符合搜尋的紀錄；請縮短名稱或清除搜尋。" : `尚未建立${title}；請使用新增按鈕開始。`}
       </div> : <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
         {result.data.items.map(record => <li key={record.id} className="min-w-0 p-4 sm:p-5">{children(record)}</li>)}
       </ul>}

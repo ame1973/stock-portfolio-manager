@@ -707,3 +707,138 @@ test("action terms and opening assertion HTTP corrections preserve evidence and 
   await page.getByRole("button", { name: "登出", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
 });
+
+test("trade browser forms preserve exact entries, stale input, dependency rollback and unposted drafts", async ({ page }) => {
+  type Trade = components["schemas"]["TradeRecord"];
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => {
+    if (message.type() === "error" && /Content Security Policy|violates.*directive|Refused to apply/i.test(message.text())) errors.push(message.text());
+  });
+  await page.goto("/settings/accounts");
+  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  const { headers, post } = await signedRequests(page);
+  const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E trade form portfolio" });
+  const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E trade form broker" });
+  const account = await post<components["schemas"]["Account"]>("accounts", {
+    portfolio_id: portfolio.id, broker_id: broker.id, name: "E2E UI ledger account", default_currency: "USD",
+    opening_cash: "2000", opening_cash_date: "2026-01-01", opening_fx_rate_hkd: "7.7", cash_completeness: "COMPLETE",
+  });
+  const stock = await post<components["schemas"]["Security"]>("securities", {
+    exchange_code: "NASDAQ", display_ticker: "UIE", name: "E2E trade form stock", quote_currency: "USD",
+  });
+  await page.getByRole("link", { name: "交易紀錄", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "交易紀錄", exact: true })).toBeVisible();
+  await page.getByText("篩選交易", { exact: true }).click();
+  await page.getByLabel("篩選組合", { exact: true }).selectOption(portfolio.id);
+  await expect(page.getByText("這個篩選範圍沒有紀錄；請調整日期、搜尋或清除篩選。", { exact: true })).toBeVisible();
+  await page.getByText("篩選交易", { exact: true }).click();
+
+  async function enterTrade(side: "BUY" | "SELL", day: string, quantity: string, price: string, fee: string, rate: string) {
+    await page.getByRole("button", { name: "新增交易", exact: true }).click();
+    const form = page.getByRole("form", { name: "新增交易", exact: true });
+    await form.getByLabel("投資組合", { exact: true }).selectOption(portfolio.id);
+    await form.getByLabel("交易帳戶", { exact: true }).selectOption(account.id);
+    await form.getByLabel("交易證券", { exact: true }).selectOption(stock.id);
+    await form.getByLabel("買賣方向").selectOption(side);
+    await form.getByLabel("交易日期", { exact: true }).fill(day);
+    await form.getByLabel("交易股數").fill(quantity);
+    await form.getByLabel("每股成交價").fill(price);
+    await form.getByLabel("交易費用").fill(fee);
+    await form.getByLabel("歷史匯率（1 USD = HKD）").fill(rate);
+    return form;
+  }
+  let form = await enterTrade("BUY", "2026-01-02", "10", "100", "1", "7.8");
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const label of ["買賣方向", "交易股數", "交易稅費"]) {
+      const bounds = await form.getByLabel(label).boundingBox();
+      expect(bounds!.height).toBeGreaterThanOrEqual(44);
+      expect(bounds!.height).toBeLessThanOrEqual(56);
+    }
+    await page.screenshot({ path: `.local/screenshots/trade-form-${width}.png`, fullPage: true });
+  }
+  await page.emulateMedia({ colorScheme: "dark" });
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
+  await page.screenshot({ path: ".local/screenshots/trade-form-dark.png", fullPage: true });
+  await page.emulateMedia({ colorScheme: "light" });
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  const buyCard = () => page.getByRole("article", { name: /^2026-01-02 買入/ }).filter({ has: page.getByRole("button", { name: "更正交易", exact: true }) });
+  await expect(buyCard()).toContainText("7807.800000");
+  form = await enterTrade("SELL", "2026-01-03", "11", "120", "2", "7.8");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("持倉不足");
+  await expect(form.getByLabel("交易股數")).toHaveValue("11");
+  await form.getByLabel("交易股數").fill("4");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(page.getByRole("article", { name: /^2026-01-03 賣出/ })).toContainText("478.000000");
+  const original = (await (await page.request.get("/api/v1/trades", { params: { portfolio_id: portfolio.id } })).json() as { items: Trade[] }).items.find(row => row.side === "BUY")!;
+  await buyCard().getByRole("button", { name: "更正交易", exact: true }).click();
+  form = page.getByRole("form", { name: "更正交易", exact: true });
+  await form.getByLabel("交易股數").fill("12");
+  await form.getByLabel("歷史匯率（1 USD = HKD）").fill("7.9");
+  await form.getByLabel("交易更正依據").fill("Synthetic reviewed corrected broker statement");
+  // A real second writer revises the same immutable root while the form retains its old ID/version.
+  const otherWriter = await page.request.patch(`/api/v1/trades/${original.id}`, {
+    headers: headers(1), data: {
+      portfolio_id: portfolio.id, account_id: account.id, security_id: stock.id, side: "BUY", trade_date: "2026-01-02",
+      quantity: "11", price: "100", fee: "1", currency: "USD", fx_rate_hkd: "7.8", reason: "Synthetic concurrent statement correction",
+    },
+  });
+  expect(otherWriter.status()).toBe(200);
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("不會覆蓋新版");
+  await expect(form.getByLabel("交易股數")).toHaveValue("12");
+  await expect(form.getByLabel("歷史匯率（1 USD = HKD）")).toHaveValue("7.9");
+  await form.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(buyCard()).toContainText("11.00000000");
+  await buyCard().getByRole("button", { name: "更正交易", exact: true }).click();
+  form = page.getByRole("form", { name: "更正交易", exact: true });
+  await form.getByLabel("交易股數").fill("12");
+  await form.getByLabel("歷史匯率（1 USD = HKD）").fill("7.9");
+  await form.getByLabel("交易更正依據").fill("Synthetic reconciled replacement statement");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(buyCard()).toContainText("9487.900000");
+  await buyCard().getByRole("button", { name: "查看此事件修訂鏈", exact: true }).click();
+  await expect(page.getByRole("article")).toHaveCount(3);
+  await expect(page.getByText("已有新修訂", { exact: true })).toHaveCount(2);
+  await buyCard().getByRole("button", { name: "作廢交易", exact: true }).click();
+  await page.getByLabel("作廢交易依據").fill("Synthetic dependency rollback demonstration");
+  await page.getByRole("button", { name: "作廢此交易", exact: true }).click();
+  await expect(page.getByRole("alertdialog").getByRole("button", { name: "取消", exact: true })).toBeFocused();
+  await page.getByRole("alertdialog").getByRole("button", { name: "確認", exact: true }).click();
+  await expect(page.getByRole("alertdialog").getByRole("alert")).toContainText("持倉不足");
+  await page.getByRole("alertdialog").getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "取消作廢", exact: true }).click();
+  await page.getByRole("button", { name: "顯示全部交易事件", exact: true }).click();
+  for (const card of [page.getByRole("article", { name: /^2026-01-03 賣出/ }), buyCard()]) {
+    await card.getByRole("button", { name: "作廢交易", exact: true }).click();
+    await page.getByLabel("作廢交易依據").fill("Void reviewed synthetic broker record");
+    await page.getByRole("button", { name: "作廢此交易", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "確認", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page.getByText("交易已作廢；原值、精確沖銷及審計仍保留。", { exact: true })).toBeVisible();
+  }
+  form = await enterTrade("SELL", "2050-01-02", "1", "50", "0", "");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(page.getByText("已儲存未來交易草稿；沒有現金或目前持倉影響。", { exact: true })).toBeVisible();
+  await expect(page.getByText("未知，未確認 HKD 認列", { exact: true })).toBeVisible();
+  const history = await (await page.request.get("/api/v1/trades", { params: { portfolio_id: portfolio.id, include_history: true } })).json() as { items: Trade[] };
+  expect(history.items).toHaveLength(5);
+  expect(history.items.filter(row => row.status === "ACTIVE")).toHaveLength(0);
+  const cash = await (await page.request.get(`/api/v1/accounts/${account.id}/cash-balances`)).json() as components["schemas"]["AccountCashBalances"];
+  expect(cash.balances[0]!.balance).toBe("2000.000000");
+  expect(cash.balances[0]!.historical_booked_hkd_net).toBe("15400.000000");
+  await page.setViewportSize({ width: 360, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: ".local/screenshots/trade-history-360.png", fullPage: true });
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  expect(errors).toEqual([]);
+  await page.getByRole("button", { name: "登出", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
+});

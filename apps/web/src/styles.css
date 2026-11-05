@@ -14,8 +14,11 @@
   --font-sans: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif;
 }
 
+:root { color-scheme: light; }
+
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --color-background: #142433;
     --color-surface: #1b3042;
     --color-foreground: #e8f0f7;
