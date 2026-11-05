@@ -455,3 +455,111 @@ test("native cash and expense HTTP corrections preserve FX, wallets, opening, an
   await page.getByRole("button", { name: "登出", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
 });
+
+test("paired cash and cost-preserving securities transfer HTTP revisions commit both sides or neither", async ({ page }) => {
+  type CashTransfer = components["schemas"]["CashTransfer"];
+  type StockTransfer = components["schemas"]["SecurityTransfer"];
+  type Trade = components["schemas"]["TradeRecord"];
+  type Balances = components["schemas"]["AccountCashBalances"];
+  await page.goto("/settings/accounts");
+  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  const { headers, post } = await signedRequests(page);
+  const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E transfer portfolio" });
+  const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E transfer broker" });
+  const accounts = [];
+  for (const name of ["E2E transfer source", "E2E transfer destination"]) {
+    accounts.push(await post<components["schemas"]["Account"]>("accounts", {
+      portfolio_id: portfolio.id, broker_id: broker.id, name, default_currency: "USD", opening_cash: "2000",
+      opening_cash_date: "2026-01-01", opening_fx_rate_hkd: "7.8", cash_completeness: "COMPLETE",
+    }));
+  }
+  const [source, target] = [accounts[0]!, accounts[1]!];
+  const cashBody = {
+    portfolio_id: portfolio.id, source_account_id: source.id, target_account_id: target.id,
+    transfer_date: "2026-01-03", source_currency: "USD", target_currency: "USD",
+    source_amount: "100", target_amount: "100", fx_rate_hkd: "7.8", note: "",
+    reason: "Synthetic reviewed internal transfer",
+  } satisfies components["schemas"]["CashTransferCreate"];
+  const pair = await post<CashTransfer>("cash-transfers", cashBody);
+  expect(pair.booking_delta_hkd).toBe("0.000000");
+  expect(pair.source_booked_hkd).toBe("780.000000");
+  const correction = await page.request.patch(`/api/v1/cash-transfers/${pair.id}`, {
+    headers: headers(1), data: { ...cashBody, source_amount: "120", target_amount: "120", fx_rate_hkd: "7.9" },
+  });
+  expect(correction.status()).toBe(200);
+  const correctedPair = await correction.json() as CashTransfer;
+  expect(correctedPair.root_id).toBe(pair.id);
+  expect(correctedPair.revision).toBe(2);
+  expect(correctedPair.source_booked_hkd).toBe("948.000000");
+  const oldPair = await (await page.request.get(`/api/v1/cash-transfers/${pair.id}`)).json() as CashTransfer;
+  expect(oldPair.status).toBe("SUPERSEDED");
+  expect(oldPair.source_booked_hkd).toBe("780.000000");
+  const fx = await post<CashTransfer>("cash-transfers", {
+    ...cashBody, target_account_id: source.id, source_amount: "1", target_amount: "7.8", target_currency: "HKD",
+  });
+  expect(fx.booking_delta_hkd).toBe("0.000000");
+  const reason = { reason: "Void synthetic reviewed transfer" };
+  const fxVoid = await page.request.delete(`/api/v1/cash-transfers/${fx.id}`, { headers: headers(1), data: reason });
+  expect(fxVoid.status()).toBe(200);
+  const stock = await post<components["schemas"]["Security"]>("securities", {
+    exchange_code: "NASDAQ", display_ticker: "XFR", name: "E2E transfer security", quote_currency: "USD",
+  });
+  await post<Trade>("trades", {
+    portfolio_id: portfolio.id, account_id: source.id, security_id: stock.id, side: "BUY", trade_date: "2026-01-02",
+    quantity: "10", price: "100", fee: "1", currency: "USD", fx_rate_hkd: "7.8",
+  });
+  const balancesBefore = await (await page.request.get(`/api/v1/accounts/${source.id}/cash-balances`)).json() as Balances;
+  const stockBody = {
+    portfolio_id: portfolio.id, source_account_id: source.id, target_account_id: target.id,
+    security_id: stock.id, transfer_date: "2026-01-03", quantity: "4", note: "",
+  } satisfies components["schemas"]["SecurityTransferCreate"];
+  const moved = await post<StockTransfer>("security-transfers", stockBody);
+  expect(moved.cost_moved_hkd).toBe("3123.120000");
+  expect(moved.cost_scope).toBe("BOOKED_AT_CREATION");
+  const balancesAfter = await (await page.request.get(`/api/v1/accounts/${source.id}/cash-balances`)).json() as Balances;
+  expect(balancesAfter).toEqual(balancesBefore);
+  const sale = await post<Trade>("trades", {
+    portfolio_id: portfolio.id, account_id: target.id, security_id: stock.id, side: "SELL", trade_date: "2026-01-04",
+    quantity: "2", price: "120", fee: "1", currency: "USD", fx_rate_hkd: "7.8",
+  });
+  const orphan = await page.request.delete(`/api/v1/security-transfers/${moved.id}`, { headers: headers(1), data: reason });
+  expect(orphan.status()).toBe(409);
+  expect((await orphan.json() as { code: string }).code).toBe("INSUFFICIENT_SHARES");
+  const revised = await page.request.patch(`/api/v1/security-transfers/${moved.id}`, {
+    headers: headers(1), data: { ...stockBody, quantity: "5", reason: "Correct synthetic custodian movement" },
+  });
+  expect(revised.status()).toBe(200);
+  const revisedStock = await revised.json() as StockTransfer;
+  expect(revisedStock.root_id).toBe(moved.id);
+  expect(revisedStock.created_sequence).toBe(moved.created_sequence);
+  expect(revisedStock.cost_moved_hkd).toBe("3903.900000");
+  const oldStock = await (await page.request.get(`/api/v1/security-transfers/${moved.id}`)).json() as StockTransfer;
+  expect(oldStock.is_current).toBe(false);
+  expect(oldStock.status).toBe("SUPERSEDED");
+  expect(oldStock.cost_moved_hkd).toBe("3123.120000");
+  const saleVoid = await page.request.delete(`/api/v1/trades/${sale.id}`, { headers: headers(1), data: reason });
+  expect(saleVoid.status()).toBe(200);
+  const stockVoidHeaders = headers(1);
+  const stockVoid = await page.request.delete(`/api/v1/security-transfers/${revisedStock.id}`, { headers: stockVoidHeaders, data: reason });
+  expect(stockVoid.status()).toBe(200);
+  const stockRetry = await page.request.delete(`/api/v1/security-transfers/${revisedStock.id}`, { headers: stockVoidHeaders, data: reason });
+  expect(stockRetry.status()).toBe(200);
+  expect(await stockRetry.json()).toEqual(await stockVoid.json());
+  const pairVoidHeaders = headers(1);
+  const pairVoid = await page.request.delete(`/api/v1/cash-transfers/${correctedPair.id}`, { headers: pairVoidHeaders, data: reason });
+  expect(pairVoid.status()).toBe(200);
+  const pairRetry = await page.request.delete(`/api/v1/cash-transfers/${correctedPair.id}`, { headers: pairVoidHeaders, data: reason });
+  expect(pairRetry.status()).toBe(200);
+  expect(await pairRetry.json()).toEqual(await pairVoid.json());
+  const currentSource = await (await page.request.get(`/api/v1/accounts/${source.id}/cash-balances`)).json() as Balances;
+  const currentTarget = await (await page.request.get(`/api/v1/accounts/${target.id}/cash-balances`)).json() as Balances;
+  expect(currentSource.balances.find(row => row.currency === "USD")!.balance).toBe("999.000000");
+  expect(currentSource.balances.find(row => row.currency === "HKD")!.balance).toBe("0.000000");
+  expect(currentTarget.balances.find(row => row.currency === "USD")!.balance).toBe("2000.000000");
+  const history = await page.request.get("/api/v1/security-transfers", { params: { root_id: moved.id, include_history: true } });
+  expect(history.headers()["cache-control"]).toBe("no-store");
+  expect((await history.json() as { items: StockTransfer[] }).items).toHaveLength(2);
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  await page.getByRole("button", { name: "登出", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
+});

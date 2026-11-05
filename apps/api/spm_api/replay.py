@@ -113,6 +113,12 @@ def replay(
     return positions
 
 
+def replay_before(events: Sequence[Event], boundary: Event) -> dict[tuple[str, str], Position]:
+    """Use the same ordering for an event's cost snapshot as for authoritative full replay."""
+    key = _order(boundary)
+    return replay([event for event in events if _order(event) < key], as_of=boundary.day)
+
+
 def eligible_quantity(
     events: Sequence[Event], account_id: str, security_id: str, ex_date: date
 ) -> Decimal:

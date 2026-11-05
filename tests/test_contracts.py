@@ -54,6 +54,15 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "patch",
         ): "correct_provider_symbol_period",
     }
+    for resource, singular in (
+        ("cash-transfers", "cash_transfer"),
+        ("security-transfers", "security_transfer"),
+    ):
+        extensions[(f"/api/v1/{resource}", "get")] = f"list_{singular}s"
+        extensions[(f"/api/v1/{resource}/{{id}}", "get")] = f"get_{singular}"
+        extensions[(f"/api/v1/{resource}/{{id}}", "patch")] = f"revise_{singular}"
+        extensions[(f"/api/v1/{resource}/{{id}}", "delete")] = f"void_{singular}"
+    extensions[("/api/v1/cash-transfers", "post")] = "create_cash_transfer"
     for route, operation in actual.items():
         if route in extensions:
             assert operation["operationId"] == extensions[route]

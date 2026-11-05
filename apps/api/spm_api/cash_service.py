@@ -126,7 +126,7 @@ def _active_account(con: Connection, auth: Auth, identifier: str) -> RowMapping:
     return account
 
 
-def _booking(body: BookingInput) -> tuple[int, int | None, int | None]:
+def native_booking(body: BookingInput) -> tuple[int, int | None, int | None]:
     amount = reversible_integer(to_scaled(body.amount, 6))
     rate = conversion_rate(
         body.currency, Decimal(body.fx_rate_hkd) if body.fx_rate_hkd is not None else None
@@ -147,7 +147,7 @@ def _booking(body: BookingInput) -> tuple[int, int | None, int | None]:
     return amount, to_scaled(format(rate, "f"), 12), money_integer(locked.hkd)
 
 
-def _finish(
+def finish_financial_change(
     con: Connection,
     auth: Auth,
     rows: Sequence[RowMapping],
@@ -174,7 +174,7 @@ def _manual_current(row: RowMapping) -> None:
 
 
 def _post_manual(con: Connection, body: CashEntryCreate, *, predecessor: str | None = None) -> str:
-    amount, fx, booked = _booking(body)
+    amount, fx, booked = native_booking(body)
     return post_cash(
         con,
         account=str(body.account_id),
@@ -195,7 +195,7 @@ def create_cash(con: Connection, auth: Auth, body: CashEntryCreate, request_id: 
     _active_account(con, auth, str(body.account_id))
     identifier = _post_manual(con, body)
     row = owned_cash(con, str(auth.owner.id), identifier)
-    _finish(
+    finish_financial_change(
         con,
         auth,
         [row],
@@ -234,7 +234,7 @@ def revise_cash(
     reversal = reverse_cash(con, before, reason=body.reason)
     revised = _post_manual(con, body, predecessor=identifier)
     row = owned_cash(con, str(auth.owner.id), revised)
-    _finish(
+    finish_financial_change(
         con,
         auth,
         [before, row],
@@ -271,7 +271,7 @@ def void_cash(
     check_version(before["version"], version)
     _manual_current(before)
     reversal = reverse_cash(con, before, reason=reason)
-    _finish(
+    finish_financial_change(
         con,
         auth,
         [before],
@@ -301,7 +301,7 @@ def _insert_expense(
     *,
     predecessor: str | None = None,
 ) -> str:
-    amount, fx, booked = _booking(body)
+    amount, fx, booked = native_booking(body)
     identifier = str(uuid4())
     con.execute(
         text("""
@@ -377,7 +377,9 @@ def create_expense(con: Connection, auth: Auth, body: ExpenseCreate, request_id:
     identifier = _insert_expense(con, body)
     row = owned_expense(con, str(auth.owner.id), identifier)
     cash = _post_expense(con, row)
-    _finish(con, auth, [row], [cash], identifier, "EXPENSE_FACT_CHANGED", body.date, request_id)
+    finish_financial_change(
+        con, auth, [row], [cash], identifier, "EXPENSE_FACT_CHANGED", body.date, request_id
+    )
     result = as_expense(row)
     audit(
         con,
@@ -408,7 +410,7 @@ def revise_expense(
     revised = _insert_expense(con, body, predecessor=identifier)
     row = owned_expense(con, str(auth.owner.id), revised)
     cash = _post_expense(con, row)
-    _finish(
+    finish_financial_change(
         con,
         auth,
         [before, row],
@@ -445,7 +447,7 @@ def void_expense(
     check_version(before["version"], version)
     _retire_expense(con, before, "VOID")
     reversal = _reverse_expense(con, before, reason)
-    _finish(
+    finish_financial_change(
         con,
         auth,
         [before],
