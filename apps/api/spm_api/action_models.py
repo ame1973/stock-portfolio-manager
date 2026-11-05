@@ -1,10 +1,18 @@
 """Explicit corporate-action terms; unsupported allocation is review, never guessed math."""
 
+import re
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import AfterValidator, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BeforeValidator,
+    Field,
+    PlainSerializer,
+    field_validator,
+    model_validator,
+)
 
 from spm_api.decimal_types import INT64_MAX, IsoDate
 from spm_api.errors import Model
@@ -13,7 +21,25 @@ from spm_api.master_models import ChangeReason, Note, Ticker
 ActionType = Literal[
     "SPLIT", "REVERSE_SPLIT", "SYMBOL_CHANGE", "CASH_IN_LIEU", "MERGER", "SPIN_OFF"
 ]
-Ratio = Annotated[int, Field(strict=True, ge=1, le=INT64_MAX)]
+
+
+def _ratio_input(value: object) -> object:
+    if isinstance(value, str):
+        if re.fullmatch(r"[0-9]{1,19}", value) is None:
+            raise ValueError(
+                "Use an exact positive INT64 integer string without exponent or decimal"
+            )
+        return int(value)
+    return value
+
+
+Ratio = Annotated[
+    int,
+    Field(strict=True, ge=1, le=INT64_MAX),
+    BeforeValidator(_ratio_input, json_schema_input_type=int | str),
+]
+# Input models retain integer fingerprints; only responses need browser-safe JSON strings.
+JsonRatio = Annotated[Ratio, PlainSerializer(str, return_type=str, when_used="json")]
 
 
 def _evidence(value: str) -> str:
@@ -87,8 +113,8 @@ class CorporateAction(Model):
     security_id: UUID
     action_type: ActionType
     effective_date: IsoDate
-    ratio_numerator: int | None
-    ratio_denominator: int | None
+    ratio_numerator: JsonRatio | None
+    ratio_denominator: JsonRatio | None
     new_symbol: str | None
     previous_symbol: str | None
     evidence_url: str | None

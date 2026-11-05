@@ -234,13 +234,14 @@ A synthetic three-for-two adoption is:
   "security_id": "00000000-0000-4000-8000-000000000003",
   "action_type": "SPLIT",
   "effective_date": "2026-01-03",
-  "ratio_numerator": 3,
-  "ratio_denominator": 2,
+  "ratio_numerator": "3",
+  "ratio_denominator": "2",
   "status": "CONFIRMED",
   "reason": "Synthetic reviewed rational split terms"
 }
 ```
 
+- Ratio fields accept exact positive INT64 digit strings (recommended) or legacy strict JSON integers; responses always use canonical strings/null. Never construct a large ratio through JavaScript Number: adjacent integers above 2^53 would lose precision. Valid inputs normalize to Python/SQLite integers, retaining the existing integer idempotency fingerprints and historical facts; old numeric response caches can still replay into the exact string output.
 - SPLIT needs positive integer terms with numerator greater than denominator; REVERSE_SPLIT requires the opposite. No decimal/float ratios or guessed 1:1 defaults are accepted. Confirmed terms apply at the effective day's opening, preserving total cost. Non-representable fractional shares require review, never truncation or invented cash-in-lieu. Future confirmed quantity terms do not affect today's holdings; each security's exchange-local calendar determines their horizon.
 - `status=CONFIRMED` adopts terms, **not a complete valuation**. The response states `allocation_scope=TERMS_NOT_A_VALUATION` and an explicit `effect_scope`. Unallocated later history may remain review-required while a known earlier action is resolved. The computable prefix must still validate; no partial positions are published as a complete current result. Normal ledger writes cannot bypass a held unallocated action.
 - CASH_IN_LIEU, MERGER and SPIN_OFF without an implemented allocation workflow must remain NEEDS_REVIEW. Saving their evidence creates a real review item; it does not invent shares, cash, cost allocation or realized profit. Such allocation remains unsupported, not silently successful.

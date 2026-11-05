@@ -136,6 +136,61 @@ async def test_confirmed_three_for_two_split_is_exact_no_cash_and_idempotent(
     assert read.status_code == 200 and read.json() == action and read.headers["ETag"] == '"1"'
 
 
+async def test_ratio_strings_preserve_legacy_integer_fingerprints_and_response_roundtrips(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    key = str(uuid4())
+    original = await create(
+        client,
+        "corporate-actions",
+        action_body(book, ratio_numerator="0003", ratio_denominator="2"),
+        key=key,
+    )
+    assert original["ratio_numerator"] == "3" and original["ratio_denominator"] == "2"
+    before = snapshot(engine)
+    retry = await create(client, "corporate-actions", action_body(book), key=key)
+    assert retry == original and snapshot(engine) == before
+    legacy = {**original, "ratio_numerator": 3, "ratio_denominator": 2}
+    parsed = CorporateAction.model_validate(legacy)
+    assert parsed.ratio_numerator == 3 and parsed.model_dump(mode="json") == original
+    assert (
+        CorporateAction.model_validate_json(json.dumps(original)).model_dump(mode="json")
+        == original
+    )
+
+
+@pytest.mark.parametrize(
+    ("numerator", "denominator"),
+    [("9007199254740993", "9007199254740992"), ("9223372036854775807", "9223372036854775806")],
+)
+async def test_large_ratio_terms_roundtrip_exactly_as_json_strings_and_sqlite_integers(
+    client: httpx.AsyncClient,
+    engine: Engine,
+    book: dict[str, Any],
+    numerator: str,
+    denominator: str,
+) -> None:
+    record = await create(
+        client,
+        "corporate-actions",
+        action_body(
+            book,
+            ratio_numerator=numerator,
+            ratio_denominator=denominator,
+            status="NEEDS_REVIEW",
+        ),
+    )
+    assert record["ratio_numerator"] == numerator and record["ratio_denominator"] == denominator
+    with unit_of_work(engine) as con:
+        row = con.exec_driver_sql(
+            "SELECT ratio_num,ratio_den,typeof(ratio_num),typeof(ratio_den) "
+            "FROM corporate_actions WHERE id=?",
+            (record["id"],),
+        ).one()
+        assert tuple(row) == (int(numerator), int(denominator), "integer", "integer")
+    assert (await client.get(f"/api/v1/corporate-actions/{record['id']}")).json() == record
+
+
 async def test_revision_keeps_root_sequence_old_ratio_and_full_history_dependence(
     client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
 ) -> None:
@@ -188,7 +243,7 @@ async def test_revision_keeps_root_sequence_old_ratio_and_full_history_dependenc
     assert revised["created_sequence"] == original["created_sequence"] and revised["revision"] == 2
     assert position(engine, book).quantity == Decimal("5")
     old = (await client.get(f"/api/v1/corporate-actions/{original['id']}")).json()
-    assert old["ratio_numerator"] == 3 and old["status"] == "CONFIRMED"
+    assert old["ratio_numerator"] == "3" and old["status"] == "CONFIRMED"
     assert (
         old["lifecycle_status"] == "SUPERSEDED"
         and old["is_current"] is False
@@ -304,7 +359,15 @@ async def test_confirmation_coexists_with_later_unallocated_review_without_parti
     "changes",
     [
         {"ratio_numerator": 3.0},
-        {"ratio_numerator": "3"},
+        {"ratio_numerator": "3.0"},
+        {"ratio_numerator": "3e0"},
+        {"ratio_numerator": " 3"},
+        {"ratio_numerator": "+3"},
+        {"ratio_numerator": "-1"},
+        {"ratio_numerator": "0"},
+        {"ratio_numerator": "٣"},
+        {"ratio_numerator": "9223372036854775808"},
+        {"ratio_numerator": "12345678901234567890"},
         {"ratio_numerator": True},
         {"ratio_numerator": 0},
         {"ratio_numerator": 9223372036854775808},

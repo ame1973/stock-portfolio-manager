@@ -1267,7 +1267,7 @@
           "ratio_denominator": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -1278,7 +1278,7 @@
           "ratio_numerator": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -1418,9 +1418,10 @@
           "ratio_denominator": {
             "anyOf": [
               {
-                "maximum": 9.223372036854776e+18,
-                "minimum": 1.0,
                 "type": "integer"
+              },
+              {
+                "type": "string"
               },
               {
                 "type": "null"
@@ -1431,9 +1432,10 @@
           "ratio_numerator": {
             "anyOf": [
               {
-                "maximum": 9.223372036854776e+18,
-                "minimum": 1.0,
                 "type": "integer"
+              },
+              {
+                "type": "string"
               },
               {
                 "type": "null"

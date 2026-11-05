@@ -1193,9 +1193,9 @@ export interface components {
             /** Previous Symbol */
             previous_symbol: string | null;
             /** Ratio Denominator */
-            ratio_denominator: number | null;
+            ratio_denominator: string | null;
             /** Ratio Numerator */
-            ratio_numerator: number | null;
+            ratio_numerator: string | null;
             /** Reason */
             reason: string;
             /** Review Required */
@@ -1244,9 +1244,9 @@ export interface components {
              */
             note: string;
             /** Ratio Denominator */
-            ratio_denominator?: number | null;
+            ratio_denominator?: number | string | null;
             /** Ratio Numerator */
-            ratio_numerator?: number | null;
+            ratio_numerator?: number | string | null;
             /** Reason */
             reason: string;
             /**

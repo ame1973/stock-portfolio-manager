@@ -606,6 +606,15 @@ test("action terms and opening assertion HTTP corrections preserve evidence and 
   const original = await created.json() as Action;
   expect(original.effect_scope).toBe("QUANTITY_TERMS");
   expect(original.allocation_scope).toBe("TERMS_NOT_A_VALUATION");
+  const largeRatio = await post<Action>("corporate-actions", {
+    ...body, effective_date: "2050-01-03", status: "NEEDS_REVIEW", ratio_numerator: "9223372036854775807", ratio_denominator: "9223372036854775806",
+  });
+  expect(largeRatio.ratio_numerator).toBe("9223372036854775807");
+  expect(await page.evaluate(async identifier => {
+    const response = await fetch(`/api/v1/corporate-actions/${identifier}`, { cache: "no-store", credentials: "same-origin" });
+    const data = await response.json() as { ratio_numerator: unknown; ratio_denominator: unknown };
+    return [data.ratio_numerator, data.ratio_denominator];
+  }, largeRatio.id)).toEqual(["9223372036854775807", "9223372036854775806"]);
   expect(await journal()).toEqual(beforeSplit);
   const repeated = await page.request.post("/api/v1/corporate-actions", { headers: splitHeaders, data: body });
   expect(repeated.status()).toBe(201);
@@ -627,8 +636,8 @@ test("action terms and opening assertion HTTP corrections preserve evidence and 
   expect(revised.revision).toBe(2);
   const retained = await (await page.request.get(`/api/v1/corporate-actions/${original.id}`)).json() as Action;
   expect(retained.lifecycle_status).toBe("SUPERSEDED");
-  expect(retained.ratio_numerator).toBe(3);
-  expect(retained.ratio_denominator).toBe(2);
+  expect(retained.ratio_numerator).toBe("3");
+  expect(retained.ratio_denominator).toBe("2");
   expect((await page.request.delete(`/api/v1/trades/${sale.id}`, { headers: headers(1), data: reason })).status()).toBe(200);
 
   const beforeReview = await journal();
