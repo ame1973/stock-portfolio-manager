@@ -871,14 +871,16 @@ async def test_trade_replays_stored_actions_and_never_guesses_unallocated_terms(
         con.execute(
             text(
                 "INSERT INTO corporate_actions(id,root_id,created_sequence,security_id,action_type,"
-                "effective_date,ratio_num,ratio_den,status,created_at) "
-                "VALUES (:id,:id,:seq,:security,:action,:day,:num,:den,:status,:now)"
+                "effective_date,ratio_num,ratio_den,status,created_at,new_symbol,previous_symbol) "
+                "VALUES (:id,:id,:seq,:security,:action,:day,:num,:den,:status,:now,:new,:previous)"
             ),
             {
                 "id": identifier,
                 "seq": seq,
                 "security": book["security"]["id"],
                 "action": action,
+                "new": "RENAMED" if action == "SYMBOL_CHANGE" else None,
+                "previous": "SYN" if action == "SYMBOL_CHANGE" else None,
                 "day": day,
                 "num": num,
                 "den": den,

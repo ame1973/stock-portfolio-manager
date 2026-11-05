@@ -491,14 +491,15 @@ def test_cash_revision_lineage_and_security_root_cannot_cross_owner_or_fork(engi
                 )
 
 
-def test_transfer_downgrade_requires_a_validated_backup(engine: Engine) -> None:
-    with engine.connect() as con:
+def test_transfer_downgrade_requires_a_validated_backup(old_engine: Engine) -> None:
+    with old_engine.connect() as con:
         config = migration_config()
         config.attributes["connection"] = con
+        command.upgrade(config, "0006_transfers")
         with pytest.raises(RuntimeError, match="validated pre-upgrade backup"):
             command.downgrade(config, "0005_cash")
-    with unit_of_work(engine) as con:
+    with unit_of_work(old_engine) as con:
         assert (
             con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == schema_head()
+            == "0006_transfers"
         )
