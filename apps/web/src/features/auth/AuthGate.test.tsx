@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { AuthGate } from "./AuthGate";
@@ -83,5 +83,40 @@ describe("owner authentication", () => {
     expect(cache.getQueryData(["private-holdings"])).toBeUndefined();
     expect(post).toHaveBeenCalledWith("/api/v1/auth/logout", { params: { header: { "X-CSRF-Token": "synthetic-csrf-token", "Idempotency-Key": expect.any(String) } } });
     await waitFor(() => expect(cache.getQueryData(["owner"])).toBeNull());
+  });
+
+  it("purges private data on an expired-session event", async () => {
+    vi.spyOn(api, "GET").mockResolvedValueOnce(setupData(true)).mockResolvedValueOnce({ data: owner, response: new Response() });
+    const cache = renderGate();
+    await screen.findByText(/私人內容/);
+    cache.setQueryData(["accounts"], { private: "synthetic-only" });
+    act(() => { window.dispatchEvent(new Event("spm:session-expired")); });
+    expect(await screen.findByRole("heading", { name: "登入持倉簿" })).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("未儲存的內容不會自動入帳");
+    expect(cache.getQueryData(["accounts"])).toBeUndefined();
+    expect(cache.getQueryData(["owner"])).toBeNull();
+  });
+
+  it("drops stale private state when session revalidation returns 401", async () => {
+    vi.spyOn(api, "GET").mockResolvedValueOnce(setupData(true)).mockResolvedValueOnce(unauthorized);
+    const cache = renderGate();
+    cache.setQueryData(["accounts"], { private: "synthetic-only" });
+    await screen.findByRole("heading", { name: "登入持倉簿" });
+    await waitFor(() => expect(cache.getQueryData(["accounts"])).toBeUndefined());
+  });
+
+  it("does not claim logout succeeded when the network failed", async () => {
+    vi.spyOn(api, "GET")
+      .mockResolvedValueOnce(setupData(true))
+      .mockResolvedValueOnce({ data: owner, response: new Response() })
+      .mockResolvedValueOnce({ data: { csrf_token: "synthetic-csrf-token", expires_at: "2026-12-01T00:00:00Z" }, response: new Response() });
+    vi.spyOn(api, "POST").mockRejectedValue(new TypeError("Network failed"));
+    const cache = renderGate();
+    await screen.findByText(/私人內容/);
+    cache.setQueryData(["accounts"], { private: "synthetic-only" });
+    fireEvent.click(screen.getByRole("button", { name: "登出" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("網絡連線中斷");
+    expect(screen.getByText(/私人內容/)).toBeVisible();
+    expect(cache.getQueryData(["accounts"])).toBeDefined();
   });
 });

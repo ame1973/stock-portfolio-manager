@@ -1,8 +1,9 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type components } from "@spm/contracts";
 import { Button } from "../../components/ui/button";
-import { errorMessage, mutationHeaders } from "../../lib/api";
+import { checked, errorMessage, failureMessage, mutationHeaders } from "../../lib/api";
+import { clearSession } from "../../lib/session";
 
 type Owner = components["schemas"]["Owner"];
 export type AuthSession = {
@@ -28,17 +29,26 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
   });
   const owner = useQuery({
     queryKey: ["owner"], enabled: setup.data?.initialized === true, retry: false, staleTime: 30_000,
-    queryFn: async () => {
-      const { data, error, response } = await api.GET("/api/v1/auth/me");
+    queryFn: async ({ signal }) => {
+      const { data, error, response } = await api.GET("/api/v1/auth/me", { signal });
       if (response.status === 401) return null;
       if (!data || error) throw new Error(errorMessage(error));
       return data;
     },
   });
 
-  function clearPrivateQueries() {
-    cache.removeQueries({ predicate: query => !["setup", "owner"].includes(String(query.queryKey[0])) });
-  }
+  useEffect(() => {
+    const expired = () => {
+      setError("登入已過期，請重新登入；未儲存的內容不會自動入帳。");
+      void clearSession(cache);
+    };
+    window.addEventListener("spm:session-expired", expired);
+    return () => window.removeEventListener("spm:session-expired", expired);
+  }, [cache]);
+
+  useEffect(() => {
+    if (owner.data === null) void clearSession(cache);
+  }, [cache, owner.data]);
 
   async function logout() {
     setLoggingOut(true);
@@ -46,11 +56,10 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
     try {
       const headers = await mutationHeaders();
       const result = await api.POST("/api/v1/auth/logout", { params: { header: headers } });
-      if (result.error) throw new Error(errorMessage(result.error));
-      clearPrivateQueries();
-      cache.setQueryData(["owner"], null);
+      checked(result);
+      await clearSession(cache);
     } catch (cause) {
-      setLogoutError(cause instanceof Error ? cause.message : "登出未完成，請重試。");
+      setLogoutError(failureMessage(cause));
     } finally {
       setLoggingOut(false);
     }
@@ -76,13 +85,13 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
           setup_token: String(values.get("setup_token") ?? ""), password,
         } })
         : await api.POST("/api/v1/auth/login", { body: { password } });
-      if (!result.data || result.error) throw new Error(errorMessage(result.error));
+      const authenticated = checked(result, false);
       form.reset();
-      clearPrivateQueries();
+      await clearSession(cache);
       cache.setQueryData(["setup"], { initialized: true, requires_token: false });
-      cache.setQueryData(["owner"], result.data);
+      cache.setQueryData(["owner"], authenticated);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "無法登入，請檢查連線後重試。");
+      setError(failureMessage(cause));
     } finally {
       setPending(false);
     }
