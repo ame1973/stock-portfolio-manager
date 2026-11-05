@@ -1,6 +1,7 @@
 """Master-data services; callers own the short database transaction."""
 
 from datetime import date
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -10,6 +11,7 @@ from sqlalchemy import Connection, RowMapping, text
 from spm_api.audit import audit, now, stamp
 from spm_api.decimal_types import from_scaled, to_scaled
 from spm_api.errors import ApiError, Model, Success
+from spm_api.finance import lock_money
 from spm_api.master_models import (
     Account,
     AccountCreate,
@@ -351,11 +353,12 @@ def create_account(con: Connection, auth: Auth, body: AccountCreate, request_id:
     if amount is not None:
         fx = "1.000000000000" if body.default_currency == "HKD" else body.opening_fx_rate_hkd
         assert fx is not None
+        booked = lock_money(Decimal(from_scaled(amount, 6)), body.default_currency, Decimal(fx))
         con.execute(
             text("""
             INSERT INTO cash_ledger_entries(id,account_id,effective_date,currency,amount_micro,
-                fx_rate_hkd_e12,kind,source_type,source_id,note,created_at)
-            VALUES (:id,:account,:day,:currency,:amount,:fx,'ADJUSTMENT','OPENING_BALANCE',
+                fx_rate_hkd_e12,booked_hkd_micro,kind,source_type,source_id,note,created_at)
+            VALUES (:id,:account,:day,:currency,:amount,:fx,:booked,'ADJUSTMENT','OPENING_BALANCE',
                     :account,'Owner-declared starting balance; not an external deposit',:now)
         """),
             {
@@ -365,6 +368,7 @@ def create_account(con: Connection, auth: Auth, body: AccountCreate, request_id:
                 "currency": body.default_currency,
                 "amount": amount,
                 "fx": to_scaled(fx, 12),
+                "booked": to_scaled(str(booked.hkd), 6),
                 "now": stamp(),
             },
         )

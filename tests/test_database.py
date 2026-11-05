@@ -37,6 +37,10 @@ def seed(engine: Engine) -> None:
             "VALUES ('s','HKG','0005','Synthetic','HKD',?)",
             (NOW,),
         )
+        for kind in ("TRADE", "TRANSFER"):
+            con.exec_driver_sql(
+                "INSERT INTO ledger_sequences(kind,fact_id) VALUES (?,'t')", (kind,)
+            )
         for event, revision in (("e1", "r1"), ("e2", "r2")):
             con.exec_driver_sql(
                 "INSERT INTO dividend_events(id,security_id,event_identity_key,created_at) "
@@ -85,7 +89,7 @@ def test_empty_and_repeat_upgrade(engine: Engine, settings: Settings) -> None:
                 "SELECT count(*) FROM sqlite_master WHERE type='table' "
                 "AND name NOT LIKE 'sqlite_%' AND name != 'alembic_version'"
             ).scalar()
-            == 38
+            == 39
         )
     assert not list(settings.data_dir.glob("pre-migration-*"))
 
@@ -133,14 +137,16 @@ def test_evidence_is_append_only(engine: Engine, table: str, operation: str) -> 
         (
             "INSERT INTO trades(id,portfolio_id,account_id,security_id,side,trade_date,quantity_e8,"
             "price_e8,currency,fx_rate_hkd_e12,gross_micro,settlement_micro,booked_hkd_micro,"
-            "created_at,updated_at) VALUES ('t','p2','a1','s','BUY','2026-01-01',100000000,"
-            "100000000,'HKD',1000000000000,1000000,1000000,1000000,'now','now')",
+            "created_at,updated_at,root_id,created_sequence) VALUES ('t','p2','a1','s','BUY',"
+            "'2026-01-01',100000000,100000000,'HKD',1000000000000,1000000,1000000,"
+            "1000000,'now','now','t',1)",
             "TRADE_ACCOUNT_PORTFOLIO_MISMATCH",
         ),
         (
             "INSERT INTO security_transfers(id,portfolio_id,source_account_id,target_account_id,"
-            "security_id,transfer_date,quantity_e8,transferred_cost_hkd_micro,created_at) "
-            "VALUES ('t','p1','a1','a2','s','2026-01-01',100000000,1000000,'now')",
+            "security_id,transfer_date,quantity_e8,transferred_cost_hkd_micro,"
+            "created_at,created_sequence) "
+            "VALUES ('t','p1','a1','a2','s','2026-01-01',100000000,1000000,'now',2)",
             "TRANSFER_ACCOUNT_PORTFOLIO_MISMATCH",
         ),
         (

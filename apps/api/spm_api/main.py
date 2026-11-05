@@ -16,6 +16,7 @@ from spm_api.auth_routes import router as auth_router
 from spm_api.config import Settings
 from spm_api.db import check_database, make_engine
 from spm_api.errors import ApiError, Error, Status, error_response
+from spm_api.finance import FinanceError
 from spm_api.master_routes import router as master_router
 
 
@@ -54,6 +55,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(ApiError)
     async def application_error(request: Request, exc: ApiError) -> JSONResponse:
         return error_response(request, exc.status, exc.code, exc.message)
+
+    @app.exception_handler(FinanceError)
+    async def financial_error(request: Request, exc: FinanceError) -> JSONResponse:
+        status = (
+            409 if exc.code in {"INSUFFICIENT_SHARES", "NEEDS_REVIEW", "DUPLICATE_FACT"} else 422
+        )
+        return error_response(request, status, exc.code, str(exc))
 
     @app.exception_handler(IntegrityError)
     async def integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:

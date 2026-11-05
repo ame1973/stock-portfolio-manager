@@ -108,6 +108,7 @@ async def test_opening_cash_is_posted_once_and_not_an_external_deposit(
         assert row["amount_micro"] == 123450001
         assert row["external_flow"] == 0 and row["source_type"] == "OPENING_BALANCE"
         assert row["fx_rate_hkd_e12"] == (7812345678901 if currency == "USD" else 10**12)
+        assert row["booked_hkd_micro"] == (964434082 if currency == "USD" else 123450001)
         assert (
             con.execute(
                 text("SELECT count(*) FROM projection_invalidations WHERE source_id=:id"),
@@ -140,6 +141,44 @@ async def test_missing_opening_fx_never_posts_partial_account(
     with unit_of_work(engine) as con:
         assert con.execute(text("SELECT count(*) FROM accounts")).scalar_one() == 1
         assert con.execute(text("SELECT count(*) FROM cash_ledger_entries")).scalar_one() == 0
+
+
+async def test_opening_hkd_overflow_rolls_back_account_audit_and_idempotency(
+    client: httpx.AsyncClient, engine: Engine, graph: dict[str, Any]
+) -> None:
+    tables = (
+        "accounts",
+        "cash_ledger_entries",
+        "audit_events",
+        "idempotency_keys",
+        "projection_invalidations",
+    )
+    with unit_of_work(engine) as con:
+        before = {
+            table: con.exec_driver_sql(f"SELECT count(*) FROM {table}").scalar_one()
+            for table in tables
+        }
+        revision = con.exec_driver_sql("SELECT data_revision FROM portfolios").scalar_one()
+    response = await client.post(
+        "/api/v1/accounts",
+        headers=write_headers(client),
+        json={
+            "portfolio_id": graph["portfolio"]["id"],
+            "broker_id": graph["broker"]["id"],
+            "name": "Cannot store converted opening amount",
+            "default_currency": "USD",
+            "opening_cash": "2000000",
+            "opening_cash_date": "2026-01-01",
+            "opening_fx_rate_hkd": "9000000.000000000000",
+        },
+    )
+    assert response.status_code == 422 and response.json()["code"] == "FINANCIAL_OVERFLOW"
+    with unit_of_work(engine) as con:
+        assert {
+            table: con.exec_driver_sql(f"SELECT count(*) FROM {table}").scalar_one()
+            for table in tables
+        } == before
+        assert con.exec_driver_sql("SELECT data_revision FROM portfolios").scalar_one() == revision
 
 
 async def test_idempotency_mismatch_and_unique_name_do_not_duplicate(

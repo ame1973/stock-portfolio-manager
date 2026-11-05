@@ -36,7 +36,7 @@ Only the web gateway is bound to loopback. API and worker run separately, share 
 
 For a different web port, set both `WEB_PORT` and `PUBLIC_ORIGIN`. When using the sample `.env` for Compose, change `PUBLIC_ORIGIN` to `http://localhost:8080` (the local Vite default is port 5173). Production requires `APP_ENV=production` and an HTTPS public origin behind a trusted reverse proxy; target NAS validation and full production deployment/recovery instructions are still pending.
 
-Before a schema change, the migration command checks integrity and retains a mode-0600 local SQLite rollback snapshot in the data directory. This snapshot is sensitive and **not** an encrypted disaster-recovery backup. Encrypted portable backups and safe full restore are later implementation stages.
+Before a schema change, the migration command checks integrity and retains a mode-0600 local SQLite rollback snapshot in the data directory. Existing ledger values are preserved; invalid ledger dates, ratios, revision lineage, or mismatched cash reversals cause an atomic refusal rather than an invented repair. Trade, cash, expense, security-transfer, and corporate-action facts cannot be rewritten or deleted directly: corrections retain history, and cash reversals link back to and exactly offset their originals. A cash posting must fit both INT64 signs so its reversal remains representable. This snapshot is sensitive and **not** an encrypted disaster-recovery backup. Encrypted portable backups and safe full restore are later implementation stages.
 
 ## Owner authentication
 

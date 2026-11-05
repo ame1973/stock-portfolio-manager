@@ -16,6 +16,7 @@ const messages: Record<string, string> = {
   CONFLICT: "紀錄重複或識別碼有效期重疊，請重新核對。",
   NOT_FOUND: "找不到紀錄，或你無權存取這項資料。",
   MISSING_FX: "缺少認列當日的歷史匯率，不能使用現價或預設匯率入帳。",
+  FINANCIAL_OVERFLOW: "計算結果超過可儲存範圍，請核對金額與歷史匯率。",
   ARCHIVED: "這項紀錄已封存，請先重新啟用。",
   EXCHANGE_MISMATCH: "識別碼必須屬於同一交易所。",
   CURRENCY_MISMATCH: "此市場與報價幣別不符，請重新核對。",
