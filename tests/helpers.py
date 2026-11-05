@@ -1,4 +1,4 @@
-"""Shared synthetic onboarding and request headers for API regression tests."""
+"""Shared synthetic onboarding, record creation, and guarded API request headers."""
 
 from typing import Any
 from uuid import uuid4
@@ -30,3 +30,19 @@ def write_headers(client: httpx.AsyncClient, *, key: str | None = None) -> dict[
         "X-CSRF-Token": str(client.cookies.get(CSRF_COOKIE)),
         "Idempotency-Key": key or str(uuid4()),
     }
+
+
+def version_headers(
+    client: httpx.AsyncClient, version: int, *, key: str | None = None
+) -> dict[str, str]:
+    return {**write_headers(client, key=key), "If-Match": f'"{version}"'}
+
+
+async def create(
+    client: httpx.AsyncClient, path: str, body: dict[str, Any], *, key: str | None = None
+) -> dict[str, Any]:
+    response = await client.post(
+        f"/api/v1/{path}", json=body, headers=write_headers(client, key=key)
+    )
+    assert response.status_code == 201, response.text
+    return dict(response.json())

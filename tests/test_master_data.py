@@ -12,19 +12,9 @@ from sqlalchemy.exc import IntegrityError
 
 from spm_api.audit import stamp
 from spm_api.db import unit_of_work
-from tests.helpers import initialize, write_headers
+from tests.helpers import create, initialize, version_headers, write_headers
 
 pytestmark = pytest.mark.anyio
-
-
-async def create(
-    client: httpx.AsyncClient, path: str, body: dict[str, Any], *, key: str | None = None
-) -> dict[str, Any]:
-    response = await client.post(
-        f"/api/v1/{path}", json=body, headers=write_headers(client, key=key)
-    )
-    assert response.status_code == 201, response.text
-    return dict(response.json())
 
 
 @pytest.fixture
@@ -45,10 +35,6 @@ async def graph(client: httpx.AsyncClient, engine: Engine) -> dict[str, dict[str
         },
     )
     return {"owner": owner, "portfolio": portfolio, "broker": broker, "account": account}
-
-
-def version_headers(client: httpx.AsyncClient, version: int) -> dict[str, str]:
-    return {**write_headers(client), "If-Match": f'"{version}"'}
 
 
 async def test_master_create_read_and_exact_fee(

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
+import type { components } from "../../packages/contracts/src/schema";
 
 const PASSWORD = "synthetic-browser-passphrase-2026";
 test.describe.configure({ mode: "serial" });
@@ -253,4 +254,104 @@ test("master-data management, dated mappings, conflicts, and session security", 
   } finally { await other.close(); }
   expect(errors).toEqual([]);
   expect(cspErrors).toEqual([]);
+});
+
+test("trade HTTP postings, oversell rejection, immutable correction, void, and scheduled draft", async ({ page }) => {
+  type Trade = components["schemas"]["TradeRecord"];
+  await page.goto("/settings/accounts");
+  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  const csrf = await (await page.request.get("/api/v1/auth/csrf")).json() as { csrf_token: string };
+  const headers = (version?: number, key = randomUUID()) => ({
+    Origin: process.env.SPM_E2E_BASE_URL!,
+    "X-CSRF-Token": csrf.csrf_token,
+    "Idempotency-Key": key,
+    ...(version === undefined ? {} : { "If-Match": `"${version}"` }),
+  });
+  async function post<T>(path: string, data: object): Promise<T> {
+    const response = await page.request.post(`/api/v1/${path}`, { headers: headers(), data });
+    expect(response.status()).toBe(201);
+    expect(response.headers()["cache-control"]).toBe("no-store");
+    return await response.json() as T;
+  }
+  const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E trade portfolio" });
+  const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E trade broker" });
+  const account = await post<components["schemas"]["Account"]>("accounts", {
+    portfolio_id: portfolio.id, broker_id: broker.id, name: "E2E trade anchor account",
+    default_currency: "USD", opening_cash: "1000", opening_cash_date: "2026-01-10",
+    opening_fx_rate_hkd: "7.7", cash_completeness: "COMPLETE",
+  });
+  const security = await post<components["schemas"]["Security"]>("securities", {
+    exchange_code: "NASDAQ", display_ticker: "SYN", name: "E2E trade security", quote_currency: "USD",
+  });
+  const body = {
+    portfolio_id: portfolio.id, account_id: account.id, security_id: security.id,
+    side: "BUY", trade_date: "2026-01-02", quantity: "10", price: "100", fee: "1", tax: "0",
+    currency: "USD", fx_rate_hkd: "7.8", fx_source: "MANUAL", note: "", override_reason: "",
+  } satisfies components["schemas"]["TradeCreate"];
+  const createHeaders = headers();
+  const created = await page.request.post("/api/v1/trades", { headers: createHeaders, data: body });
+  expect(created.status()).toBe(201);
+  expect(created.headers().etag).toBe('"1"');
+  const buy = await created.json() as Trade;
+  expect(buy.settlement).toBe("1001.000000");
+  expect(buy.booked_hkd).toBe("7807.800000");
+  const retry = await page.request.post("/api/v1/trades", { headers: createHeaders, data: body });
+  expect(retry.status()).toBe(201);
+  expect(await retry.json()).toEqual(buy);
+  const sale = await post<Trade>("trades", {
+    ...body, side: "SELL", trade_date: "2026-01-03", quantity: "4", price: "120", fee: "2",
+  });
+  expect(sale.settlement).toBe("478.000000");
+  expect(sale.booked_hkd).toBe("3728.400000");
+  const oversell = await page.request.post("/api/v1/trades", {
+    headers: headers(), data: { ...body, side: "SELL", trade_date: "2026-01-04", quantity: "7" },
+  });
+  expect(oversell.status()).toBe(409);
+  expect((await oversell.json() as { code: string }).code).toBe("INSUFFICIENT_SHARES");
+  expect(oversell.headers()["cache-control"]).toBe("no-store");
+  const revisedBody = { ...body, quantity: "12", fx_rate_hkd: "7.9", reason: "Correct synthetic broker statement" };
+  const stale = await page.request.patch(`/api/v1/trades/${buy.id}`, { headers: headers(99), data: revisedBody });
+  expect(stale.status()).toBe(412);
+  const revised = await page.request.patch(`/api/v1/trades/${buy.id}`, { headers: headers(1), data: revisedBody });
+  expect(revised.status()).toBe(200);
+  const replacement = await revised.json() as Trade;
+  expect(replacement.root_id).toBe(buy.root_id);
+  expect(replacement.created_sequence).toBe(buy.created_sequence);
+  expect(replacement.revision).toBe(2);
+  expect(replacement.booked_hkd).toBe("9487.900000");
+  const original = await (await page.request.get(`/api/v1/trades/${buy.id}`)).json() as Trade;
+  expect(original.status).toBe("SUPERSEDED");
+  expect(original.booked_hkd).toBe("7807.800000");
+  expect(original.fx_rate_hkd).toBe("7.800000000000");
+  const reason = { reason: "Void synthetic duplicate trade" };
+  const orphanedSale = await page.request.delete(`/api/v1/trades/${replacement.id}`, { headers: headers(1), data: reason });
+  expect(orphanedSale.status()).toBe(409);
+  const retained = await (await page.request.get(`/api/v1/trades/${replacement.id}`)).json() as Trade;
+  expect(retained.status).toBe("ACTIVE");
+  expect(retained.version).toBe(1);
+  const voidedSale = await page.request.delete(`/api/v1/trades/${sale.id}`, { headers: headers(1), data: reason });
+  expect(voidedSale.status()).toBe(200);
+  const voidHeaders = headers(1);
+  const voidedBuy = await page.request.delete(`/api/v1/trades/${replacement.id}`, { headers: voidHeaders, data: reason });
+  expect(voidedBuy.status()).toBe(200);
+  const voidRetry = await page.request.delete(`/api/v1/trades/${replacement.id}`, { headers: voidHeaders, data: reason });
+  expect(voidRetry.status()).toBe(200);
+  expect(await voidRetry.json()).toEqual(await voidedBuy.json());
+  const draft = await post<Trade>("trades", {
+    ...body, side: "SELL", trade_date: "2050-01-02", quantity: "1", fx_rate_hkd: null,
+  });
+  expect(draft.status).toBe("DRAFT_SCHEDULED");
+  expect(draft.booked_hkd).toBeNull();
+  expect(draft.fx_rate_hkd).toBeNull();
+  const listing = await page.request.get("/api/v1/trades", { params: { portfolio_id: portfolio.id, include_history: true } });
+  const history = await listing.json() as { items: Trade[] };
+  expect(history.items).toHaveLength(4);
+  expect(history.items.some(row => row.status === "ACTIVE")).toBe(false);
+  expect(listing.headers()["cache-control"]).toBe("no-store");
+  const preserved = await (await page.request.get(`/api/v1/accounts/${account.id}`)).json() as components["schemas"]["Account"];
+  expect(preserved.opening_cash).toBe("1000.000000");
+  expect(preserved.opening_cash_date).toBe("2026-01-10");
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  await page.getByRole("button", { name: "登出", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
 });
