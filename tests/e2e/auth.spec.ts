@@ -708,7 +708,8 @@ test("action terms and opening assertion HTTP corrections preserve evidence and 
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
 });
 
-test("trade browser forms preserve exact entries, stale input, dependency rollback and unposted drafts", async ({ page }) => {
+test("financial browser forms preserve exact facts, conflicts, reversals and opening assertions", async ({ page }) => {
+  test.setTimeout(120_000);
   type Trade = components["schemas"]["TradeRecord"];
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -838,7 +839,185 @@ test("trade browser forms preserve exact entries, stale input, dependency rollba
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: ".local/screenshots/trade-history-360.png", fullPage: true });
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  await test.step("cash, expenses, wallets and opening: unknown is not known zero", () => cashBrowserForms(page));
   expect(errors).toEqual([]);
   await page.getByRole("button", { name: "登出", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
 });
+
+async function cashBrowserForms(page: Page) {
+  type Cash = components["schemas"]["CashEntry"];
+  type Expense = components["schemas"]["Expense"];
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => {
+    if (message.type() === "error" && /Content Security Policy|violates.*directive|Refused to apply/i.test(message.text())) errors.push(message.text());
+  });
+  // Continue the authenticated journey without repeated logins or weakened production limits.
+  await page.goto("/settings/accounts");
+  const { headers, post } = await signedRequests(page);
+  const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E cash form portfolio" });
+  const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E cash form broker" });
+  const account = await post<components["schemas"]["Account"]>("accounts", {
+    portfolio_id: portfolio.id, broker_id: broker.id, name: "E2E cash form account", default_currency: "USD",
+    opening_cash: "1000", opening_cash_date: "2026-01-01", opening_fx_rate_hkd: "7.8", cash_completeness: "COMPLETE",
+  });
+  const journalURL = `/cash?account_id=${account.id}`;
+  const expenseURL = `/cash/expenses?account_id=${account.id}`;
+  const walletURL = `/cash/accounts/${account.id}`;
+  async function enterMovement(mode: "cash" | "expense", amount: string, currency: "USD" | "HKD", day: string, kindOrCategory: string, rate = "", explanation = "") {
+    const title = mode === "cash" ? "新增現金紀錄" : "新增費用紀錄";
+    await page.getByRole("button", { name: title, exact: true }).click();
+    const form = page.getByRole("form", { name: title, exact: true });
+    await form.getByLabel("入帳帳戶", { exact: true }).selectOption(account.id);
+    await form.getByLabel("實際原幣", { exact: true }).selectOption(currency);
+    await form.getByLabel("實際入帳日期").fill(day);
+    await form.getByLabel("實際原幣金額").fill(amount);
+    if (mode === "cash") await form.getByLabel("現金分類").selectOption(kindOrCategory);
+    else await form.getByLabel("費用分類").fill(kindOrCategory);
+    if (currency === "USD") await form.getByLabel("現金歷史匯率（1 USD = HKD）").fill(rate);
+    await form.getByLabel("入帳／更正依據").fill(explanation);
+    return form;
+  }
+  const actualUSD = () => page.getByLabel("USD 錢包", { exact: true }).getByText("可確認的實際餘額", { exact: true }).locator("..");
+  const recordedUSD = () => page.getByLabel("USD 錢包", { exact: true }).getByText("已記錄原幣淨額（含沖銷）", { exact: true }).locator("..");
+  async function confirmVoid(mode: "cash" | "expense") {
+    await page.getByLabel("作廢入帳依據").fill("Void synthetic reviewed native movement");
+    await page.getByRole("button", { name: mode === "cash" ? "確認作廢現金紀錄" : "確認作廢費用紀錄", exact: true }).click();
+    await expect(page.getByRole("alertdialog").getByRole("button", { name: "取消", exact: true })).toBeFocused();
+    await page.getByRole("alertdialog").getByRole("button", { name: "確認", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page.getByText("已作廢並精確沖銷；原始紀錄與審計仍保留。", { exact: true })).toBeVisible();
+  }
+
+  await page.goto(journalURL);
+  await expect(page.getByRole("heading", { name: "現金紀錄", exact: true })).toBeVisible();
+  const initialOpening = page.getByRole("article", { name: "2026-01-01 USD 1000.000000", exact: true });
+  await expect(initialOpening).toContainText("來源流程管理");
+  await expect(initialOpening.getByRole("button", { name: "更正現金紀錄", exact: true })).toHaveCount(0);
+  let form = await enterMovement("cash", "10.000001", "USD", "2026-01-02", "DEPOSIT");
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `.local/screenshots/cash-form-${width}.png`, fullPage: true });
+  }
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(page.getByText("已儲存原幣事實；歷史 HKD 仍未知，沒有採用預設匯率。", { exact: true })).toBeVisible();
+  const deposit = page.getByRole("article", { name: "2026-01-02 USD 10.000001", exact: true });
+  await expect(deposit).toContainText("未知，不是零");
+  await deposit.getByRole("button", { name: "更正現金紀錄", exact: true }).click();
+  form = page.getByRole("form", { name: "更正現金紀錄", exact: true });
+  await form.getByLabel("實際原幣金額").fill("12.000001");
+  await form.getByLabel("現金歷史匯率（1 USD = HKD）").fill("7.9");
+  await form.getByLabel("入帳／更正依據").fill("Adopt reviewed historical deposit evidence");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "2026-01-02 USD 12.000001", exact: true })).toContainText("94.800008");
+  await expect(deposit).toContainText("已被新修訂取代");
+
+  await page.goto(expenseURL);
+  form = await enterMovement("expense", "2.000001", "USD", "2026-01-03", "Custody charge", "7.8");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  const charge = page.getByRole("article", { name: "2026-01-03 USD 2.000001", exact: true });
+  await expect(charge).toContainText("15.600008");
+  await charge.getByRole("button", { name: "更正費用紀錄", exact: true }).click();
+  form = page.getByRole("form", { name: "更正費用紀錄", exact: true });
+  await expect(form.getByLabel("沿用／指定 HKD 金額（選填）")).toHaveValue("15.600008");
+  await form.getByLabel("入帳備註").fill("Corrected note with original booking retained");
+  await form.getByLabel("入帳／更正依據").fill("Retain the original historical booked value");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(charge).toContainText("15.600008");
+  form = await enterMovement("expense", "-0.500001", "USD", "2026-01-03", "Custody refund", "7.8");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("退款");
+  await form.getByLabel("入帳／更正依據").fill("Synthetic explicit operating fee refund");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.screenshot({ path: ".local/screenshots/expense-refund-dark.png", fullPage: true });
+  await page.emulateMedia({ colorScheme: "light" });
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await page.getByRole("article", { name: "2026-01-03 USD -0.500001", exact: true }).getByRole("button", { name: "作廢費用紀錄", exact: true }).click();
+  await confirmVoid("expense");
+
+  await page.goto(journalURL);
+  form = await enterMovement("cash", "-0.000001", "USD", "2026-01-04", "WITHDRAW");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await page.getByRole("article", { name: "2026-01-04 USD -0.000001", exact: true }).getByRole("button", { name: "作廢現金紀錄", exact: true }).click();
+  await confirmVoid("cash");
+  form = await enterMovement("cash", "0.000001", "HKD", "2026-01-03", "ADJUSTMENT", "", "Synthetic independent HKD micro adjustment");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+
+  await page.goto(walletURL);
+  await expect(actualUSD()).toContainText("USD 1010.000000");
+  await page.getByRole("button", { name: "設定／更正期初", exact: true }).click();
+  form = page.getByRole("form", { name: "設定／更正期初斷言", exact: true });
+  await form.getByLabel("期初餘額（USD）").fill("1500");
+  await form.getByLabel("期初生效日期").fill("2026-01-05");
+  await form.getByLabel("期初歷史匯率（1 USD = HKD）").fill("7.9");
+  await form.getByLabel("期初更正依據").fill("Synthetic relocated opening statement");
+  // Account metadata and opening corrections intentionally share one CAS version namespace.
+  const renamed = await page.request.patch(`/api/v1/accounts/${account.id}`, { headers: headers(1), data: { name: "E2E independently renamed cash wallet" } });
+  expect(renamed.status()).toBe(200);
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("不會覆蓋新版");
+  await expect(form.getByLabel("期初餘額（USD）")).toHaveValue("1500");
+  await form.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "設定／更正期初", exact: true }).click();
+  form = page.getByRole("form", { name: "設定／更正期初斷言", exact: true });
+  await form.getByLabel("期初餘額（USD）").fill("1500");
+  await form.getByLabel("期初生效日期").fill("2026-01-05");
+  await form.getByLabel("期初歷史匯率（1 USD = HKD）").fill("7.9");
+  await form.getByLabel("期初更正依據").fill("Synthetic reviewed replacement after conflict");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(actualUSD()).toContainText("USD 1500.000000");
+  await page.getByRole("button", { name: "撤回期初斷言", exact: true }).click();
+  await page.getByLabel("撤回期初依據").fill("Withdraw synthetic unsupported opening evidence");
+  await page.getByRole("button", { name: "確認撤回期初斷言", exact: true }).click();
+  await expect(page.getByRole("alertdialog").getByRole("button", { name: "取消", exact: true })).toBeFocused();
+  await page.getByRole("alertdialog").getByRole("button", { name: "確認", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(recordedUSD()).toContainText("USD 10.000000");
+  await expect(actualUSD()).toContainText("未知，不是零");
+  await page.getByRole("button", { name: "設定／更正期初", exact: true }).click();
+  form = page.getByRole("form", { name: "設定／更正期初斷言", exact: true });
+  await form.getByLabel("期初餘額（USD）").fill("0");
+  await form.getByLabel("期初生效日期").fill("2026-01-10");
+  await form.getByLabel("期初更正依據").fill("Synthetic explicit known zero statement");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("即使金額為零");
+  await form.getByLabel("期初歷史匯率（1 USD = HKD）").fill("8");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(recordedUSD()).toContainText("USD 0.000000");
+  await expect(actualUSD()).toContainText("未知，不是零");
+  await page.getByRole("button", { name: "設定現金完整性", exact: true }).click();
+  form = page.getByRole("form", { name: "設定現金完整性", exact: true });
+  await form.getByLabel("帳戶現金完整性").selectOption("COMPLETE");
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("必須明確確認");
+  await form.getByLabel("我已核對所有原幣、現金歷史及期初來源").check();
+  await form.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(actualUSD()).toContainText("USD 0.000000");
+  await expect(page.getByLabel("USD 錢包", { exact: true })).toContainText("HKD -0.800000");
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `.local/screenshots/wallet-opening-${width}.png`, fullPage: true });
+  }
+  const journal = await (await page.request.get("/api/v1/cash-entries", { params: { account_id: account.id, limit: 100 } })).json() as { items: Cash[] };
+  expect(journal.items).toHaveLength(19);
+  expect(journal.items.filter(row => row.entry_role === "REVERSAL")).toHaveLength(7);
+  expect(journal.items.some(row => row.amount === "10.000001" && row.fx_rate_hkd === null && row.booked_hkd === null && row.status === "SUPERSEDED")).toBe(true);
+  const expenses = await (await page.request.get("/api/v1/expenses", { params: { account_id: account.id, include_history: true } })).json() as { items: Expense[] };
+  expect(expenses.items).toHaveLength(3);
+  expect(expenses.items.filter(row => row.amount === "2.000001").every(row => row.hkd_amount === "15.600008")).toBe(true);
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  expect(errors).toEqual([]);
+}

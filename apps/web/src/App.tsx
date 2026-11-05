@@ -9,6 +9,8 @@ import { SecurityDetailPage } from "./features/settings/SecurityDetailPage";
 import { SecuritySettingsPage } from "./features/settings/SecuritySettingsPage";
 
 const TradesPage = lazy(() => import("./features/ledger/TradesPage").then(module => ({ default: module.TradesPage })));
+const BookingPage = lazy(() => import("./features/ledger/BookingPage").then(module => ({ default: module.BookingPage })));
+const AccountCashPage = lazy(() => import("./features/ledger/AccountCashPage").then(module => ({ default: module.AccountCashPage })));
 
 export function App() {
   return <AuthGate>{session => <SignedInApp session={session} />}</AuthGate>;
@@ -28,6 +30,7 @@ function SignedInApp({ session }: { session: AuthSession }) {
       <nav aria-label="主要導覽" className="order-3 flex w-full flex-wrap gap-2 sm:order-none sm:w-auto">
         <NavLink to="/" end className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">服務連線</NavLink>
         <NavLink to="/transactions" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">交易紀錄</NavLink>
+        <NavLink to="/cash" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">現金帳</NavLink>
         <NavLink to="/settings" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">管理設定</NavLink>
       </nav>
       <Button className="ml-auto" variant="outline" onClick={() => void session.logout()} disabled={session.loggingOut}>{session.loggingOut ? "正在登出…" : "登出"}</Button>
@@ -37,6 +40,9 @@ function SignedInApp({ session }: { session: AuthSession }) {
       <Routes>
         <Route path="/" element={<ServiceStatus />} />
         <Route path="/transactions" element={<Suspense fallback={<p role="status">正在載入交易介面…</p>}><TradesPage /></Suspense>} />
+        <Route path="/cash" element={<Suspense fallback={<p role="status">正在載入現金介面…</p>}><BookingPage key="cash" mode="cash" /></Suspense>} />
+        <Route path="/cash/expenses" element={<Suspense fallback={<p role="status">正在載入費用介面…</p>}><BookingPage key="expense" mode="expense" /></Suspense>} />
+        <Route path="/cash/accounts/:id" element={<Suspense fallback={<p role="status">正在載入原幣餘額與期初…</p>}><AccountCashPage /></Suspense>} />
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<Navigate to="portfolios" replace />} />
           <Route path="portfolios" element={<PortfoliosPage />} />
@@ -82,7 +88,7 @@ function ServiceStatus() {
       <h2 id="status-title" className="text-lg font-semibold">服務連線</h2>
       {health.isPending ? <p role="status" className="my-5 text-secondary">正在檢查服務狀態…</p>
         : health.isError ? <div role="alert" className="my-5 text-danger"><p>暫時無法使用</p><p className="mt-2 text-sm leading-6">{health.error.message}</p></div>
-          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供交易紀錄、主檔及帳戶安全設定；其餘財務介面與估值功能仍在開發。</p></div>}
+          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供交易、現金／費用、期初與主檔安全設定；轉倉、企業行動介面及估值仍在開發。</p></div>}
       <Button variant="outline" onClick={() => void health.refetch()} disabled={health.isFetching}>重新檢查</Button>
     </section>
   </div>;

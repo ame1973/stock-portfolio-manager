@@ -95,7 +95,7 @@ export function AccountForm({ record, onSaved, onCancel }: Saved<Account>) {
     </> : <div className="text-sm leading-7 text-secondary">
       <input type="hidden" {...register("portfolio_id")} /><input type="hidden" {...register("broker_id")} /><input type="hidden" {...register("default_currency")} />
       <p>幣別：{record.default_currency}；組合及券商歸屬不能在此更換。</p>
-      <p>起始餘額：{record.opening_cash ?? "未設定"}{record.opening_cash_date ? `（${record.opening_cash_date}）` : ""}。更正須透過現金帳調整，不會直接改寫歷史。</p>
+      <p>起始餘額：{record.opening_cash ?? "未設定"}{record.opening_cash_date ? `（${record.opening_cash_date}）` : ""}。請使用帳戶的「現金與期初」頁面更正，不會直接改寫歷史。</p>
     </div>}
     <SelectField label="現金帳完整性" {...register("cash_completeness")} help={completenessHelp}>{cashOptions}</SelectField>
     {!record && <>

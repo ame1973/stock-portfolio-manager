@@ -93,6 +93,7 @@ export function AccountsPage() {
     result={result} page={page} Form={AccountForm}>{record => <>
       <p>{record.default_currency} · {cashLabels[record.cash_completeness]}</p>
       <p>起始餘額：{record.opening_cash === null ? "未知（不是零）" : `${record.default_currency} ${record.opening_cash}，${record.opening_cash_date}`}</p>
+      <Link to={`/cash/accounts/${record.id}`} className="inline-flex min-h-11 items-center text-primary underline">現金與期初<span className="sr-only">：{record.name}</span></Link>
       <ArchiveControl kind="accounts" record={record} />
     </>}</ManageRecords>;
 }
