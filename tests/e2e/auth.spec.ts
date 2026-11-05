@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import type { components } from "../../packages/contracts/src/schema";
+import { workspaceBrowserForms } from "./workspace";
 
 const PASSWORD = "synthetic-browser-passphrase-2026";
 test.describe.configure({ mode: "serial" });
@@ -230,6 +231,7 @@ test("master-data management, dated mappings, conflicts, and session security", 
     await expect(page.getByText("目前工作階段（此裝置）", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "撤銷登入", exact: true }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "確認", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
     await otherPage.reload();
     await expect(otherPage.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
     await signIn(otherPage);
@@ -773,6 +775,7 @@ test("financial browser forms preserve exact facts, conflicts, reversals and ope
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
   await page.screenshot({ path: ".local/screenshots/trade-form-dark.png", fullPage: true });
   await page.emulateMedia({ colorScheme: "light" });
+  await page.setViewportSize({ width: 360, height: 900 });
   await form.getByRole("button", { name: "儲存", exact: true }).click();
   await expect(form).toHaveCount(0);
   const buyCard = () => page.getByRole("article", { name: /^2026-01-02 買入/ }).filter({ has: page.getByRole("button", { name: "更正交易", exact: true }) });
@@ -851,6 +854,7 @@ test("financial browser forms preserve exact facts, conflicts, reversals and ope
   await test.step("cash, expenses, wallets and opening: unknown is not known zero", () => cashBrowserForms(page));
   await test.step("paired cash and stock transfers: preserve both legs, cost and dependencies", () => transferBrowserForms(page));
   await test.step("corporate-action forms: exact ratios, adopted terms and explicit review", () => actionBrowserForms(page));
+  await test.step("responsive workspace: server tables, full-screen sheets, focus and pending-write protection", async () => workspaceBrowserForms(page, (await signedRequests(page)).post));
   expect(errors).toEqual([]);
   await page.getByRole("button", { name: "登出", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
@@ -859,6 +863,7 @@ test("financial browser forms preserve exact facts, conflicts, reversals and ope
 async function cashBrowserForms(page: Page) {
   type Cash = components["schemas"]["CashEntry"];
   type Expense = components["schemas"]["Expense"];
+  await page.setViewportSize({ width: 360, height: 900 });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => {
@@ -912,6 +917,7 @@ async function cashBrowserForms(page: Page) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `.local/screenshots/cash-form-${width}.png`, fullPage: true });
   }
+  await page.setViewportSize({ width: 360, height: 900 });
   await form.getByRole("button", { name: "儲存", exact: true }).click();
   await expect(form).toHaveCount(0);
   await expect(page.getByText("已儲存原幣事實；歷史 HKD 仍未知，沒有採用預設匯率。", { exact: true })).toBeVisible();
@@ -1037,6 +1043,7 @@ async function transferBrowserForms(page: Page) {
   type CashTransfer = components["schemas"]["CashTransfer"];
   type StockTransfer = components["schemas"]["SecurityTransfer"];
   type Balances = components["schemas"]["AccountCashBalances"];
+  await page.setViewportSize({ width: 360, height: 900 });
   await page.goto("/settings/accounts");
   const { headers, post } = await signedRequests(page);
   const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E transfer form portfolio" });
@@ -1088,6 +1095,7 @@ async function transferBrowserForms(page: Page) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `.local/screenshots/paired-transfer-form-${width}.png`, fullPage: true });
   }
+  await page.setViewportSize({ width: 360, height: 900 });
   await form.getByRole("button", { name: "儲存", exact: true }).click();
   await expect(form).toHaveCount(0);
   const original = page.getByRole("article", { name: "2026-01-03 USD 100.000001 USD 100.000001", exact: true });
@@ -1184,6 +1192,7 @@ async function transferBrowserForms(page: Page) {
 
 async function actionBrowserForms(page: Page) {
   type Action = components["schemas"]["CorporateAction"];
+  await page.setViewportSize({ width: 360, height: 900 });
   await page.goto("/settings/accounts");
   const { headers, post } = await signedRequests(page);
   const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E action form portfolio" });
@@ -1227,6 +1236,7 @@ async function actionBrowserForms(page: Page) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `.local/screenshots/action-form-${width}.png`, fullPage: true });
   }
+  await page.setViewportSize({ width: 360, height: 900 });
   await form.getByRole("button", { name: "儲存", exact: true }).click();
   await expect(form).toHaveCount(0);
   const original = page.getByRole("article", { name: "2026-01-03 SPLIT 3:2", exact: true });

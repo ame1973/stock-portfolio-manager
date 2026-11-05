@@ -158,6 +158,16 @@ describe("trade forms preserve exact facts and intent", () => {
 });
 
 describe("trade list controls do not rewrite history", () => {
+  it("lets the financial sheet own initial focus instead of a native form autofocus", async () => {
+    reads();
+    renderUI(<TradesPage />);
+    const create = screen.getByRole("button", { name: "新增交易" });
+    create.focus(); fireEvent.click(create);
+    const sheet = await screen.findByRole("dialog", { name: "新增交易" });
+    await waitFor(() => expect(within(sheet).getByRole("button", { name: "關閉編輯" })).toHaveFocus());
+    expect(within(sheet).getByLabelText("搜尋投資組合")).not.toHaveFocus();
+  });
+
   it("does not call a filtered empty page a nonexistent ledger", async () => {
     reads();
     renderUI(<TradesPage />);

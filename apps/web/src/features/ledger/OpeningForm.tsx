@@ -26,7 +26,7 @@ export function OpeningForm({ record, onSaved, onCancel }: { record: Opening; on
       params: { path: { id: record.account_id }, header: { ...await mutationHeaders(key), "If-Match": `"${record.version}"` } },
       body: { ...values, opening_fx_rate_hkd: record.currency === "USD" ? values.opening_fx_rate_hkd : null },
     }))))}>
-    <Field label={`期初餘額（${record.currency}）`} inputMode="decimal" {...register("opening_cash")} error={errors.opening_cash?.message} autoFocus help="必須明確填寫；0 是已知零，空白不能儲存，也不會撤回現有斷言。" />
+    <Field label={`期初餘額（${record.currency}）`} inputMode="decimal" {...register("opening_cash")} error={errors.opening_cash?.message} help="必須明確填寫；0 是已知零，空白不能儲存，也不會撤回現有斷言。" />
     <Field label="期初生效日期" type="date" {...register("opening_cash_date")} error={errors.opening_cash_date?.message} help="這是當日開始時的餘額斷言，不是外部存款。" />
     {record.currency === "USD" ? <Field label="期初歷史匯率（1 USD = HKD）" inputMode="decimal" {...register("opening_fx_rate_hkd")} error={errors.opening_fx_rate_hkd?.message} help="即使金額為零也必須明確提供；不沿用有問題的來源或預設匯率。" /> : <p className="text-sm leading-7 text-secondary">期初幣別固定為帳戶預設 HKD，以 1:1 記帳；不會替其他原幣錢包補足現金。</p>}
     <Field label="期初更正依據" {...register("reason")} maxLength={1000} error={errors.reason?.message} />

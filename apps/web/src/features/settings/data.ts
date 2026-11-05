@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type components } from "@spm/contracts";
 import { checked, failureMessage } from "../../lib/api";
+import { FormSavedContext } from "../../lib/form-lifecycle";
+import { useViewState } from "../../lib/view-state";
 
 type Schemas = components["schemas"];
 export type Portfolio = Schemas["Portfolio"];
@@ -32,8 +34,8 @@ export function useExchanges() {
     checked(await api.GET("/api/v1/exchanges", { signal })) });
 }
 
-export function usePageState() {
-  const [state, setState] = useState({ q: "", cursors: [] as string[] });
+export function usePageState(view?: string) {
+  const [state, setState] = useViewState(view ? `page:${view}` : undefined, { q: "", cursors: [] as string[] });
   return {
     q: state.q, cursor: state.cursors.at(-1), number: state.cursors.length + 1,
     search: (q: string) => setState({ q, cursors: [] }),
@@ -44,6 +46,7 @@ export function usePageState() {
 }
 
 export function useFormAction<T>(onSaved: (record: T) => void) {
+  const markSaved = useContext(FormSavedContext);
   const key = useRef(crypto.randomUUID());
   const [error, setError] = useState<string | null>(null);
   return {
@@ -54,6 +57,7 @@ export function useFormAction<T>(onSaved: (record: T) => void) {
       try {
         const result = await action(key.current);
         key.current = crypto.randomUUID();
+        markSaved();
         onSaved(result);
       } catch (cause) { setError(failureMessage(cause)); }
     },

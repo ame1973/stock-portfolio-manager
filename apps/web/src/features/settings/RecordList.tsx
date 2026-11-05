@@ -1,14 +1,17 @@
 import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Button } from "../../components/ui/button";
+import { FinancialTable, type LedgerColumn } from "../../components/ui/financial-table";
+import { useDesktop } from "../../lib/use-desktop";
 import { failureMessage } from "../../lib/api";
 import { usePageState } from "./data";
 
 type Page<T> = { items: T[]; next_cursor?: string | null };
-export function RecordList<T extends { id: string }>({ title, result, page, children, searchable = true, filtered = false }: {
-  title: string; result: UseQueryResult<Page<T>>; page: ReturnType<typeof usePageState>; searchable?: boolean; filtered?: boolean;
+export function RecordList<T extends { id: string }>({ title, result, page, children, searchable = true, filtered = false, columns }: {
+  title: string; result: UseQueryResult<Page<T>>; page: ReturnType<typeof usePageState>; searchable?: boolean; filtered?: boolean; columns?: LedgerColumn<T>[];
   children: (record: T) => ReactNode;
 }) {
+  const desktop = useDesktop();
   return <section aria-label={`${title}列表`} className="grid min-w-0 gap-4">
     <div className="flex flex-wrap items-end gap-3">
       {searchable && <label className="grid min-w-0 flex-1 gap-2 text-sm font-medium">
@@ -17,6 +20,8 @@ export function RecordList<T extends { id: string }>({ title, result, page, chil
       </label>}
       <Button variant="outline" onClick={() => void result.refetch()} disabled={result.isFetching}>重新載入{title}</Button>
     </div>
+    {page.q && <div><Button variant="outline" className="max-w-full text-left" onClick={() => page.search("")}><span className="break-all">清除搜尋：{page.q}</span></Button></div>}
+    {columns && <p className="text-xs leading-6 text-secondary">篩選與分頁只在本次登入的記憶體保留；重新整理或登出即清除，不寫入網址或離線儲存。</p>}
     {result.isPaused ? <p role="status" className="text-sm text-secondary">連線已暫停；目前僅顯示記憶體內已載入的資料。連線恢復前無法儲存。</p>
       : result.isPending ? <div role="status" className="panel text-secondary">正在載入{title}…</div> : null}
     {result.isError && <div role="alert" className="panel text-sm leading-7 text-danger">
@@ -27,7 +32,7 @@ export function RecordList<T extends { id: string }>({ title, result, page, chil
     {result.data && <>
       {result.data.items.length === 0 ? <div className="panel text-sm leading-7 text-secondary">
         {filtered ? "這個篩選範圍沒有紀錄；請調整日期、搜尋或清除篩選。" : page.q ? "沒有符合搜尋的紀錄；請縮短名稱或清除搜尋。" : `尚未建立${title}；請使用新增按鈕開始。`}
-      </div> : <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+      </div> : desktop && columns ? <FinancialTable title={title} data={result.data.items} columns={columns}>{children}</FinancialTable> : <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
         {result.data.items.map(record => <li key={record.id} className="min-w-0 p-4 sm:p-5">{children(record)}</li>)}
       </ul>}
       <div className="flex flex-wrap items-center gap-3">

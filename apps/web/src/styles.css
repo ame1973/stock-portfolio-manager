@@ -33,7 +33,16 @@
 }
 
 html { scrollbar-gutter: stable; }
-body:has([data-confirm-dialog][data-state="open"]) { overflow: hidden; }
+body:has([data-confirm-dialog][data-state="open"]),
+body:has([data-editor-sheet][data-state="open"]) { overflow: hidden; }
+
+.editor-sheet-body { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+.editor-sheet-body > form.panel { border: 0; padding: 0; }
+.editor-sheet-body > form > h3 { display: none; }
+.workspace-frame { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+.mobile-workspace-nav { padding-bottom: env(safe-area-inset-bottom); }
+@media (min-width: 1024px) { .workspace-frame { padding-bottom: 0; } }
+@media (max-width: 1023px) { html:has([data-editor-sheet][data-state="open"]) { scrollbar-gutter: auto; } }
 
 body {
   margin: 0;

@@ -66,7 +66,7 @@ export function BookingForm({ mode, record, onSaved, onCancel }: {
         ? checked(await api.PATCH("/api/v1/expenses/{id}", { params: { path: { id: record.id }, header: { ...header, "If-Match": `"${record.version}"` } }, body: { ...create, reason: reason.parse(values.reason) } }))
         : checked(await api.POST("/api/v1/expenses", { params: { header }, body: create }));
     }))}>
-    <ReferenceSelect kind="accounts" label="入帳帳戶" value={accountId} registration={register("account_id")} error={errors.account_id?.message} clearSelection={() => setValue("account_id", "")} autoFocus />
+    <ReferenceSelect kind="accounts" label="入帳帳戶" value={accountId} registration={register("account_id")} error={errors.account_id?.message} clearSelection={() => setValue("account_id", "")} />
     <SelectField label="實際原幣" {...register("currency", { onChange: () => { setValue("fx_rate_hkd", ""); setValue("actual_hkd", ""); } })} error={errors.currency?.message} help="獨立選擇實際現金幣別，不會按帳戶預設幣別自動換匯。"><option value="">請選擇實際幣別</option><option value="HKD">HKD 港元</option><option value="USD">USD 美元</option></SelectField>
     {mode === "cash" ? <SelectField label="現金分類" {...register("kind")} error={errors.kind?.message}><option value="">請選擇現金分類</option><option value="DEPOSIT">外部存入（正數）</option><option value="WITHDRAW">外部提款（負數）</option><option value="ADJUSTMENT">非外部調整（須依據）</option></SelectField>
       : <Field label="費用分類" {...register("category")} error={errors.category?.message} maxLength={100} />}

@@ -5,13 +5,17 @@ import { api } from "@spm/contracts";
 import { Field } from "../../components/forms/fields";
 import { Button } from "../../components/ui/button";
 import { ConfirmAction } from "../../components/ui/confirm-action";
+import { EditorSheet } from "../../components/ui/editor-sheet";
 import { checked, mutationHeaders } from "../../lib/api";
+import { FilterChips } from "../../components/forms/filter-chips";
+import { useViewState } from "../../lib/view-state";
 import { RecordList } from "../settings/RecordList";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { usePageState } from "../settings/data";
 import { reason } from "./inputs";
 import { TradeForm, type Trade } from "./TradeForm";
 import { useAccount, useSecurity } from "./data";
+import { AccountName, SecurityName } from "./ReferenceName";
 
 const statuses: Record<Trade["status"], string> = {
   ACTIVE: "已入帳", DRAFT_SCHEDULED: "未來草稿，尚未入帳", PENDING_FX: "待補歷史 FX", SUPERSEDED: "已有新修訂", VOID: "已作廢，歷史保留",
@@ -77,8 +81,8 @@ const initialFilters = { portfolio_id: "", account_id: "", security_id: "", from
 
 export function TradesPage() {
   const cache = useQueryClient();
-  const page = usePageState();
-  const [filters, setFilters] = useState(initialFilters);
+  const page = usePageState("trades");
+  const [filters, setFilters] = useViewState("filters:trades", initialFilters);
   const [editor, setEditor] = useState<Trade | "new" | null>(null);
   const [voiding, setVoiding] = useState<Trade | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -96,12 +100,14 @@ export function TradesPage() {
   return <div className="grid gap-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="max-w-2xl"><h1 className="text-2xl font-semibold">交易紀錄</h1><p className="mt-2 text-sm leading-7 text-secondary">逐帳戶記錄買賣與歷史交收。更正建立新版本，不覆寫原值；缺少 FX 不會被當作零，也不會以現價補填。</p></div>
-      <Button disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增交易</Button>
+      <Button data-editor-create disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增交易</Button>
     </div>
     <p className="text-sm leading-7 text-secondary">請先在<Link to="/settings/accounts" className="inline-flex min-h-11 items-center text-primary underline">管理設定</Link>建立組合、帳戶與證券。此頁不是現金估值或目前持倉總額。</p>
     {notice && <p role="status" className="text-sm leading-7 text-success">{notice}</p>}
-    {editor !== null && <TradeForm key={editor === "new" ? "new" : editor.id} record={editor === "new" ? undefined : editor} onCancel={() => { setEditor(null); void result.refetch(); }}
-      onSaved={record => { setEditor(null); setNotice(record.status === "DRAFT_SCHEDULED" ? "已儲存未來交易草稿；沒有現金或目前持倉影響。" : "已儲存交易；原始版本與歷史匯率會保留。請核對下方伺服器入帳結果。"); refresh(); }} />}
+    {editor !== null && <EditorSheet title={editor === "new" ? "新增交易" : "更正交易"} onClose={() => { setEditor(null); void result.refetch(); }}>
+      <TradeForm key={editor === "new" ? "new" : editor.id} record={editor === "new" ? undefined : editor} onCancel={() => { setEditor(null); void result.refetch(); }}
+        onSaved={record => { setEditor(null); setNotice(record.status === "DRAFT_SCHEDULED" ? "已儲存未來交易草稿；沒有現金或目前持倉影響。" : "已儲存交易；原始版本與歷史匯率會保留。請核對下方伺服器入帳結果。"); refresh(); }} />
+    </EditorSheet>}
     {voiding && <VoidTrade key={voiding.id} record={voiding} onCancel={() => setVoiding(null)} onDone={() => { setVoiding(null); setNotice("交易已作廢；原值、精確沖銷及審計仍保留。"); refresh(); }} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="cursor-pointer font-medium">篩選交易</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -114,8 +120,16 @@ export function TradesPage() {
         <Button variant="outline" onClick={() => { setFilters(initialFilters); page.reset(); }}>清除交易篩選</Button>
       </div>
     </details>
+    <FilterChips values={filters} labels={{ portfolio_id: "組合", account_id: "帳戶", security_id: "證券", from_date: "交易起日", to_date: "交易迄日", root_id: "事件修訂鏈", include_history: "歷史修訂" }} onRemove={key => filter({ [key]: key === "include_history" ? false : "", ...(key === "portfolio_id" ? { account_id: "" } : {}) })} />
     {filters.root_id && <div className="flex flex-wrap items-center gap-3 text-sm"><p>只顯示所選事件的修訂鏈。</p><Button variant="outline" onClick={() => filter({ root_id: "" })}>顯示全部交易事件</Button></div>}
-    <RecordList title="交易" result={result} page={page} filtered={Object.values(filters).some(value => typeof value === "string" && value !== "")}>{record => <TradeDetails record={record}>
+    <RecordList title="交易" result={result} page={page} filtered={Object.values(filters).some(value => value !== false && value !== "")} columns={[
+      { accessorKey: "trade_date", header: "交易日期" },
+      { id: "references", header: "證券／帳戶", cell: ({ row }) => <div className="grid gap-1"><SecurityName id={row.original.security_id} /><AccountName id={row.original.account_id} /></div> },
+      { id: "quantity", header: "方向／股數", cell: ({ row }) => <>{row.original.side === "BUY" ? "買入" : "賣出"}<br />{row.original.quantity} 股</> },
+      { id: "settlement", header: "原幣交收額", cell: ({ row }) => <>{row.original.currency} {row.original.settlement}{row.original.status === "DRAFT_SCHEDULED" && <span className="block text-secondary">草稿，未入帳</span>}</> },
+      { id: "booked", header: "歷史 HKD，非估值", cell: ({ row }) => row.original.booked_hkd === null ? "未知，不是零" : `HKD ${row.original.booked_hkd}` },
+      { id: "status", header: "紀錄狀態", cell: ({ row }) => statuses[row.original.status] },
+    ]}>{record => <TradeDetails record={record}>
       <div className="flex flex-wrap gap-3">
         {editable(record) && <><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor(record); }}>更正交易</Button>
           <Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setVoiding(record); }}>作廢交易</Button></>}

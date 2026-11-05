@@ -4,12 +4,16 @@ import { Link } from "react-router";
 import { api } from "@spm/contracts";
 import { Field, SelectField } from "../../components/forms/fields";
 import { Button } from "../../components/ui/button";
+import { EditorSheet } from "../../components/ui/editor-sheet";
 import { checked, mutationHeaders } from "../../lib/api";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
+import { FilterChips } from "../../components/forms/filter-chips";
+import { useViewState } from "../../lib/view-state";
 import { RecordList } from "../settings/RecordList";
 import { usePageState } from "../settings/data";
 import { ActionForm } from "./ActionForm";
 import { ReasonedAction } from "./ReasonedAction";
+import { SecurityName } from "./ReferenceName";
 import { actionLabels, refreshLedger, useSecurity, type CorporateAction } from "./data";
 
 const statusLabels = { CONFIRMED: "已採納條款，不代表完整估值", NEEDS_REVIEW: "待覆核，未完成分配", VOID: "已作廢，原始條款保留" };
@@ -37,8 +41,8 @@ const empty = { security_id: "", root_id: "", action_type: "" as "" | CorporateA
 
 export function ActionPage() {
   const cache = useQueryClient();
-  const page = usePageState();
-  const [filters, setFilters] = useState(empty);
+  const page = usePageState("actions");
+  const [filters, setFilters] = useViewState("filters:actions", empty);
   const [editor, setEditor] = useState<CorporateAction | "new" | null>(null);
   const [voiding, setVoiding] = useState<CorporateAction | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -49,12 +53,14 @@ export function ActionPage() {
   function refresh() { void refreshLedger(cache); void cache.invalidateQueries({ queryKey: ["securities"] }); }
   return <div className="grid gap-6">
     <div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-2xl"><h1 className="text-2xl font-semibold">企業行動</h1><p className="mt-2 text-sm leading-7 text-secondary">安裝共用證券目錄的明確條款與證據，不是多租戶邊界。精確拆合股、只改目前顯示代號及未分配事件的待覆核，保留不同口徑與穩定修訂鏈。</p></div>
-      <Button disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增企業行動</Button></div>
+      <Button data-editor-create disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增企業行動</Button></div>
     <p className="text-sm leading-7 text-secondary">未確認的零碎股現金、合併與分拆不會編造持倉、成本或現金；已採納的未來股數條款不會提前改變今日股數。普通交易與轉倉仍由伺服器嚴格驗證。</p>
     {notice && <p role="status" className="text-sm leading-7 text-success">{notice}</p>}
-    {editor !== null && <ActionForm key={editor === "new" ? "new" : editor.id} record={editor === "new" ? undefined : editor} onCancel={() => { setEditor(null); void result.refetch(); }} onSaved={record => {
-      setEditor(null); page.search(""); refresh(); setNotice(record.review_required || record.status === "NEEDS_REVIEW" ? "已儲存企業行動條款；仍有待覆核，不代表已完成分配或估值。" : "已儲存企業行動條款；這不是完整估值或現金分配成功的宣稱。");
-    }} />}
+    {editor !== null && <EditorSheet title={editor === "new" ? "新增企業行動" : "更正企業行動"} onClose={() => { setEditor(null); void result.refetch(); }}>
+      <ActionForm key={editor === "new" ? "new" : editor.id} record={editor === "new" ? undefined : editor} onCancel={() => { setEditor(null); void result.refetch(); }} onSaved={record => {
+        setEditor(null); page.search(""); refresh(); setNotice(record.review_required || record.status === "NEEDS_REVIEW" ? "已儲存企業行動條款；仍有待覆核，不代表已完成分配或估值。" : "已儲存企業行動條款；這不是完整估值或現金分配成功的宣稱。");
+      }} />
+    </EditorSheet>}
     {voiding && <ReasonedAction key={voiding.id} title="作廢企業行動" label="確認作廢企業行動" reasonLabel="企業行動作廢依據" description="原始條款與審計不會刪除。依賴此股數來源的後續賣出／轉倉、較後採納的代號變更或已獨立更改的目前代號，都可能拒絕整項操作。" onCancel={() => setVoiding(null)} onConfirm={async (reason, key) => {
       checked(await api.DELETE("/api/v1/corporate-actions/{id}", { params: { path: { id: voiding.id }, header: { ...await mutationHeaders(key), "If-Match": `"${voiding.version}"` } }, body: { reason } }));
       setVoiding(null); refresh(); setNotice("企業行動已作廢；原始條款、穩定排序及審計仍保留。");
@@ -67,8 +73,17 @@ export function ActionPage() {
       <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={filters.include_history} onChange={event => filter({ include_history: event.target.checked })} />包括已被取代的條款修訂</label>
       <Button variant="outline" onClick={() => { setFilters(empty); page.reset(); }}>清除企業行動篩選</Button>
     </div></details>
+    <FilterChips values={filters} labels={{ security_id: "證券", action_type: "條款類型", status: "條款狀態", from_date: "生效起日", to_date: "生效迄日", root_id: "事件修訂鏈", include_history: "歷史修訂" }} onRemove={key => filter({ [key]: key === "include_history" ? false : "" })} />
     {filters.root_id && <div className="flex flex-wrap items-center gap-3 text-sm"><p>只顯示所選企業行動的修訂鏈。</p><Button variant="outline" onClick={() => filter({ root_id: "" })}>顯示全部行動事件</Button></div>}
-    <RecordList title="企業行動" result={result} page={page} filtered={Object.values(filters).some(value => typeof value === "string" && value !== "")}>{record => <article aria-label={`${record.effective_date} ${record.action_type} ${record.ratio_numerator ?? "未提供"}:${record.ratio_denominator ?? "未提供"}`} className="min-w-0 break-words">
+    <RecordList title="企業行動" result={result} page={page} filtered={Object.values(filters).some(value => value !== false && value !== "")} columns={[
+      { accessorKey: "effective_date", header: "生效日期" },
+      { id: "security", header: "目前證券代號", cell: ({ row }) => <SecurityName id={row.original.security_id} /> },
+      { id: "type", header: "條款類型", cell: ({ row }) => actionLabels[row.original.action_type] },
+      { id: "terms", header: "精確比例／新代號", cell: ({ row }) => row.original.ratio_numerator !== null && row.original.ratio_denominator !== null
+        ? `${row.original.ratio_numerator} : ${row.original.ratio_denominator}` : row.original.new_symbol ?? "未提供，不代表 1:1" },
+      { id: "scope", header: "效用口徑，非估值", cell: ({ row }) => scopeLabels[row.original.effect_scope] },
+      { id: "status", header: "紀錄狀態／覆核", cell: ({ row }) => <>{row.original.lifecycle_status === "SUPERSEDED" ? "已被新修訂取代" : statusLabels[row.original.status]}{row.original.review_required && <span className="block text-danger">仍有未解決覆核</span>}</> },
+    ]}>{record => <article aria-label={`${record.effective_date} ${record.action_type} ${record.ratio_numerator ?? "未提供"}:${record.ratio_denominator ?? "未提供"}`} className="min-w-0 break-words">
       <ActionDetails record={record} /><div className="mt-3 flex flex-wrap gap-3">
         {canEdit(record) && <><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor(record); }}>更正企業行動</Button><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setVoiding(record); }}>作廢企業行動</Button></>}
         <Button variant="outline" onClick={() => { filter({ root_id: record.root_id, include_history: true }); page.search(""); }}>查看企業行動修訂鏈</Button>

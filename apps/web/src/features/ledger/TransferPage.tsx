@@ -4,13 +4,17 @@ import { Link } from "react-router";
 import { api } from "@spm/contracts";
 import { Field, SelectField } from "../../components/forms/fields";
 import { Button } from "../../components/ui/button";
+import { EditorSheet } from "../../components/ui/editor-sheet";
 import { checked, mutationHeaders } from "../../lib/api";
+import { FilterChips } from "../../components/forms/filter-chips";
+import { useViewState } from "../../lib/view-state";
 import { RecordList } from "../settings/RecordList";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { usePageState } from "../settings/data";
 import { CashNav } from "./CashNav";
 import { ReasonedAction } from "./ReasonedAction";
 import { TransferForm } from "./TransferForm";
+import { AccountName, SecurityName } from "./ReferenceName";
 import { isCashTransfer, refreshLedger, useAccount, useSecurity, type Transfer } from "./data";
 
 const statusLabels = { ACTIVE: "有效", SUPERSEDED: "已被新修訂取代", VOID: "已作廢，原值保留" };
@@ -47,9 +51,9 @@ function TransferDetails({ record }: { record: Transfer }) {
 const empty = { portfolio_id: "", account_id: "", security_id: "", root_id: "", from_date: "", to_date: "", currency: "" as "" | "HKD" | "USD", include_history: false };
 
 export function TransferPage({ mode }: { mode: "cash" | "security" }) {
-  const page = usePageState();
+  const page = usePageState(`transfers:${mode}`);
   const cache = useQueryClient();
-  const [filters, setFilters] = useState(empty);
+  const [filters, setFilters] = useViewState(`filters:transfers:${mode}`, empty);
   const [editor, setEditor] = useState<Transfer | "new" | null>(null);
   const [voiding, setVoiding] = useState<Transfer | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -65,11 +69,13 @@ export function TransferPage({ mode }: { mode: "cash" | "security" }) {
     {mode === "cash" && <CashNav />}
     <div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-2xl"><h1 className="text-2xl font-semibold">{title}</h1>
       <p className="mt-2 text-sm leading-7 text-secondary">{mode === "cash" ? "同組合內的原幣本金成對移動；明確換幣可在同帳戶內進行。兩腿一起提交或沖銷，費用另記，不以金額比例推算 FX。" : "同組合內不同帳戶的證券轉倉，保留成本及穩定排序。伺服器驗證全期依賴，不會以新修訂日期掩蓋超賣。"}</p></div>
-      <Button disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增{title}</Button>
+      <Button data-editor-create disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增{title}</Button>
     </div>
     <div className="flex flex-wrap gap-4 text-sm"><Link to={mode === "cash" ? "/transfers" : "/cash/transfers"} className="inline-flex min-h-11 items-center text-primary underline">{mode === "cash" ? "前往股票轉倉" : "前往成對現金轉帳"}</Link><Link to="/cash/expenses" className="inline-flex min-h-11 items-center text-primary underline">另記真實費用／退款</Link></div>
     {notice && <p role="status" className="text-sm leading-7 text-success">{notice}</p>}
-    {editor !== null && <TransferForm mode={mode} key={editor === "new" ? "new" : editor.id} record={editor === "new" ? undefined : editor} onCancel={() => { setEditor(null); void result.refetch(); }} onSaved={record => { saved(); setNotice(isCashTransfer(record) ? "已儲存成對現金事實；請核對兩腿歷史入帳與品質，差額不是匯兌獲利。" : "已儲存股票轉倉及建立時成本快照；沒有新增現金或已實現獲利。"); }} />}
+    {editor !== null && <EditorSheet title={`${editor === "new" ? "新增" : "更正"}${title}`} onClose={() => { setEditor(null); void result.refetch(); }}>
+      <TransferForm mode={mode} key={editor === "new" ? "new" : editor.id} record={editor === "new" ? undefined : editor} onCancel={() => { setEditor(null); void result.refetch(); }} onSaved={record => { saved(); setNotice(isCashTransfer(record) ? "已儲存成對現金事實；請核對兩腿歷史入帳與品質，差額不是匯兌獲利。" : "已儲存股票轉倉及建立時成本快照；沒有新增現金或已實現獲利。"); }} />
+    </EditorSheet>}
     {voiding && <ReasonedAction key={voiding.id} title={`作廢${title}`} label={`確認作廢${title}`} reasonLabel="轉倉作廢依據" description={mode === "cash" ? "會保留原始兩腿，並按各腿原幣、歷史 FX 與 HKD 精確沖銷；不能只作廢一腿。" : "會保留原始成本與修訂鏈；若目標帳戶的後續賣出／轉倉失去股份來源，整項操作會拒絕。"} onCancel={() => setVoiding(null)} onConfirm={async (reason, key) => {
       const params = { path: { id: voiding.id }, header: { ...await mutationHeaders(key), "If-Match": `"${voiding.version}"` } };
       if (isCashTransfer(voiding)) checked(await api.DELETE("/api/v1/cash-transfers/{id}", { params, body: { reason } }));
@@ -85,8 +91,19 @@ export function TransferPage({ mode }: { mode: "cash" | "security" }) {
       <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={filters.include_history} onChange={event => filter({ include_history: event.target.checked })} />包括已被取代的轉倉修訂</label>
       <Button variant="outline" onClick={() => { setFilters(empty); page.reset(); }}>清除轉倉篩選</Button>
     </div></details>
+    <FilterChips values={filters} labels={{ portfolio_id: "組合", account_id: "帳戶", security_id: "證券", currency: "原幣", from_date: "轉倉起日", to_date: "轉倉迄日", root_id: "事件修訂鏈", include_history: "歷史修訂" }} onRemove={key => filter({ [key]: key === "include_history" ? false : "", ...(key === "portfolio_id" ? { account_id: "" } : {}) })} />
     {filters.root_id && <div className="flex flex-wrap items-center gap-3 text-sm"><p>只顯示所選轉倉事件的修訂鏈。</p><Button variant="outline" onClick={() => filter({ root_id: "" })}>顯示全部轉倉事件</Button></div>}
-    <RecordList title={title} result={result} page={page} filtered={Object.values(filters).some(value => typeof value === "string" && value !== "")}>{record => <article aria-label={`${record.transfer_date} ${isCashTransfer(record) ? `${record.source_currency} ${record.source_amount} ${record.target_currency} ${record.target_amount}` : `${record.quantity} 股轉倉`}`} className="min-w-0 break-words">
+    <RecordList title={title} result={result} page={page} filtered={Object.values(filters).some(value => value !== false && value !== "")} columns={[
+      { accessorKey: "transfer_date", header: "轉倉日期" },
+      { id: "accounts", header: "來源／目標帳戶", cell: ({ row }) => <div className="grid gap-1"><AccountName id={row.original.source_account_id} /><AccountName id={row.original.target_account_id} /></div> },
+      { id: "principal", header: mode === "cash" ? "原幣本金（費用另記）" : "證券／股數", cell: ({ row }) => isCashTransfer(row.original)
+        ? <>{row.original.source_currency} {row.original.source_amount}<br />轉至 {row.original.target_currency} {row.original.target_amount}</>
+        : <><SecurityName id={row.original.security_id} />{row.original.quantity} 股</> },
+      { id: "booking", header: mode === "cash" ? "歷史入帳差額，非 FX 損益" : "建立時成本，非目前估值", cell: ({ row }) => isCashTransfer(row.original)
+        ? row.original.booking_delta_hkd === null ? "未知，不是零" : `HKD ${row.original.booking_delta_hkd}`
+        : `HKD ${row.original.cost_moved_hkd}（BOOKED_AT_CREATION）` },
+      { id: "status", header: "紀錄狀態／品質", cell: ({ row }) => <>{statusLabels[row.original.status]}{isCashTransfer(row.original) && <span className="block text-secondary">{qualityLabels[row.original.quality]}</span>}</> },
+    ]}>{record => <article aria-label={`${record.transfer_date} ${isCashTransfer(record) ? `${record.source_currency} ${record.source_amount} ${record.target_currency} ${record.target_amount}` : `${record.quantity} 股轉倉`}`} className="min-w-0 break-words">
       <TransferDetails record={record} /><div className="mt-3 flex flex-wrap gap-3">
         {canEdit(record) && <><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor(record); }}>更正{title}</Button><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setVoiding(record); }}>作廢{title}</Button></>}
         <Button variant="outline" onClick={() => { filter({ root_id: record.root_id, include_history: true }); page.search(""); }}>查看轉倉修訂鏈</Button>

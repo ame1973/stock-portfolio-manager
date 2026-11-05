@@ -4,13 +4,17 @@ import { Link, useSearchParams } from "react-router";
 import { api } from "@spm/contracts";
 import { Field, SelectField } from "../../components/forms/fields";
 import { Button } from "../../components/ui/button";
+import { EditorSheet } from "../../components/ui/editor-sheet";
 import { checked, mutationHeaders } from "../../lib/api";
+import { FilterChips } from "../../components/forms/filter-chips";
+import { useViewState } from "../../lib/view-state";
 import { RecordList } from "../settings/RecordList";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { usePageState } from "../settings/data";
 import { BookingForm } from "./BookingForm";
 import { CashNav } from "./CashNav";
 import { ReasonedAction } from "./ReasonedAction";
+import { AccountName } from "./ReferenceName";
 import { isCash, refreshLedger, useAccount, type Booking } from "./data";
 
 const kindLabels: Record<string, string> = { DEPOSIT: "外部存入", WITHDRAW: "外部提款", ADJUSTMENT: "非外部調整", REVERSAL: "精確沖銷", TRADE_SETTLEMENT: "交易交收", EXPENSE: "費用現金", TRANSFER_IN: "轉入", TRANSFER_OUT: "轉出", DIVIDEND_RECEIPT: "股息實收", CORPORATE_CASH: "企業行動現金" };
@@ -42,10 +46,11 @@ function BookingDetails({ record }: { record: Booking }) {
 
 export function BookingPage({ mode }: { mode: "cash" | "expense" }) {
   const cache = useQueryClient();
-  const page = usePageState();
   const [query] = useSearchParams();
+  const view = `booking:${mode}:${query.get("account_id") ?? ""}`;
+  const page = usePageState(view);
   const emptyFilters = { account_id: "", portfolio_id: "", currency: "" as "" | "HKD" | "USD", from_date: "", to_date: "", source_type: "", entry_role: "" as "" | "PRIMARY" | "REVERSAL", include_history: false };
-  const [filters, setFilters] = useState({ ...emptyFilters, account_id: query.get("account_id") ?? "" });
+  const [filters, setFilters] = useViewState(`filters:${view}`, { ...emptyFilters, account_id: query.get("account_id") ?? "" });
   const [editor, setEditor] = useState<Booking | "new" | null>(null);
   const [voiding, setVoiding] = useState<Booking | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -62,11 +67,13 @@ export function BookingPage({ mode }: { mode: "cash" | "expense" }) {
     <CashNav />
     <div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-2xl"><h1 className="text-2xl font-semibold">{title}</h1>
       <p className="mt-2 text-sm leading-7 text-secondary">{mode === "cash" ? "完整日誌保留原始、修訂與精確沖銷。這不是已確認現金總額；不同幣別不會相加，來源管理項目必須透過原流程更正。" : "逐筆記錄營運費用及有依據的退款；交易費已包含在交收成本，不要重複登記。"}</p></div>
-      <Button disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增{title}</Button>
+      <Button data-editor-create disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增{title}</Button>
     </div>
     {notice && <p role="status" className="text-sm leading-7 text-success">{notice}</p>}
-    {editor !== null && <BookingForm mode={mode} key={editor === "new" ? "new" : editor.id} record={editor === "new" ? undefined : editor}
-      onCancel={() => { setEditor(null); void result.refetch(); }} onSaved={record => { saved(); setNotice(record.quality === "MISSING_FX" ? "已儲存原幣事實；歷史 HKD 仍未知，沒有採用預設匯率。" : "已儲存原幣及歷史入帳結果；原值、沖銷與審計仍保留。"); }} />}
+    {editor !== null && <EditorSheet title={`${editor === "new" ? "新增" : "更正"}${title}`} onClose={() => { setEditor(null); void result.refetch(); }}>
+      <BookingForm mode={mode} key={editor === "new" ? "new" : editor.id} record={editor === "new" ? undefined : editor}
+        onCancel={() => { setEditor(null); void result.refetch(); }} onSaved={record => { saved(); setNotice(record.quality === "MISSING_FX" ? "已儲存原幣事實；歷史 HKD 仍未知，沒有採用預設匯率。" : "已儲存原幣及歷史入帳結果；原值、沖銷與審計仍保留。"); }} />
+    </EditorSheet>}
     {voiding && <ReasonedAction key={voiding.id} title={`作廢${title}`} label={`確認作廢${title}`} reasonLabel="作廢入帳依據" description="會保留原始事實並精確沖銷原幣、歷史 FX 與 HKD；不會刪除或直接覆寫任何金融紀錄。" onCancel={() => setVoiding(null)}
       onConfirm={async (reason, key) => {
         const params = { path: { id: voiding.id }, header: { ...await mutationHeaders(key), "If-Match": `"${voiding.version}"` } };
@@ -88,8 +95,19 @@ export function BookingPage({ mode }: { mode: "cash" | "expense" }) {
         <Button variant="outline" onClick={() => { setFilters(emptyFilters); page.reset(); }}>清除日誌篩選</Button>
       </div>
     </details>
+    <FilterChips values={filters} labels={{ portfolio_id: "組合", account_id: "帳戶", currency: "原幣", from_date: "入帳起日", to_date: "入帳迄日", source_type: "來源流程", entry_role: "日誌角色", include_history: "歷史修訂" }} onRemove={key => filter({ [key]: key === "include_history" ? false : "", ...(key === "portfolio_id" ? { account_id: "" } : {}) })} />
     {filters.account_id && <Link to={`/cash/accounts/${filters.account_id}`} className="inline-flex min-h-11 items-center text-sm text-primary underline">查看所選帳戶餘額與期初</Link>}
-    <RecordList title={title} page={page} result={result} filtered={Object.values(filters).some(value => typeof value === "string" && value !== "")}>{record => <article aria-label={`${isCash(record) ? record.effective_date : record.date} ${record.currency} ${record.amount}`} className="min-w-0 break-words">
+    <RecordList title={title} page={page} result={result} filtered={Object.values(filters).some(value => value !== false && value !== "")} columns={[
+      { id: "date", header: "入帳日期", cell: ({ row }) => isCash(row.original) ? row.original.effective_date : row.original.date },
+      { id: "account", header: "帳戶", cell: ({ row }) => <AccountName id={row.original.account_id} /> },
+      { id: "kind", header: "類型／分類", cell: ({ row }) => isCash(row.original) ? kindLabels[row.original.kind] ?? row.original.kind : row.original.category },
+      { id: "amount", header: "原幣金額（不加總）", cell: ({ row }) => `${row.original.currency} ${row.original.amount}` },
+      { id: "booked", header: "歷史 HKD，非估值", cell: ({ row }) => {
+        const value = isCash(row.original) ? row.original.booked_hkd : row.original.hkd_amount;
+        return value === null ? "未知，不是零" : `HKD ${value}`;
+      } },
+      { id: "status", header: "紀錄狀態／品質", cell: ({ row }) => <>{statusLabels[row.original.status]}<span className="block text-secondary">{row.original.quality === "MISSING_FX" ? "缺少歷史 FX" : "歷史入帳已記錄"}</span></> },
+    ]}>{record => <article aria-label={`${isCash(record) ? record.effective_date : record.date} ${record.currency} ${record.amount}`} className="min-w-0 break-words">
       <BookingDetails record={record} />
       {canEdit(record) && <div className="mt-3 flex flex-wrap gap-3"><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor(record); }}>更正{title}</Button>
         <Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setVoiding(record); }}>作廢{title}</Button></div>}

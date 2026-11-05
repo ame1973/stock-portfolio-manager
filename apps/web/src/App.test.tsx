@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { api } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
@@ -14,9 +14,9 @@ vi.mock("./features/auth/AuthGate", () => ({
   }),
 }));
 
-function renderApp() {
+function renderApp(path = "/") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}><MemoryRouter><App /></MemoryRouter></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><App /></MemoryRouter></QueryClientProvider>);
 }
 
 describe("service status", () => {
@@ -52,5 +52,52 @@ describe("service status", () => {
     });
     renderApp();
     expect(await screen.findByRole("alert")).toHaveTextContent("服務未就緒");
+  });
+});
+
+describe("financial workspace navigation", () => {
+  function reads() {
+    vi.spyOn(api, "GET").mockImplementation(async path => ({ data: path === "/api/v1/health/ready" ? { status: "ready" } : { items: [], next_cursor: null }, response: new Response() }));
+  }
+
+  it("has six working desktop destinations and exactly five mobile destinations with labelled collapsed icons", async () => {
+    reads();
+    renderApp();
+    await screen.findByText("已連線，資料庫已就緒");
+    const desktop = screen.getByRole("navigation", { name: "主要導覽" });
+    const mobile = screen.getByRole("navigation", { name: "手機主要導覽" });
+    expect(within(desktop).getAllByRole("link")).toHaveLength(6);
+    expect(within(mobile).getAllByRole("link")).toHaveLength(5);
+    expect(within(desktop).getByRole("link", { name: "服務連線" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: "收合導覽" }));
+    expect(screen.getByRole("button", { name: "展開導覽" })).toHaveAttribute("aria-expanded", "false");
+    expect(within(desktop).getByRole("link", { name: "交易紀錄" })).toHaveAttribute("href", "/transactions");
+    fireEvent.click(within(desktop).getByRole("link", { name: "交易紀錄" }));
+    expect(await screen.findByRole("heading", { name: "交易紀錄" })).toBeVisible();
+    expect(within(desktop).getByRole("link", { name: "交易紀錄" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("main")).toHaveFocus();
+  });
+
+  it("restores financial filters/search when navigating back and removes individual chips without browser persistence", async () => {
+    reads();
+    renderApp("/transactions");
+    await screen.findByRole("heading", { name: "交易紀錄" });
+    fireEvent.change(screen.getByLabelText("交易起日"), { target: { value: "2026-01-02" } });
+    fireEvent.change(screen.getByLabelText("搜尋交易"), { target: { value: "synthetic evidence" } });
+    fireEvent.click(screen.getByLabelText("包括已被取代的修訂"));
+    const nav = screen.getByRole("navigation", { name: "主要導覽" });
+    fireEvent.click(within(nav).getByRole("link", { name: "現金帳" }));
+    await screen.findByRole("heading", { name: "現金紀錄" });
+    fireEvent.click(within(nav).getByRole("link", { name: "交易紀錄" }));
+    await screen.findByRole("heading", { name: "交易紀錄" });
+    expect(screen.getByLabelText("交易起日")).toHaveValue("2026-01-02");
+    expect(screen.getByLabelText("搜尋交易")).toHaveValue("synthetic evidence");
+    expect(screen.getByLabelText("包括已被取代的修訂")).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "清除此篩選：交易起日" }));
+    expect(screen.getByLabelText("交易起日")).toHaveValue("");
+    expect(screen.getByLabelText("包括已被取代的修訂")).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "清除搜尋：synthetic evidence" }));
+    expect(screen.getByLabelText("搜尋交易")).toHaveValue("");
+    expect(localStorage.length + sessionStorage.length).toBe(0);
   });
 });

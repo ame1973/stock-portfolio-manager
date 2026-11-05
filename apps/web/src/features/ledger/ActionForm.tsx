@@ -56,7 +56,7 @@ export function ActionForm({ record, onSaved, onCancel }: { record?: CorporateAc
         : checked(await api.POST("/api/v1/corporate-actions", { params: { header }, body }));
     }))}>
     {record ? <div className="text-sm leading-7 text-secondary"><input type="hidden" {...register("security_id")} /><p>穩定證券：{security.data ? `${security.data.display_ticker} / ${security.data.exchange_code}` : record.security_id}；更正不能移至另一證券。</p></div>
-      : <ReferenceSelect kind="securities" label="企業行動證券" value={securityId} registration={register("security_id")} clearSelection={() => setValue("security_id", "")} error={errors.security_id?.message} autoFocus />}
+      : <ReferenceSelect kind="securities" label="企業行動證券" value={securityId} registration={register("security_id")} clearSelection={() => setValue("security_id", "")} error={errors.security_id?.message} />}
     <SelectField label="企業行動類型" {...register("action_type", { onChange: () => { setValue("ratio_numerator", ""); setValue("ratio_denominator", ""); setValue("new_symbol", ""); setValue("status", "NEEDS_REVIEW"); setValue("confirmed_terms", false); } })}>{kinds.options.map(kind => <option key={kind} value={kind}>{actionLabels[kind]}</option>)}</SelectField>
     <Field label="企業行動生效日期" type="date" {...register("effective_date")} error={errors.effective_date?.message} help="使用交易所當地日期。未來顯示代號只能待覆核；已採納的未來股數條款也不會提前改變今日持倉。" />
     <SelectField label="條款狀態" {...register("status", { onChange: () => setValue("confirmed_terms", false) })} error={errors.status?.message}><option value="NEEDS_REVIEW">待覆核，未完成分配</option>{!unallocated && <option value="CONFIRMED">採納條款，不代表完整估值</option>}</SelectField>

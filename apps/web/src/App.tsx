@@ -1,69 +1,103 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router";
 import { api } from "@spm/contracts";
 import { Button } from "./components/ui/button";
 import { AuthGate, type AuthSession } from "./features/auth/AuthGate";
-import { AccountsPage, BrokersPage, PortfoliosPage, SecuritiesPage } from "./features/settings/MasterPages";
-import { SecurityDetailPage } from "./features/settings/SecurityDetailPage";
-import { SecuritySettingsPage } from "./features/settings/SecuritySettingsPage";
+import { ViewContext, type Views } from "./lib/view-state";
 
+const PortfoliosPage = lazy(() => import("./features/settings/MasterPages").then(module => ({ default: module.PortfoliosPage })));
+const BrokersPage = lazy(() => import("./features/settings/MasterPages").then(module => ({ default: module.BrokersPage })));
+const AccountsPage = lazy(() => import("./features/settings/MasterPages").then(module => ({ default: module.AccountsPage })));
+const SecuritiesPage = lazy(() => import("./features/settings/MasterPages").then(module => ({ default: module.SecuritiesPage })));
+const SecurityDetailPage = lazy(() => import("./features/settings/SecurityDetailPage").then(module => ({ default: module.SecurityDetailPage })));
+const SecuritySettingsPage = lazy(() => import("./features/settings/SecuritySettingsPage").then(module => ({ default: module.SecuritySettingsPage })));
 const TradesPage = lazy(() => import("./features/ledger/TradesPage").then(module => ({ default: module.TradesPage })));
 const BookingPage = lazy(() => import("./features/ledger/BookingPage").then(module => ({ default: module.BookingPage })));
 const AccountCashPage = lazy(() => import("./features/ledger/AccountCashPage").then(module => ({ default: module.AccountCashPage })));
 const TransferPage = lazy(() => import("./features/ledger/TransferPage").then(module => ({ default: module.TransferPage })));
 const ActionPage = lazy(() => import("./features/ledger/ActionPage").then(module => ({ default: module.ActionPage })));
 
+const navigation = [
+  { to: "/", label: "服務連線", icon: "M3 11 12 3l9 8M5 10v11h5v-7h4v7h5V10" },
+  { to: "/transactions", label: "交易紀錄", icon: "M4 5h16M4 12h10M4 19h16m-3-10 3 3-3 3" },
+  { to: "/cash", label: "現金帳", icon: "M3 5h18v15H3V5Zm12 5h6v5h-6v-5ZM7 5V3h11v2" },
+  { to: "/transfers", label: "股票轉倉", icon: "M3 7h17m-4-4 4 4-4 4M21 17H4m4-4-4 4 4 4" },
+  { to: "/corporate-actions", label: "企業行動", icon: "M12 3v7m0 0H5v8m7-8h7v8M2 18h6v4H2v-4Zm14 0h6v4h-6v-4Z" },
+  { to: "/settings", label: "管理設定", icon: "M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6M10 15v6" },
+];
+
+function Brand({ compact = false }: { compact?: boolean }) {
+  return <Link to="/" aria-label="持倉簿服務連線" className="flex min-h-11 items-center gap-3 rounded-md">
+    <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-lg bg-primary text-xl text-primary-foreground">簿</span>
+    {!compact && <div><p className="text-xl font-semibold">持倉簿</p><p className="text-xs text-secondary">Stock Portfolio Manager</p></div>}
+  </Link>;
+}
+
+function NavIcon({ path }: { path: string }) {
+  return <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={path} /></svg>;
+}
+
 export function App() {
-  return <AuthGate>{session => <SignedInApp session={session} />}</AuthGate>;
+  return <AuthGate>{session => <SignedInApp key={session.owner.id} session={session} />}</AuthGate>;
 }
 
 function SignedInApp({ session }: { session: AuthSession }) {
   const main = useRef<HTMLElement>(null);
   const location = useLocation();
+  const [collapsed, setCollapsed] = useState(false);
+  const [views, setViews] = useState<Views>({});
   useEffect(() => { main.current?.focus(); }, [location.pathname]);
-  return <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 py-6 sm:px-8 sm:py-10">
-    <a href="#content" className="sr-only focus:not-sr-only focus:mb-4">跳至內容</a>
-    <header className="flex flex-wrap items-center gap-4 border-b border-border pb-5">
-      <Link to="/" className="flex items-center gap-3">
-        <span aria-hidden="true" className="grid size-11 place-items-center rounded-lg bg-primary text-xl text-primary-foreground">簿</span>
-        <div><p className="text-xl font-semibold">持倉簿</p><p className="text-xs text-secondary">Stock Portfolio Manager</p></div>
-      </Link>
-      <nav aria-label="主要導覽" className="order-3 flex w-full flex-wrap gap-2 sm:order-none sm:w-auto">
-        <NavLink to="/" end className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">服務連線</NavLink>
-        <NavLink to="/transactions" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">交易紀錄</NavLink>
-        <NavLink to="/cash" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">現金帳</NavLink>
-        <NavLink to="/transfers" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">股票轉倉</NavLink>
-        <NavLink to="/corporate-actions" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">企業行動</NavLink>
-        <NavLink to="/settings" className="inline-flex min-h-11 items-center rounded-md px-3 text-sm aria-[current=page]:bg-muted">管理設定</NavLink>
-      </nav>
-      <Button className="ml-auto" variant="outline" onClick={() => void session.logout()} disabled={session.loggingOut}>{session.loggingOut ? "正在登出…" : "登出"}</Button>
-    </header>
-    {session.logoutError && <p role="alert" className="mt-4 text-sm text-danger">{session.logoutError}</p>}
-    <main id="content" ref={main} tabIndex={-1} className="min-w-0 flex-1 py-8 focus:outline-none sm:py-10">
-      <Routes>
-        <Route path="/" element={<ServiceStatus />} />
-        <Route path="/transactions" element={<Suspense fallback={<p role="status">正在載入交易介面…</p>}><TradesPage /></Suspense>} />
-        <Route path="/cash" element={<Suspense fallback={<p role="status">正在載入現金介面…</p>}><BookingPage key="cash" mode="cash" /></Suspense>} />
-        <Route path="/cash/expenses" element={<Suspense fallback={<p role="status">正在載入費用介面…</p>}><BookingPage key="expense" mode="expense" /></Suspense>} />
-        <Route path="/cash/transfers" element={<Suspense fallback={<p role="status">正在載入成對轉帳…</p>}><TransferPage key="cash" mode="cash" /></Suspense>} />
-        <Route path="/transfers" element={<Suspense fallback={<p role="status">正在載入股票轉倉…</p>}><TransferPage key="security" mode="security" /></Suspense>} />
-        <Route path="/cash/accounts/:id" element={<Suspense fallback={<p role="status">正在載入原幣餘額與期初…</p>}><AccountCashPage /></Suspense>} />
-        <Route path="/corporate-actions" element={<Suspense fallback={<p role="status">正在載入企業行動條款…</p>}><ActionPage /></Suspense>} />
-        <Route path="/settings" element={<SettingsLayout />}>
-          <Route index element={<Navigate to="portfolios" replace />} />
-          <Route path="portfolios" element={<PortfoliosPage />} />
-          <Route path="brokers" element={<BrokersPage />} />
-          <Route path="accounts" element={<AccountsPage />} />
-          <Route path="securities" element={<SecuritiesPage />} />
-          <Route path="securities/:id" element={<SecurityDetailPage />} />
-          <Route path="security" element={<SecuritySettingsPage />} />
-        </Route>
-        <Route path="*" element={<div className="grid gap-5"><h1 className="text-2xl font-semibold">找不到頁面</h1><Link to="/settings" className="text-primary underline">前往管理設定</Link></div>} />
-      </Routes>
-    </main>
-    <footer className="border-t border-border pt-5 text-sm text-secondary">私人部署 · 不提供下單或投資建議</footer>
-  </div>;
+  return <ViewContext value={{ views, setViews }}><div className="workspace-frame min-h-dvh lg:flex">
+    <a href="#content" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-surface focus:p-3">跳至內容</a>
+    <aside className={`hidden shrink-0 border-r border-border bg-surface lg:block ${collapsed ? "w-24" : "w-60"}`}>
+      <div className="sticky top-0 flex min-h-dvh flex-col gap-6 p-4">
+        <Brand compact={collapsed} />
+        <Button variant="outline" aria-expanded={!collapsed} aria-controls="workspace-navigation" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? "展開導覽" : "收合導覽"}>{collapsed ? "展開" : "收合導覽"}</Button>
+        <nav id="workspace-navigation" aria-label="主要導覽" className="grid gap-2">
+          {navigation.map(item => <NavLink key={item.to} to={item.to} end={item.to === "/"} aria-label={item.label} title={collapsed ? item.label : undefined} className={`flex min-h-11 items-center gap-3 rounded-md px-3 py-3 text-sm aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-primary ${collapsed ? "justify-center" : ""}`}>
+            <NavIcon path={item.icon} /><span className={collapsed ? "sr-only" : ""}>{item.label}</span>
+          </NavLink>)}
+        </nav>
+        {!collapsed && <p className="mt-auto max-w-44 text-xs leading-6 text-secondary">原始事實保留，未知數字不補零。所有寫入以伺服器確認為準。</p>}
+      </div>
+    </aside>
+    <div className="min-w-0 flex-1">
+      <header className="flex min-h-24 flex-wrap items-center gap-4 border-b border-border bg-surface px-4 py-4 sm:px-8">
+        <div className="lg:hidden"><Brand /></div><p className="hidden text-sm font-medium text-secondary lg:block">財務工作區</p>
+        <Button className="ml-auto" variant="outline" onClick={() => void session.logout()} disabled={session.loggingOut}>{session.loggingOut ? "正在登出…" : "登出"}</Button>
+      </header>
+      <div className="mx-auto flex min-h-[calc(100dvh-6rem)] max-w-[90rem] flex-col px-4 sm:px-8">
+        {session.logoutError && <p role="alert" className="mt-4 text-sm text-danger">{session.logoutError}</p>}
+        <main id="content" ref={main} tabIndex={-1} className="min-w-0 flex-1 py-8 focus:outline-none sm:py-10">
+          <Suspense fallback={<p role="status">正在載入工作區…</p>}><Routes>
+            <Route path="/" element={<ServiceStatus />} />
+            <Route path="/transactions" element={<TradesPage />} />
+            <Route path="/cash" element={<BookingPage key="cash" mode="cash" />} />
+            <Route path="/cash/expenses" element={<BookingPage key="expense" mode="expense" />} />
+            <Route path="/cash/transfers" element={<TransferPage key="cash" mode="cash" />} />
+            <Route path="/transfers" element={<TransferPage key="security" mode="security" />} />
+            <Route path="/cash/accounts/:id" element={<AccountCashPage key={location.pathname} />} />
+            <Route path="/corporate-actions" element={<ActionPage />} />
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<Navigate to="portfolios" replace />} />
+              <Route path="portfolios" element={<PortfoliosPage />} />
+              <Route path="brokers" element={<BrokersPage />} />
+              <Route path="accounts" element={<AccountsPage />} />
+              <Route path="securities" element={<SecuritiesPage />} />
+              <Route path="securities/:id" element={<SecurityDetailPage />} />
+              <Route path="security" element={<SecuritySettingsPage />} />
+            </Route>
+            <Route path="*" element={<div className="grid gap-5"><h1 className="text-2xl font-semibold">找不到頁面</h1><Link to="/settings" className="text-primary underline">前往管理設定</Link></div>} />
+          </Routes></Suspense>
+        </main>
+        <footer className="border-t border-border py-5 text-sm text-secondary">私人部署 · 不提供下單或投資建議</footer>
+      </div>
+    </div>
+    <nav aria-label="手機主要導覽" className="mobile-workspace-nav fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-surface lg:hidden">
+      {navigation.slice(1).map(item => <NavLink key={item.to} to={item.to} aria-label={item.label} className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-xs aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-primary"><NavIcon path={item.icon} /><span>{item.label}</span></NavLink>)}
+    </nav>
+  </div></ViewContext>;
 }
 
 function SettingsLayout() {

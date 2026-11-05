@@ -58,7 +58,7 @@ export function TradeForm({ record, onSaved, onCancel }: {
         ? checked(await api.PATCH("/api/v1/trades/{id}", { params: { path: { id: record.id }, header: { ...header, "If-Match": `"${record.version}"` } }, body: { ...body, reason: values.reason.trim() } }))
         : checked(await api.POST("/api/v1/trades", { params: { header }, body }));
     }))}>
-    <ReferenceSelect kind="portfolios" label="投資組合" autoFocus value={portfolioId} registration={{ ...register("portfolio_id"), onChange: event => {
+    <ReferenceSelect kind="portfolios" label="投資組合" value={portfolioId} registration={{ ...register("portfolio_id"), onChange: event => {
       void register("portfolio_id").onChange(event); clearAccount();
     } }} error={errors.portfolio_id?.message} clearSelection={() => { setValue("portfolio_id", ""); clearAccount(); }} />
     <ReferenceSelect key={portfolioId} kind="accounts" label="交易帳戶" portfolioId={portfolioId || undefined} value={accountId} registration={register("account_id")} error={errors.account_id?.message} clearSelection={clearAccount} />

@@ -4,7 +4,9 @@ import { Link, useParams } from "react-router";
 import { api } from "@spm/contracts";
 import { Field } from "../../components/forms/fields";
 import { Button } from "../../components/ui/button";
+import { EditorSheet } from "../../components/ui/editor-sheet";
 import { checked, failureMessage, mutationHeaders } from "../../lib/api";
+import { useViewState } from "../../lib/view-state";
 import type { Account } from "../settings/data";
 import { CashNav } from "./CashNav";
 import { CompletenessForm, OpeningForm } from "./OpeningForm";
@@ -26,7 +28,7 @@ export function AccountCashPage() {
   const { id = "" } = useParams();
   const cache = useQueryClient();
   const account = useAccount(id);
-  const [asOf, setAsOf] = useState("");
+  const [asOf, setAsOf] = useViewState(`balances:${id}`, "");
   const [editor, setEditor] = useState<Editor | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const opening = useQuery({ queryKey: ["ledger", "opening", id], enabled: !!id, queryFn: async ({ signal }) =>
@@ -43,12 +45,16 @@ export function AccountCashPage() {
     <div className="flex flex-wrap gap-4 text-sm"><Link to={`/cash?account_id=${id}`} className="inline-flex min-h-11 items-center text-primary underline">此帳戶現金日誌</Link><Link to={`/cash/expenses?account_id=${id}`} className="inline-flex min-h-11 items-center text-primary underline">此帳戶費用與退款</Link></div>
     {notice && <p role="status" className="text-sm leading-7 text-success">{notice}</p>}
     {archived && <p role="status" className="text-sm leading-7 text-secondary">帳戶已封存。歷史仍可讀取及作廢一般錯誤入帳；新入帳或期初更正前請先在設定重新啟用。</p>}
-    {editor?.kind === "opening" && <OpeningForm key={`opening-${editor.record.version}`} record={editor.record} onCancel={() => { setEditor(null); void opening.refetch(); }} onSaved={record => {
-      cache.setQueryData(["ledger", "opening", id], record); saved("已儲存期初斷言；原始值及精確沖銷會保留，完整性不會被自動提升。");
-    }} />}
-    {editor?.kind === "completeness" && <CompletenessForm key={`completeness-${editor.record.version}`} record={editor.record} onCancel={() => { setEditor(null); void account.refetch(); }} onSaved={record => {
-      cache.setQueryData(["accounts", "record", id], record); saved("已儲存現金完整性斷言；是否可確認餘額仍以期初來源、期間及伺服器結果為準。");
-    }} />}
+    {editor?.kind === "opening" && <EditorSheet title="設定／更正期初" successFocus="[data-opening-control]" onClose={() => { setEditor(null); void opening.refetch(); }}>
+      <OpeningForm key={`opening-${editor.record.version}`} record={editor.record} onCancel={() => { setEditor(null); void opening.refetch(); }} onSaved={record => {
+        cache.setQueryData(["ledger", "opening", id], record); saved("已儲存期初斷言；原始值及精確沖銷會保留，完整性不會被自動提升。");
+      }} />
+    </EditorSheet>}
+    {editor?.kind === "completeness" && <EditorSheet title="設定現金完整性" successFocus="[data-completeness-control]" onClose={() => { setEditor(null); void account.refetch(); }}>
+      <CompletenessForm key={`completeness-${editor.record.version}`} record={editor.record} onCancel={() => { setEditor(null); void account.refetch(); }} onSaved={record => {
+        cache.setQueryData(["accounts", "record", id], record); saved("已儲存現金完整性斷言；是否可確認餘額仍以期初來源、期間及伺服器結果為準。");
+      }} />
+    </EditorSheet>}
     {editor?.kind === "clear" && <ReasonedAction key={`clear-${editor.record.version}`} title="撤回期初斷言" label="確認撤回期初斷言" reasonLabel="撤回期初依據" description="會精確沖銷目前期初及其有效調整、保留普通現金紀錄，並把現金完整性重設為未知。這不是把實際餘額設為零。" onCancel={() => setEditor(null)} onConfirm={async (reason, key) => {
       const result = checked(await api.PATCH("/api/v1/accounts/{id}/opening-cash", { params: { path: { id }, header: { ...await mutationHeaders(key), "If-Match": `"${editor.record.version}"` } }, body: { opening_cash: null, opening_cash_date: null, opening_fx_rate_hkd: null, reason, note: "" } }));
       cache.setQueryData(["ledger", "opening", id], result); saved("已撤回期初斷言並重設完整性為未知；普通現金及原始歷史仍保留，未宣稱實際餘額為零。");
@@ -85,13 +91,13 @@ export function AccountCashPage() {
             ["帳戶控制版本", String(opening.data.version)],
           ].map(([label, value]) => <div key={label}><dt className="text-secondary">{label}</dt><dd className="mt-1 break-all">{value}</dd></div>)}
         </dl>
-        <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={busy || archived || opening.isFetching || opening.isError || !account.data} onClick={() => { setNotice(null); if (opening.data) setEditor({ kind: "opening", record: opening.data }); }}>設定／更正期初</Button>
+        <div className="flex flex-wrap gap-3"><Button data-opening-control variant="outline" disabled={busy || archived || opening.isFetching || opening.isError || !account.data} onClick={() => { setNotice(null); if (opening.data) setEditor({ kind: "opening", record: opening.data }); }}>設定／更正期初</Button>
           {opening.data.opening_cash !== null && <Button variant="outline" disabled={busy || archived || opening.isFetching || opening.isError} onClick={() => { setNotice(null); if (opening.data) setEditor({ kind: "clear", record: opening.data }); }}>撤回期初斷言</Button>}</div>
       </>}
       <p className="text-sm leading-7 text-secondary">斷言是其原幣在當日開始時的餘額，不是存款，也不會替另一原幣錢包補錢。撤回與重新設定已知零是不同操作；撤回後必須重新核對，才能明確提升完整性。</p>
     </section>
     {account.data && <section className="panel grid gap-4"><h2 className="text-lg font-semibold">現金對帳完整性</h2><p className="text-sm leading-7 text-secondary">目前：{balanceLabels[account.data.cash_completeness]}。不會因記錄了一筆現金或補填 FX 而自動變為完整。</p>
-      <Button variant="outline" disabled={busy || account.isFetching || account.isError} onClick={() => { setNotice(null); if (account.data) setEditor({ kind: "completeness", record: account.data }); }}>設定現金完整性</Button>
+      <Button data-completeness-control variant="outline" disabled={busy || account.isFetching || account.isError} onClick={() => { setNotice(null); if (account.data) setEditor({ kind: "completeness", record: account.data }); }}>設定現金完整性</Button>
     </section>}
   </div>;
 }

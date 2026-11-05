@@ -33,7 +33,7 @@ export function FormFrame({ title, children, error, pending, onCancel, onSubmit,
   title: string; children: ReactNode; error: string | null; pending: boolean;
   onCancel: () => void; onSubmit: ComponentProps<"form">["onSubmit"]; onChange?: () => void;
 }) {
-  return <form aria-label={title} onSubmit={onSubmit} onChange={onChange} className="panel grid gap-5">
+  return <form aria-label={title} aria-busy={pending} onSubmit={onSubmit} onChange={onChange} className="panel grid gap-5">
     <h3 className="text-lg font-semibold">{title}</h3>
     <fieldset disabled={pending} className="grid gap-5 sm:grid-cols-2">{children}</fieldset>
     {error && <p role="alert" className="text-sm leading-6 text-danger">{error}</p>}
