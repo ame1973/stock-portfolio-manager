@@ -18,14 +18,18 @@ from spm_api.cash_models import (
     Expense,
     ExpenseCreate,
     ExpenseRevision,
+    OpeningCashRecord,
+    OpeningCashUpdate,
 )
 from spm_api.decimal_types import from_scaled, to_scaled
 from spm_api.errors import ApiError, Success
 from spm_api.finance import FinanceError, conversion_rate, lock_money
 from spm_api.ledger_service import (
     money_integer,
+    opening_leaf,
     post_cash,
     rebase_cash_changes,
+    rebase_opening,
     reverse_cash,
     reversible_integer,
 )
@@ -40,7 +44,8 @@ CASH_SQL = """
     SELECT c.*,a.portfolio_id,
         (SELECT r.id FROM cash_ledger_entries r WHERE r.reverses_entry_id=c.id) AS reversed_by_id,
         (SELECT n.id FROM cash_ledger_entries n JOIN accounts b ON b.id=n.account_id
-         JOIN portfolios q ON q.id=b.portfolio_id WHERE n.source_type='CASH_CORRECTION'
+         JOIN portfolios q ON q.id=b.portfolio_id
+         WHERE n.source_type IN ('CASH_CORRECTION','OPENING_BALANCE_CORRECTION')
          AND n.source_id=c.id AND n.entry_role='PRIMARY' AND q.owner_id=:owner LIMIT 1)
             AS superseded_by_id
     FROM cash_ledger_entries c JOIN accounts a ON a.id=c.account_id
@@ -98,7 +103,10 @@ def as_cash(row: RowMapping) -> CashEntry:
     )
     values["supersedes_id"] = (
         row["source_id"]
-        if (row["source_type"] == "CASH_CORRECTION" and row["entry_role"] == "PRIMARY")
+        if (
+            row["source_type"] in {"CASH_CORRECTION", "OPENING_BALANCE_CORRECTION"}
+            and row["entry_role"] == "PRIMARY"
+        )
         else None
     )
     values["external_flow"] = bool(row["external_flow"])
@@ -471,6 +479,141 @@ def void_expense(
     return Success(message="Expense voided; original facts and exact cash reversal retained")
 
 
+def get_opening(con: Connection, owner: str, identifier: str) -> OpeningCashRecord:
+    account = owned_account(con, owner, identifier)
+    leaf = opening_leaf(con, identifier)
+    amount = account["opening_cash_micro"]
+    quality = "UNSET"
+    if amount is not None:
+        if (
+            leaf is None
+            or leaf["is_reversed"]
+            or leaf["amount_micro"] != amount
+            or leaf["currency"] != account["default_currency"]
+            or leaf["effective_date"] != account["opening_cash_date"]
+        ):
+            quality = "NEEDS_REVIEW"
+        else:
+            quality = "MISSING_FX" if leaf["booked_hkd_micro"] is None else "OK"
+    elif leaf is not None and not leaf["is_reversed"]:
+        quality = "NEEDS_REVIEW"
+    return OpeningCashRecord.model_validate(
+        {
+            "account_id": identifier,
+            "currency": account["default_currency"],
+            "opening_cash": from_scaled(amount, 6) if amount is not None else None,
+            "opening_cash_date": account["opening_cash_date"],
+            "fx_rate_hkd": from_scaled(leaf["fx_rate_hkd_e12"], 12)
+            if amount is not None and leaf is not None and leaf["fx_rate_hkd_e12"] is not None
+            else None,
+            "booked_hkd": from_scaled(leaf["booked_hkd_micro"], 6)
+            if amount is not None and leaf is not None and leaf["booked_hkd_micro"] is not None
+            else None,
+            "entry_id": leaf["id"] if leaf is not None else None,
+            "predecessor_id": leaf["source_id"]
+            if leaf is not None and leaf["source_type"] == "OPENING_BALANCE_CORRECTION"
+            else None,
+            "version": account["version"],
+            "cash_completeness": account["cash_completeness"],
+            "quality": quality,
+        }
+    )
+
+
+def correct_opening(
+    con: Connection,
+    auth: Auth,
+    identifier: str,
+    version: int,
+    body: OpeningCashUpdate,
+    request_id: str,
+) -> OpeningCashRecord:
+    owner = str(auth.owner.id)
+    account = owned_account(con, owner, identifier)
+    check_version(account["version"], version)
+    if account["status"] != "ACTIVE":
+        raise ApiError(
+            409, "ARCHIVED", "Reopen the account before correcting its opening assertion"
+        )
+    before = get_opening(con, owner, identifier)
+    leaf = opening_leaf(con, identifier)
+    amount = to_scaled(body.opening_cash, 6) if body.opening_cash is not None else None
+    locked = (
+        lock_money(
+            Decimal(body.opening_cash),
+            account["default_currency"],
+            Decimal(body.opening_fx_rate_hkd) if body.opening_fx_rate_hkd is not None else None,
+        )
+        if body.opening_cash is not None
+        else None
+    )
+    fx = to_scaled(format(locked.fx_rate_hkd, "f"), 12) if locked is not None else None
+    booked = money_integer(locked.hkd) if locked is not None else None
+    derived = (
+        con.execute(
+            text("""
+        SELECT c.* FROM cash_ledger_entries c WHERE c.account_id=:account
+        AND c.source_type='OPENING_REBASE' AND c.entry_role='PRIMARY'
+        AND NOT EXISTS(SELECT 1 FROM cash_ledger_entries r WHERE r.reverses_entry_id=c.id)
+    """),
+            {"account": identifier},
+        )
+        .mappings()
+        .all()
+    )
+    if leaf is not None and not leaf["is_reversed"]:
+        reverse_cash(con, leaf, reason=body.reason)
+    for entry in derived:
+        reverse_cash(con, entry, reason=body.reason)
+    completeness = "UNKNOWN" if amount is None else account["cash_completeness"]
+    result = con.execute(
+        text("""
+        UPDATE accounts SET opening_cash_micro=:amount,opening_cash_date=:day,
+            cash_completeness=:completeness,version=version+1 WHERE id=:id AND version=:version
+    """),
+        {
+            "amount": amount,
+            "day": body.opening_cash_date,
+            "completeness": completeness,
+            "id": identifier,
+            "version": version,
+        },
+    )
+    if result.rowcount != 1:
+        raise ApiError(412, "PRECONDITION_FAILED", "This account changed; reload before correcting")
+    source = identifier
+    if amount is not None:
+        source = post_cash(
+            con,
+            account=identifier,
+            day=str(body.opening_cash_date),
+            currency=account["default_currency"],
+            amount=amount,
+            fx=fx,
+            booked=booked,
+            kind="ADJUSTMENT",
+            source_type="OPENING_BALANCE_CORRECTION" if leaf is not None else "OPENING_BALANCE",
+            source_id=leaf["id"] if leaf is not None else identifier,
+            note=body.note or body.reason,
+        )
+        rebase_opening(con, owner, identifier, source, request_id)
+    # Baseline coverage changes may invalidate quality/valuation before the new opening date.
+    invalidate_portfolio(con, account["portfolio_id"], source, "OPENING_ASSERTION_CHANGED")
+    response = get_opening(con, owner, identifier)
+    audit(
+        con,
+        owner,
+        "account_opening",
+        identifier,
+        "CLEAR_OPENING" if amount is None else "CORRECT_OPENING",
+        request_id=request_id,
+        before=before.model_dump(mode="json"),
+        after=response.model_dump(mode="json"),
+        reason=body.reason,
+    )
+    return response
+
+
 def _total(value: int) -> str:
     try:
         return from_scaled(value, 6)
@@ -501,7 +644,9 @@ def cash_balances(con: Connection, owner: str, identifier: str, day: str) -> Acc
             originals = [
                 row
                 for row in rows
-                if row["source_type"] == "OPENING_BALANCE" and row["entry_role"] == "PRIMARY"
+                if row["source_type"] in {"OPENING_BALANCE", "OPENING_BALANCE_CORRECTION"}
+                and row["entry_role"] == "PRIMARY"
+                and row["id"] not in reversed_ids
             ]
             anchored = sum(
                 row["amount_micro"]
@@ -511,13 +656,16 @@ def cash_balances(con: Connection, owner: str, identifier: str, day: str) -> Acc
                     row["effective_date"] < opening_day
                     or (
                         row["effective_date"] == opening_day
-                        and row["source_type"] in {"OPENING_BALANCE", "OPENING_REBASE"}
+                        and row["source_type"]
+                        in {"OPENING_BALANCE", "OPENING_BALANCE_CORRECTION", "OPENING_REBASE"}
                     )
                 )
             )
             if (
                 len(originals) != 1
-                or originals[0]["id"] in reversed_ids
+                or originals[0]["amount_micro"] != account["opening_cash_micro"]
+                or originals[0]["effective_date"] != opening_day
+                or originals[0]["currency"] != account["default_currency"]
                 or anchored != account["opening_cash_micro"]
             ):
                 quality = "NEEDS_REVIEW"

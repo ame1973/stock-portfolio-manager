@@ -563,3 +563,147 @@ test("paired cash and cost-preserving securities transfer HTTP revisions commit 
   await page.getByRole("button", { name: "登出", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
 });
+
+test("action terms and opening assertion HTTP corrections preserve evidence and truthful balances", async ({ page }) => {
+  type Action = components["schemas"]["CorporateAction"];
+  type Opening = components["schemas"]["OpeningCashRecord"];
+  type Cash = components["schemas"]["CashEntry"];
+  type Trade = components["schemas"]["TradeRecord"];
+  type Balances = components["schemas"]["AccountCashBalances"];
+  await page.goto("/settings/accounts");
+  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  const { headers, post } = await signedRequests(page);
+  const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E action opening portfolio" });
+  const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E action opening broker" });
+  const account = await post<components["schemas"]["Account"]>("accounts", {
+    portfolio_id: portfolio.id, broker_id: broker.id, name: "E2E corrected opening account", default_currency: "USD",
+    opening_cash: "1000", opening_cash_date: "2026-01-10", opening_fx_rate_hkd: "7.7", cash_completeness: "COMPLETE",
+  });
+  const security = await post<components["schemas"]["Security"]>("securities", {
+    exchange_code: "NASDAQ", display_ticker: "ACTE", name: "E2E action security", quote_currency: "USD",
+    identifier_effective_from: "2020-01-01",
+  });
+  const buyBody = {
+    portfolio_id: portfolio.id, account_id: account.id, security_id: security.id, side: "BUY",
+    trade_date: "2026-01-02", quantity: "10", price: "100", fee: "1", currency: "USD", fx_rate_hkd: "7.8",
+  };
+  await post<Trade>("trades", buyBody);
+  async function journal() {
+    const response = await page.request.get("/api/v1/cash-entries", { params: { account_id: account.id, limit: 100 } });
+    expect(response.status()).toBe(200);
+    expect(response.headers()["cache-control"]).toBe("no-store");
+    return (await response.json() as { items: Cash[] }).items;
+  }
+  const beforeSplit = await journal();
+  const body = {
+    security_id: security.id, action_type: "SPLIT", effective_date: "2026-01-03", ratio_numerator: 3, ratio_denominator: 2,
+    status: "CONFIRMED", reason: "Synthetic reviewed split evidence", note: "",
+  } satisfies components["schemas"]["CorporateActionCreate"];
+  const splitHeaders = headers();
+  const created = await page.request.post("/api/v1/corporate-actions", { headers: splitHeaders, data: body });
+  expect(created.status()).toBe(201);
+  expect(created.headers()["cache-control"]).toBe("no-store");
+  const original = await created.json() as Action;
+  expect(original.effect_scope).toBe("QUANTITY_TERMS");
+  expect(original.allocation_scope).toBe("TERMS_NOT_A_VALUATION");
+  expect(await journal()).toEqual(beforeSplit);
+  const repeated = await page.request.post("/api/v1/corporate-actions", { headers: splitHeaders, data: body });
+  expect(repeated.status()).toBe(201);
+  expect(await repeated.json()).toEqual(original);
+  const sale = await post<Trade>("trades", { ...buyBody, side: "SELL", trade_date: "2026-01-04", quantity: "15", price: "120" });
+  const reason = { reason: "Synthetic correction of reviewed evidence" };
+  const beforeRejectedVoid = await journal();
+  const orphan = await page.request.delete(`/api/v1/corporate-actions/${original.id}`, { headers: headers(1), data: reason });
+  expect(orphan.status()).toBe(409);
+  expect((await orphan.json() as { code: string }).code).toBe("INSUFFICIENT_SHARES");
+  expect(await journal()).toEqual(beforeRejectedVoid);
+  const revisedResponse = await page.request.patch(`/api/v1/corporate-actions/${original.id}`, {
+    headers: headers(1), data: { ...body, ratio_numerator: 2, ratio_denominator: 1 },
+  });
+  expect(revisedResponse.status()).toBe(200);
+  const revised = await revisedResponse.json() as Action;
+  expect(revised.root_id).toBe(original.id);
+  expect(revised.created_sequence).toBe(original.created_sequence);
+  expect(revised.revision).toBe(2);
+  const retained = await (await page.request.get(`/api/v1/corporate-actions/${original.id}`)).json() as Action;
+  expect(retained.lifecycle_status).toBe("SUPERSEDED");
+  expect(retained.ratio_numerator).toBe(3);
+  expect(retained.ratio_denominator).toBe(2);
+  expect((await page.request.delete(`/api/v1/trades/${sale.id}`, { headers: headers(1), data: reason })).status()).toBe(200);
+
+  const beforeReview = await journal();
+  const review = await post<Action>("corporate-actions", {
+    ...body, action_type: "MERGER", effective_date: "2026-01-06", ratio_numerator: null, ratio_denominator: null, status: "NEEDS_REVIEW",
+  });
+  expect(review.effect_scope).toBe("REVIEW_ONLY");
+  expect(review.review_required).toBe(true);
+  expect(await journal()).toEqual(beforeReview);
+  const blocked = await page.request.post("/api/v1/trades", { headers: headers(), data: { ...buyBody, trade_date: "2026-01-07", quantity: "1" } });
+  expect(blocked.status()).toBe(409);
+  expect((await blocked.json() as { code: string }).code).toBe("NEEDS_REVIEW");
+  expect(await journal()).toEqual(beforeReview);
+  expect((await page.request.delete(`/api/v1/corporate-actions/${review.id}`, { headers: headers(1), data: reason })).status()).toBe(200);
+  const mappingsURL = `/api/v1/securities/${security.id}/identifiers`;
+  const mappingsBefore = await (await page.request.get(mappingsURL)).json() as { items: components["schemas"]["Identifier"][] };
+  const symbol = await post<Action>("corporate-actions", {
+    ...body, action_type: "SYMBOL_CHANGE", effective_date: "2026-01-05", ratio_numerator: null, ratio_denominator: null, new_symbol: "ACTN",
+  });
+  expect(symbol.effect_scope).toBe("DISPLAY_ONLY");
+  expect(symbol.previous_symbol).toBe("ACTE");
+  expect(symbol.review_required).toBe(true);
+  const renamed = await (await page.request.get(`/api/v1/securities/${security.id}`)).json() as components["schemas"]["Security"];
+  expect(renamed.id).toBe(security.id);
+  expect(renamed.display_ticker).toBe("ACTN");
+  expect(await (await page.request.get(mappingsURL)).json()).toEqual(mappingsBefore);
+  expect(await journal()).toEqual(beforeReview);
+
+  const openingURL = `/api/v1/accounts/${account.id}/opening-cash`;
+  const oldOpening = await (await page.request.get(openingURL)).json() as Opening;
+  const correction = {
+    opening_cash: "1500", opening_cash_date: "2026-01-15", opening_fx_rate_hkd: "7.9",
+    reason: "Synthetic corrected opening statement", note: "",
+  } satisfies components["schemas"]["OpeningCashUpdate"];
+  const correctionHeaders = headers(1);
+  const correctedResponse = await page.request.patch(openingURL, { headers: correctionHeaders, data: correction });
+  expect(correctedResponse.status()).toBe(200);
+  expect(correctedResponse.headers().etag).toBe('"2"');
+  const corrected = await correctedResponse.json() as Opening;
+  expect(corrected.predecessor_id).toBe(oldOpening.entry_id);
+  expect(corrected.fx_rate_hkd).toBe("7.900000000000");
+  expect(corrected.booked_hkd).toBe("11850.000000");
+  const correctionRetry = await page.request.patch(openingURL, { headers: correctionHeaders, data: correction });
+  expect(correctionRetry.status()).toBe(200);
+  expect(await correctionRetry.json()).toEqual(corrected);
+  const oldCash = (await journal()).find(row => row.id === oldOpening.entry_id)!;
+  expect(oldCash.amount).toBe("1000.000000");
+  expect(oldCash.fx_rate_hkd).toBe("7.700000000000");
+  expect(oldCash.status).toBe("SUPERSEDED");
+  const balance = await (await page.request.get(`/api/v1/accounts/${account.id}/cash-balances`)).json() as Balances;
+  expect(balance.balances[0]!.balance).toBe("1500.000000");
+  const cleared = await page.request.patch(openingURL, { headers: headers(2), data: { opening_cash: null, ...reason } });
+  expect(cleared.status()).toBe(200);
+  expect((await cleared.json() as Opening).quality).toBe("UNSET");
+  const unknown = await (await page.request.get(`/api/v1/accounts/${account.id}/cash-balances`)).json() as Balances;
+  expect(unknown.balances[0]!.recorded_balance).toBe("-1001.000000");
+  expect(unknown.balances[0]!.balance).toBeNull();
+  expect(unknown.balances[0]!.balance_quality).toBe("UNKNOWN");
+  const zero = await page.request.patch(openingURL, {
+    headers: headers(3), data: { ...correction, opening_cash: "0", opening_cash_date: "2026-01-20", opening_fx_rate_hkd: "8" },
+  });
+  expect(zero.status()).toBe(200);
+  const knownZero = await zero.json() as Opening;
+  expect(knownZero.opening_cash).toBe("0.000000");
+  expect(knownZero.cash_completeness).toBe("UNKNOWN");
+  const complete = await page.request.patch(`/api/v1/accounts/${account.id}`, { headers: headers(4), data: { cash_completeness: "COMPLETE" } });
+  expect(complete.status()).toBe(200);
+  const final = await (await page.request.get(`/api/v1/accounts/${account.id}/cash-balances`)).json() as Balances;
+  expect(final.balances[0]!.balance).toBe("0.000000");
+  expect(final.balances[0]!.historical_booked_hkd_net).toBe("200.200000");
+  const rows = await journal();
+  expect(rows).toHaveLength(17);
+  expect(rows.filter(row => row.entry_role === "REVERSAL")).toHaveLength(7);
+  expect(rows.every(row => row.external_flow === false)).toBe(true);
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  await page.getByRole("button", { name: "登出", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
+});

@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException
 from starlette.responses import Response
 
 from spm_api import __version__
+from spm_api.action_routes import router as action_router
 from spm_api.auth_routes import router as auth_router
 from spm_api.cash_routes import router as cash_router
 from spm_api.config import Settings
@@ -107,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(trade_router)
     app.include_router(cash_router)
     app.include_router(transfer_router)
+    app.include_router(action_router)
     return app
 
 

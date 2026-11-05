@@ -123,6 +123,30 @@ def reverse_cash(con: Connection, original: RowMapping, *, reason: str) -> str:
     return identifier
 
 
+def opening_leaf(con: Connection, account_id: str) -> RowMapping | None:
+    """Select the one assertion-chain leaf, not the newest timestamp or a guessed cash row."""
+    rows = (
+        con.execute(
+            text("""
+        SELECT c.*,EXISTS(SELECT 1 FROM cash_ledger_entries r WHERE r.reverses_entry_id=c.id)
+            AS is_reversed FROM cash_ledger_entries c
+        WHERE c.account_id=:account AND c.entry_role='PRIMARY'
+          AND c.source_type IN ('OPENING_BALANCE','OPENING_BALANCE_CORRECTION')
+          AND NOT EXISTS(SELECT 1 FROM cash_ledger_entries n
+                         WHERE n.source_type='OPENING_BALANCE_CORRECTION'
+                           AND n.entry_role='PRIMARY' AND n.source_id=c.id)
+        LIMIT 2
+    """),
+            {"account": account_id},
+        )
+        .mappings()
+        .all()
+    )
+    if len(rows) > 1:
+        raise ApiError(409, "NEEDS_REVIEW", "The opening assertion chain is ambiguous")
+    return rows[0] if rows else None
+
+
 def rebase_opening(
     con: Connection, owner: str, account_id: str, operation_id: str, request_id: str
 ) -> None:
@@ -133,23 +157,13 @@ def rebase_opening(
     day = account["opening_cash_date"]
     if day is None:
         raise ApiError(409, "NEEDS_REVIEW", "The opening balance needs a dated anchor")
-    opening = (
-        con.execute(
-            text("""
-        SELECT * FROM cash_ledger_entries WHERE account_id=:account
-        AND source_type='OPENING_BALANCE' AND entry_role='PRIMARY'
-    """),
-            {"account": account_id},
-        )
-        .mappings()
-        .first()
-    )
+    opening = opening_leaf(con, account_id)
     if (
         opening is None
-        or con.execute(
-            text("SELECT 1 FROM cash_ledger_entries WHERE reverses_entry_id=:id"),
-            {"id": opening["id"]},
-        ).first()
+        or opening["is_reversed"]
+        or opening["effective_date"] != day
+        or opening["currency"] != account["default_currency"]
+        or opening["amount_micro"] != account["opening_cash_micro"]
     ):
         raise ApiError(409, "NEEDS_REVIEW", "The opening balance has no current cash provenance")
     values = con.execute(
@@ -157,7 +171,7 @@ def rebase_opening(
         SELECT amount_micro FROM cash_ledger_entries
         WHERE account_id=:account AND currency=:currency
         AND (effective_date<:day OR (effective_date=:day
-             AND source_type IN ('OPENING_BALANCE','OPENING_REBASE')))
+             AND source_type IN ('OPENING_BALANCE','OPENING_BALANCE_CORRECTION','OPENING_REBASE')))
     """),
         {"account": account_id, "currency": account["default_currency"], "day": day},
     ).scalars()
@@ -303,8 +317,15 @@ def history_events(con: Connection, portfolio: str) -> tuple[list[Event], list[R
     return events, unresolved
 
 
-def validate_history(con: Connection, portfolio: str) -> dict[tuple[str, str], Position]:
+def _history_inputs(
+    con: Connection,
+    portfolio: str,
+    securities: set[str] | None = None,
+) -> tuple[list[Event], list[RowMapping], dict[str, date]]:
     events, unresolved = history_events(con, portfolio)
+    if securities is not None:
+        events = [event for event in events if event.operation.security_id in securities]
+        unresolved = [action for action in unresolved if action["security_id"] in securities]
     clock = now()
     horizons: dict[str, date] = {
         row["id"]: clock.astimezone(ZoneInfo(row["timezone"])).date()
@@ -317,6 +338,8 @@ def validate_history(con: Connection, portfolio: str) -> dict[tuple[str, str], P
             {"p": portfolio},
         ).mappings()
     }
+    if securities is not None:
+        horizons = {security: day for security, day in horizons.items() if security in securities}
     # Validate committed future facts too, but never apply another market's tomorrow early.
     for event in events:
         if not isinstance(event.operation, Split):
@@ -328,6 +351,11 @@ def validate_history(con: Connection, portfolio: str) -> dict[tuple[str, str], P
         if not isinstance(event.operation, Split)
         or event.day <= horizons[event.operation.security_id]
     ]
+    return events, unresolved, horizons
+
+
+def validate_history(con: Connection, portfolio: str) -> dict[tuple[str, str], Position]:
+    events, unresolved, horizons = _history_inputs(con, portfolio)
     for action in unresolved:
         day = date.fromisoformat(action["effective_date"])
         if day <= horizons[action["security_id"]]:
@@ -339,4 +367,17 @@ def validate_history(con: Connection, portfolio: str) -> dict[tuple[str, str], P
                 raise FinanceError(
                     "NEEDS_REVIEW", "An unallocated corporate action affects held shares"
                 )
-    return replay(events, as_of=max(horizons.values(), default=clock.date()))
+    return replay(events, as_of=max(horizons.values(), default=now().date()))
+
+
+def validate_action_history(con: Connection, portfolio: str, security: str) -> bool:
+    """Validate the computable prefix; return review, never partial positions as current values."""
+    events, unresolved, horizons = _history_inputs(con, portfolio, {security})
+    for action in sorted(unresolved, key=lambda row: row["effective_date"]):
+        day = date.fromisoformat(action["effective_date"])
+        if day <= horizons[security]:
+            before = replay(events, as_of=day, exclusive=True)
+            if any(position.quantity > 0 for position in before.values()):
+                return True
+    replay(events, as_of=max(horizons.values(), default=now().date()))
+    return False

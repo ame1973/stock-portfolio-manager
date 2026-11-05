@@ -48,6 +48,9 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
         ("/api/v1/cash-entries/{id}", "get"): "get_cash_entry",
         ("/api/v1/expenses/{id}", "get"): "get_expense",
         ("/api/v1/accounts/{id}/cash-balances", "get"): "get_cash_balances",
+        ("/api/v1/accounts/{id}/opening-cash", "get"): "get_opening_cash",
+        ("/api/v1/accounts/{id}/opening-cash", "patch"): "correct_opening_cash",
+        ("/api/v1/corporate-actions/{id}", "get"): "get_corporate_action",
         ("/api/v1/securities/{id}/identifiers/{mapping_id}", "patch"): "correct_identifier_period",
         (
             "/api/v1/securities/{id}/provider-symbols/{mapping_id}",

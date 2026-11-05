@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import AfterValidator, Field, model_validator
 
-from spm_api.decimal_types import FxRate, IsoDate, Money
+from spm_api.decimal_types import FxRate, IsoDate, Money, NonNegativeMoney
 from spm_api.errors import Model
 from spm_api.master_models import ChangeReason, Completeness, Currency, Name, Note
 
@@ -142,3 +142,34 @@ class AccountCashBalances(Model):
     as_of: IsoDate
     cash_completeness: Completeness
     balances: list[CurrencyCashBalance]
+
+
+class OpeningCashUpdate(Model):
+    opening_cash: NonNegativeMoney | None
+    opening_cash_date: CashDate | None = None
+    opening_fx_rate_hkd: FxRate | None = None
+    reason: ChangeReason
+    note: Note = ""
+
+    @model_validator(mode="after")
+    def complete_assertion(self) -> "OpeningCashUpdate":
+        if self.opening_cash is None:
+            if self.opening_cash_date is not None or self.opening_fx_rate_hkd is not None:
+                raise ValueError("Clearing an opening assertion cannot retain its date/rate")
+        elif self.opening_cash_date is None:
+            raise ValueError("An opening assertion requires an explicit effective date")
+        return self
+
+
+class OpeningCashRecord(Model):
+    account_id: UUID
+    currency: Currency
+    opening_cash: NonNegativeMoney | None
+    opening_cash_date: IsoDate | None
+    fx_rate_hkd: FxRate | None
+    booked_hkd: Money | None
+    entry_id: UUID | None
+    predecessor_id: UUID | None
+    version: int
+    cash_completeness: Completeness
+    quality: Literal["UNSET", "OK", "MISSING_FX", "NEEDS_REVIEW"]

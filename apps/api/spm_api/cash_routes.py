@@ -17,6 +17,8 @@ from spm_api.cash_models import (
     Expense,
     ExpenseCreate,
     ExpenseRevision,
+    OpeningCashRecord,
+    OpeningCashUpdate,
     VoidFinancial,
 )
 from spm_api.db import unit_of_work
@@ -170,6 +172,38 @@ def cash_balances(
         return service.cash_balances(
             con, str(auth.owner.id), str(id), as_of or date.today().isoformat()
         )
+
+
+@router.get("/accounts/{id}/opening-cash", operation_id="get_opening_cash")
+def opening_cash(
+    id: UUID, request: Request, response: Response, auth: AuthDep
+) -> OpeningCashRecord:
+    with unit_of_work(request.app.state.engine) as con:
+        result = service.get_opening(con, str(auth.owner.id), str(id))
+    response.headers["ETag"] = f'"{result.version}"'
+    return result
+
+
+@router.patch("/accounts/{id}/opening-cash", operation_id="correct_opening_cash")
+def correct_opening_cash(
+    id: UUID,
+    body: OpeningCashUpdate,
+    request: Request,
+    response: Response,
+    headers: WriteDep,
+    version: VersionDep,
+) -> OpeningCashRecord:
+    result = mutate(
+        request,
+        headers,
+        body.model_dump(mode="json", exclude_unset=True),
+        OpeningCashRecord,
+        lambda con, auth: service.correct_opening(
+            con, auth, str(id), version, body, request.state.request_id
+        ),
+    )
+    response.headers["ETag"] = f'"{result.version}"'
+    return result
 
 
 @router.get("/expenses", operation_id="list_expenses")

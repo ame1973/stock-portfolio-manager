@@ -58,6 +58,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/accounts/{id}/opening-cash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opening Cash */
+        get: operations["get_opening_cash"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Correct Opening Cash */
+        patch: operations["correct_opening_cash"];
+        trace?: never;
+    };
     "/api/v1/auth/change-password": {
         parameters: {
             query?: never;
@@ -302,6 +320,43 @@ export interface paths {
         head?: never;
         /** Revise Cash Transfer */
         patch: operations["revise_cash_transfer"];
+        trace?: never;
+    };
+    "/api/v1/corporate-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Actions */
+        get: operations["list_corporate_actions"];
+        put?: never;
+        /** Create Action */
+        post: operations["create_corporate_action"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/corporate-actions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Action */
+        get: operations["get_corporate_action"];
+        put?: never;
+        post?: never;
+        /** Void Action */
+        delete: operations["void_corporate_action"];
+        options?: never;
+        head?: never;
+        /** Revise Action */
+        patch: operations["revise_corporate_action"];
         trace?: never;
     };
     "/api/v1/exchanges": {
@@ -1090,6 +1145,122 @@ export interface components {
              */
             old_password: string;
         };
+        /** CorporateAction */
+        CorporateAction: {
+            /**
+             * Action Type
+             * @enum {string}
+             */
+            action_type: "SPLIT" | "REVERSE_SPLIT" | "SYMBOL_CHANGE" | "CASH_IN_LIEU" | "MERGER" | "SPIN_OFF";
+            /**
+             * Allocation Scope
+             * @default TERMS_NOT_A_VALUATION
+             * @constant
+             */
+            allocation_scope: "TERMS_NOT_A_VALUATION";
+            /** Created At */
+            created_at: string;
+            /** Created Sequence */
+            created_sequence: number;
+            /**
+             * Effect Scope
+             * @enum {string}
+             */
+            effect_scope: "QUANTITY_TERMS" | "DISPLAY_ONLY" | "REVIEW_ONLY" | "NONE";
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /** Evidence Url */
+            evidence_url: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Current */
+            is_current: boolean;
+            /**
+             * Lifecycle Status
+             * @enum {string}
+             */
+            lifecycle_status: "CURRENT" | "SUPERSEDED" | "VOID";
+            /** New Symbol */
+            new_symbol: string | null;
+            /** Note */
+            note: string;
+            /** Previous Symbol */
+            previous_symbol: string | null;
+            /** Ratio Denominator */
+            ratio_denominator: number | null;
+            /** Ratio Numerator */
+            ratio_numerator: number | null;
+            /** Reason */
+            reason: string;
+            /** Review Required */
+            review_required: boolean;
+            /** Revision */
+            revision: number;
+            /**
+             * Root Id
+             * Format: uuid
+             */
+            root_id: string;
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "CONFIRMED" | "NEEDS_REVIEW" | "VOID";
+            /** Supersedes Id */
+            supersedes_id: string | null;
+            /** Version */
+            version: number;
+        };
+        /** CorporateActionCreate */
+        CorporateActionCreate: {
+            /**
+             * Action Type
+             * @enum {string}
+             */
+            action_type: "SPLIT" | "REVERSE_SPLIT" | "SYMBOL_CHANGE" | "CASH_IN_LIEU" | "MERGER" | "SPIN_OFF";
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /** Evidence Url */
+            evidence_url?: string | null;
+            /** New Symbol */
+            new_symbol?: string | null;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Ratio Denominator */
+            ratio_denominator?: number | null;
+            /** Ratio Numerator */
+            ratio_numerator?: number | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /**
+             * Status
+             * @default NEEDS_REVIEW
+             * @enum {string}
+             */
+            status: "CONFIRMED" | "NEEDS_REVIEW";
+        };
         /** CsrfToken */
         CsrfToken: {
             /** Csrf Token */
@@ -1348,6 +1519,59 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** OpeningCashRecord */
+        OpeningCashRecord: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Booked Hkd */
+            booked_hkd: string | null;
+            /**
+             * Cash Completeness
+             * @enum {string}
+             */
+            cash_completeness: "UNKNOWN" | "PARTIAL" | "COMPLETE";
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /** Entry Id */
+            entry_id: string | null;
+            /** Fx Rate Hkd */
+            fx_rate_hkd: string | null;
+            /** Opening Cash */
+            opening_cash: string | null;
+            /** Opening Cash Date */
+            opening_cash_date: string | null;
+            /** Predecessor Id */
+            predecessor_id: string | null;
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "UNSET" | "OK" | "MISSING_FX" | "NEEDS_REVIEW";
+            /** Version */
+            version: number;
+        };
+        /** OpeningCashUpdate */
+        OpeningCashUpdate: {
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Opening Cash */
+            opening_cash: string | null;
+            /** Opening Cash Date */
+            opening_cash_date?: string | null;
+            /** Opening Fx Rate Hkd */
+            opening_fx_rate_hkd?: string | null;
+            /** Reason */
+            reason: string;
+        };
         /** Owner */
         Owner: {
             /** Created At */
@@ -1385,6 +1609,13 @@ export interface components {
         Page_CashTransfer_: {
             /** Items */
             items: components["schemas"]["CashTransfer"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[CorporateAction] */
+        Page_CorporateAction_: {
+            /** Items */
+            items: components["schemas"]["CorporateAction"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2532,6 +2763,184 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountCashBalances"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_opening_cash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpeningCashRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    correct_opening_cash: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpeningCashUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpeningCashRecord"];
                 };
             };
             /** @description Unauthorized */
@@ -4640,6 +5049,461 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CashTransfer"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_corporate_actions: {
+        parameters: {
+            query?: {
+                security_id?: string | null;
+                root_id?: string | null;
+                action_type?: ("SPLIT" | "REVERSE_SPLIT" | "SYMBOL_CHANGE" | "CASH_IN_LIEU" | "MERGER" | "SPIN_OFF") | null;
+                status?: ("CONFIRMED" | "NEEDS_REVIEW" | "VOID") | null;
+                from_date?: string | null;
+                to_date?: string | null;
+                include_history?: boolean;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CorporateAction_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    create_corporate_action: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorporateActionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorporateAction"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_corporate_action: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorporateAction"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    void_corporate_action: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidFinancial"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Success"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revise_corporate_action: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorporateActionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorporateAction"];
                 };
             };
             /** @description Unauthorized */

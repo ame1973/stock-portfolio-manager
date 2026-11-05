@@ -2,7 +2,7 @@
 
 A self-hosted portfolio ledger for Hong Kong and US securities, designed for a single owner with multiple brokerage accounts. Monetary values use exact decimal arithmetic and historical exchange rates, not floating-point estimates.
 
-> **Development status:** authentication, master-data management, trade/cash/expense/transfer APIs, and native-wallet balance reads are implemented. Financial forms, corporate actions, providers, valuations, and encrypted offline/backup features remain under development. This is not a complete portfolio application or a production release. No live provider coverage or target NAS validation is claimed.
+> **Development status:** authentication, master-data management, trade/cash/expense/transfer APIs, corporate-action terms, opening-cash corrections, and native-wallet balance reads are implemented. Financial forms, providers, valuations, and encrypted offline/backup features remain under development. Unallocated corporate actions remain explicit reviews, not successful valuations. This is not a complete portfolio application or a production release. No live provider coverage or target NAS validation is claimed.
 
 ## Local development
 
@@ -40,7 +40,7 @@ Before a schema change, the migration command checks integrity and retains a mod
 
 ## Owner authentication
 
-The authentication API and browser initialization/login/logout, master-data management, and password/session settings are implemented. Trade, manual cash, operating-expense and transfer recording are currently available through the API only; financial browser forms remain under development.
+The authentication API and browser initialization/login/logout, master-data management, and password/session settings are implemented. Financial recording, corporate-action terms and opening-assertion corrections are currently available through the API only; financial browser forms remain under development.
 
 After migration, explicitly issue a cryptographically random setup token from a trusted local terminal. It is valid for ten minutes, consumed once, and never returned by an HTTP endpoint or automatically written to service/container logs. To create or replace it locally:
 
@@ -74,7 +74,7 @@ Portfolios, brokers, accounts, securities, identifiers, and provider symbols hav
 - New securities are unverified. Manual verification requires an explanation. Creating a security does not guess provider aliases, contact a provider, or promise live coverage.
 - Identifier and provider-alias periods cannot overlap ambiguously. Audited period corrections use the nested mapping PATCH endpoints with `If-Match` and an explanation. Ticker validity defaults to the exchange-local creation date unless explicitly supplied; historical validity is not invented.
 
-Account creation can optionally post an initial cash balance. Supply `opening_cash` as a decimal string and an explicit non-future `opening_cash_date`; USD also requires a locked `opening_fx_rate_hkd`. This creates one audited **start-of-day** balance adjustment atomically, **not** an external deposit. Completeness defaults to UNKNOWN and must be asserted separately after reconciliation. Opening cash metadata is never added a second time to ledger balances. Backdated trade, cash, or expense changes before that date append separately audited adjustments using the original opening FX, preserving the declared native opening balance without rewriting any existing fact. Only a nonzero net change to the declared currency before the opening date triggers this rebase; a note-only or FX-only revision does not silently repair an unrelated opening problem. Ordinary trades on the opening date or later still change cash normally; an opening balance in one currency does not fund another. Direct opening-balance correction workflows are not yet available, and account metadata edits cannot overwrite the assertion.
+Account creation can optionally post an initial cash balance. Supply `opening_cash` as a decimal string and an explicit non-future `opening_cash_date`; USD also requires a locked `opening_fx_rate_hkd`. This creates one audited **start-of-day** balance adjustment atomically, **not** an external deposit. Completeness defaults to UNKNOWN and must be asserted separately after reconciliation. Opening cash metadata is never added a second time to ledger balances. Backdated trade, cash, or expense changes before that date append separately audited adjustments using the original opening FX, preserving the declared native opening balance without rewriting any existing fact. Only a nonzero net change to the declared currency before the opening date triggers this rebase; a note-only or FX-only revision does not silently repair an unrelated opening problem. Ordinary trades on the opening date or later still change cash normally; an opening balance in one currency does not fund another. Direct opening assertions are corrected through the dedicated audited API below, not account metadata edits.
 
 All monetary inputs reject floats, scientific notation, excessive fractional digits, and INT64 overflow. SQLite guards reject REAL values in scaled financial columns even on a direct SQL path. No input is silently rounded.
 
@@ -86,7 +86,7 @@ Pure dividend arithmetic keeps one current accrual per stable event/account, pre
 
 ## Trade ledger API
 
-Trade create/read/list/revise/void operations are available at `/api/v1/trades`. They require the authentication/CSRF/idempotency headers described above. This records financial history; it never submits an order to a broker. Financial browser forms and the remaining corporate-action workflows are not available yet.
+Trade create/read/list/revise/void operations are available at `/api/v1/trades`. They require the authentication/CSRF/idempotency headers described above. This records financial history; it never submits an order to a broker. Financial browser forms are not available yet.
 
 A synthetic `POST /api/v1/trades` body is shown below. Replace the IDs, dates, amounts, and rate with explicitly reviewed evidence; the sample FX is **not** an application default or a live quote.
 
@@ -154,7 +154,7 @@ A synthetic native deposit request is shown below. Substitute reviewed account/d
 - `historical_booked_hkd_net` is an audit net of historical booking snapshots, **not live valuation of remaining foreign cash**. Missing unreversed bookings produce null/MISSING_FX. An exactly reversed unknown-FX pair cancels and does not permanently contaminate the current net.
 - Unlike currencies are never added together, no current FX is guessed, and no aggregate HKD/NAV/TWR value is fabricated. Computed total overflow is rejected rather than clipped; a read total can represent signed INT64_MIN even though an individual reversible posting cannot.
 
-These APIs share short atomic posting/reversal/audit/idempotency/invalidation transactions. Schema migration 0005 adds manual sign/flow, same-owner correction and unique-successor guards plus a source lookup index without changing existing financial values. Invalid existing correction graphs stop the upgrade atomically. Financial forms, corporate actions, valuations and direct correction of an opening assertion remain unfinished.
+These APIs share short atomic posting/reversal/audit/idempotency/invalidation transactions. Schema migration 0005 adds manual sign/flow, same-owner correction and unique-successor guards plus a source lookup index without changing existing financial values. Invalid existing correction graphs stop the upgrade atomically. Financial forms and valuations remain unfinished.
 
 ## Paired cash and securities transfers
 
@@ -199,7 +199,56 @@ Cost is proportional to the source account's independently replayed moving avera
 - Removing/reducing a transfer that would orphan a destination sale or a dependent transfer returns 409 INSUFFICIENT_SHARES and changes nothing. Full-history validation protects both old/new affected portfolios during an owner-authorized correction.
 - Native cash, financial facts, exact pair reversals, audit/idempotency, projections' invalidation and opening rebases commit in one short UoW where applicable. Generic cash editing cannot modify transfer legs. Migration 0006 preserves old security-transfer fields/order and adds guarded revision selection plus an immutable paired-cash fact table.
 
-These APIs do not provide the still-unimplemented financial browser forms, corporate-action workflow, complete cash-FX performance attribution or production acceptance.
+These APIs do not provide the still-unimplemented financial browser forms, complete cash-FX performance attribution or production acceptance.
+
+## Opening-cash assertion API
+
+`GET /api/v1/accounts/{id}/opening-cash` reads the current dated assertion, historical FX/booked HKD, provenance entry/predecessor, completeness and quality. Its ETag is the **account version**, so an intervening account metadata edit also invalidates a correction's If-Match. Account ownership and active status are required for a correction; archived records remain readable.
+
+`PATCH /api/v1/accounts/{id}/opening-cash` requires CSRF/idempotency, quoted account If-Match and a trimmed reason of at least ten characters. A synthetic replacement body is:
+
+```json
+{
+  "opening_cash": "1500.000000",
+  "opening_cash_date": "2026-01-15",
+  "opening_fx_rate_hkd": "7.900000000000",
+  "reason": "Synthetic reconciled starting statement"
+}
+```
+
+- A supplied amount is nonnegative, exact to six places, and needs an explicit non-future date. USD requires explicit historical FX even for known zero; HKD uses identity 1. Neither amounts nor missing FX are inferred from subsequent cash.
+- A replacement appends exact original-date/native/HKD/FX reversals of the current assertion and its active derived opening adjustments. It appends the new `OPENING_BALANCE_CORRECTION`, linked to its retired predecessor, then recalculates any required pre-opening adjustment at the **new assertion's FX**. Ordinary trade/cash/expense/transfer facts are not rewritten. Later backdated movements use that current assertion's FX, not a retired opening rate.
+- Supply `{"opening_cash":null,"reason":"Withdraw an unsupported starting assertion"}` to clear it. Do not supply a date/rate with null. Clearing reverses the assertion and derived adjustments, retains ordinary recorded movements, and resets cash completeness to UNKNOWN. It does not claim a true zero balance.
+- Reintroducing an explicit `"0"` creates a known zero assertion, but does not silently restore COMPLETE. Reconcile and explicitly update the account's completeness before treating recorded cash as the actual balance.
+- UNSET, MISSING_FX and NEEDS_REVIEW are distinct from OK. Missing or retired single-chain provenance may be replaced only by this new explicit owner assertion; ambiguous chains are rejected rather than guessed. The generic cash API cannot edit any opening-family entry.
+- Metadata, exact reversals, replacement/rebase, audit, idempotency response and invalidation commit together. Conversion, derived-rebase, serialization or CAS failure restores every old value/version. Historical booked HKD remains audit evidence, not current foreign-cash valuation.
+
+## Corporate-action terms API
+
+`/api/v1/corporate-actions` supports authenticated list/create/read/full-revise/void. Actions belong to the installation-wide security catalogue, not a separate multi-tenant data model. POST requires a reason; PATCH takes the full create body with a reason and quoted If-Match; DELETE takes a reason body and quoted If-Match. Root/sequence stay stable across immutable physical revisions. Lists support security/root/type/status/date/history filters, escaped literal note/reason/symbol search, and bounded descending date/ID cursors.
+
+A synthetic three-for-two adoption is:
+
+```json
+{
+  "security_id": "00000000-0000-4000-8000-000000000003",
+  "action_type": "SPLIT",
+  "effective_date": "2026-01-03",
+  "ratio_numerator": 3,
+  "ratio_denominator": 2,
+  "status": "CONFIRMED",
+  "reason": "Synthetic reviewed rational split terms"
+}
+```
+
+- SPLIT needs positive integer terms with numerator greater than denominator; REVERSE_SPLIT requires the opposite. No decimal/float ratios or guessed 1:1 defaults are accepted. Confirmed terms apply at the effective day's opening, preserving total cost. Non-representable fractional shares require review, never truncation or invented cash-in-lieu. Future confirmed quantity terms do not affect today's holdings; each security's exchange-local calendar determines their horizon.
+- `status=CONFIRMED` adopts terms, **not a complete valuation**. The response states `allocation_scope=TERMS_NOT_A_VALUATION` and an explicit `effect_scope`. Unallocated later history may remain review-required while a known earlier action is resolved. The computable prefix must still validate; no partial positions are published as a complete current result. Normal ledger writes cannot bypass a held unallocated action.
+- CASH_IN_LIEU, MERGER and SPIN_OFF without an implemented allocation workflow must remain NEEDS_REVIEW. Saving their evidence creates a real review item; it does not invent shares, cash, cost allocation or realized profit. Such allocation remains unsupported, not silently successful.
+- SYMBOL_CHANGE requires explicit `new_symbol` and no share ratio. Confirmation changes **only the current display ticker**, keeps `security_id` and all financial history, and captures `previous_symbol`. Historical identifiers and provider aliases are never guessed or rewritten; an identity-mapping review remains necessary. Keep future display changes in NEEDS_REVIEW and explicitly confirm after their exchange-local effective date. Undo/correction refuses to overwrite later adopted display changes or an independently changed current ticker. Independent name/status edits remain intact.
+- `evidence_url`, when supplied, must be HTTP(S) without credentials or whitespace; it is stored as evidence and **never fetched inside the mutation**. User-entered terms are not provider verification.
+- Review replacement/resolution, affected-portfolio replay/invalidation, symbol display changes, facts, audit and idempotency are atomic. A revision/void that would orphan a later sale or transfer is rejected without writes. Only current non-void action revisions participate in replay; old terms remain readable with their lifecycle status.
+
+Migration 0007 adds strict action identities/lineage/terms and unique reversed-parent opening-correction guards without rewriting old financial values. Existing legacy symbol actions do not acquire an invented previous ticker. Duplicate retained current action identities stop the upgrade atomically for explicit review. Downgrade remains restore-from-validated-backup only.
 
 ## Using the browser
 
@@ -208,7 +257,7 @@ The interface defaults to Traditional Chinese and follows the operating system's
 1. Open `/settings/portfolios` and create a portfolio. Reporting currency is fixed to HKD. Leave cash completeness unknown until the entire relevant cash history has actually been reconciled.
 2. Open `/settings/brokers` and create a broker. Dividend collection fees are exact decimal strings and affect future estimates only, never past receipts.
 3. Open `/settings/accounts`, select the portfolio and an active broker, and choose HKD or USD. Reference lists support bounded name search; changing the search clears the previous selection so an invisible account association cannot be submitted.
-4. Leave an unknown opening balance blank; blank is not zero. An explicit balance needs its effective date, and a USD balance also needs the historical HKD conversion rate. There is no default FX rate. Existing starting balances cannot be rewritten through this metadata form; direct correction of the opening assertion is still pending. Manual cash adjustments and expense corrections are API-only for now.
+4. Leave an unknown opening balance blank; blank is not zero. An explicit balance needs its effective date, and a USD balance also needs the historical HKD conversion rate. There is no default FX rate. Existing starting balances cannot be rewritten through this metadata form; use the dedicated opening-cash API described above. Financial corrections and corporate-action terms are API-only for now.
 5. Open `/settings/securities` to add an exchange-specific security. Preserve the actual ticker, including leading zeros and dots. Choose its quote currency and, when known, an explicit first identifier date. Manual verification needs an evidence explanation; it does not establish provider coverage.
 6. Use a security's detail link to manage dated identifiers and provider symbols. Period corrections require a reason and the version read by the browser. Yahoo and yfinance belong to the same source family, not independent corroboration.
 7. Open `/settings/security` to reauthenticate, change the password, or revoke a listed session. Changing the password revokes all sessions, including the current one, and returns to login.
@@ -241,7 +290,7 @@ SPM_E2E_BASE_URL=http://localhost:18083 npm run test:e2e
 docker compose -p spm-e2e-local-001 down
 ```
 
-The serial browser scenarios verify one-time initialization, authenticated rendering at 360/768/1440px, light/dark views, exact opening-cash input with required historical FX, non-overwriting 412 conflicts, archive/reopen without orphaning linked accounts, exchange-specific leading-zero/dotted tickers, dated mappings, disconnected read warnings, reauthentication, session revocation, and password-change revoke-all. Modal keyboard focus, background scroll locking, and the unchanged strict CSP are exercised against the actual Nginx/API/worker deployment. A third scenario uses authenticated **real HTTP requests**, not unavailable financial forms, to verify trade posting/retry, oversell rejection, stale versions, immutable revision/FX preservation, dependent-sale rollback, exact void/retry, opening preservation, and an unposted future draft. A fourth verifies missing-FX native deposits, immutable cash corrections, operating expenses, a separate micro-HKD wallet, managed-source protection, and exact reversal/retry without rewriting opening cash. A fifth verifies paired cash revision/void, same-account currency conversion, cost-preserving security movement with no cash effect, stable revision sequences, destination-sale dependency rejection, and final native balances. Screenshots after token consumption are local artifacts under `.local/`, excluded from Git. Use a fresh test project for each run: these scenarios intentionally change the synthetic owner's password. Remaining financial forms/workflows and encrypted-offline behavior will be implemented and tested in later stages.
+The serial browser scenarios verify one-time initialization, authenticated rendering at 360/768/1440px, light/dark views, exact opening-cash input with required historical FX, non-overwriting 412 conflicts, archive/reopen without orphaning linked accounts, exchange-specific leading-zero/dotted tickers, dated mappings, disconnected read warnings, reauthentication, session revocation, and password-change revoke-all. Modal keyboard focus, background scroll locking, and the unchanged strict CSP are exercised against the actual Nginx/API/worker deployment. A third scenario uses authenticated **real HTTP requests**, not unavailable financial forms, to verify trade posting/retry, oversell rejection, stale versions, immutable revision/FX preservation, dependent-sale rollback, exact void/retry, opening preservation, and an unposted future draft. A fourth verifies missing-FX native deposits, immutable cash corrections, operating expenses, a separate micro-HKD wallet, managed-source protection, and exact reversal/retry without rewriting opening cash. A fifth verifies paired cash revision/void, same-account currency conversion, cost-preserving security movement with no cash effect, stable revision sequences, destination-sale dependency rejection, and final native balances. A sixth uses real HTTP to verify exact 3:2 split adoption, stable-sequence correction, dependent-sale rollback, explicit unallocated-action review, display-only symbol adoption without rewriting identifiers, and opening replacement/clear/known-zero reintroduction with exact historical reversals and a separate completeness assertion. It deliberately distinguishes a zero native balance from a nonzero historical HKD booking net. Screenshots after token consumption are local artifacts under `.local/`, excluded from Git. Use a fresh test project for each run: these scenarios intentionally change the synthetic owner's password. Remaining financial forms/workflows and encrypted-offline behavior will be implemented and tested in later stages.
 
 ## Data and privacy
 
