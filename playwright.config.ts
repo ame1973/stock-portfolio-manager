@@ -20,6 +20,7 @@ export default defineConfig({
   use: {
     baseURL,
     browserName: "chromium",
+    actionTimeout: 10_000,
     // Bootstrap and session secrets must never be persisted in browser traces or videos.
     trace: "off",
     screenshot: "off",

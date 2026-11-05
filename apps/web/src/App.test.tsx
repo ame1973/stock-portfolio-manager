@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { api } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
 import { App } from "./App";
 import type { ReactNode } from "react";
 import type { AuthSession } from "./features/auth/AuthGate";
@@ -15,7 +16,7 @@ vi.mock("./features/auth/AuthGate", () => ({
 
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><MemoryRouter><App /></MemoryRouter></QueryClientProvider>);
 }
 
 describe("service status", () => {

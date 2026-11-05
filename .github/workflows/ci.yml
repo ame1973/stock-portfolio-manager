@@ -35,7 +35,7 @@ jobs:
         run: |
           docker compose -p spm-e2e-ci up -d --wait --wait-timeout 120
           curl --fail http://127.0.0.1:8080/api/v1/health/ready
-      - name: Browser onboarding and session revocation
+      - name: Browser onboarding, master data, and session security
         env:
           SPM_E2E_COMPOSE_PROJECT: spm-e2e-ci
           SPM_E2E_BASE_URL: http://localhost:8080
