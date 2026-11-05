@@ -16,7 +16,15 @@ from spm_api.db import unit_of_work
 from spm_api.finance import Position
 from spm_api.ledger_service import allocate_sequence, reverse_cash, validate_history
 from spm_api.trade_models import TradeRecord
-from tests.helpers import create, initialize, version_headers, write_headers
+from tests.helpers import (
+    create,
+    initialize,
+    version_headers,
+    write_headers,
+)
+from tests.helpers import (
+    database_snapshot as snapshot,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -70,20 +78,6 @@ def payload(book: dict[str, Any], **changes: Any) -> dict[str, Any]:
         "fx_rate_hkd": "7.8",
         **changes,
     }
-
-
-def snapshot(engine: Engine) -> dict[str, list[tuple[Any, ...]]]:
-    """Compare all values, not just row counts, including sequence and idempotency state."""
-    with unit_of_work(engine) as con:
-        tables = con.exec_driver_sql(
-            "SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name"
-        ).scalars()
-        return {
-            table: [
-                tuple(row) for row in con.exec_driver_sql(f'SELECT * FROM "{table}" ORDER BY rowid')
-            ]
-            for table in tables
-        }
 
 
 def position(engine: Engine, book: dict[str, Any]) -> Position:

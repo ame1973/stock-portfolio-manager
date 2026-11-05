@@ -1,9 +1,10 @@
-"""Shared bounded keyset pagination for alphabetically ordered master data."""
+"""Shared bounded keyset pagination, literal search, and financial date cursors."""
 
 import base64
 import binascii
 import json
 from collections.abc import Callable, Sequence
+from datetime import date
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -53,6 +54,17 @@ class PageQuery:
             "search": f"%{escaped}%",
             "limit": self.limit + 1,
         }
+
+
+def validate_date_page(query: PageQuery, start: str | None, end: str | None) -> None:
+    if start is not None and end is not None and start > end:
+        raise ApiError(422, "VALIDATION_ERROR", "Date range end precedes start")
+    if query.cursor_value is not None:
+        try:
+            if date.fromisoformat(query.cursor_value).isoformat() != query.cursor_value:
+                raise ValueError("Invalid date cursor")
+        except ValueError as exc:
+            raise ApiError(422, "INVALID_CURSOR", "Invalid financial date cursor") from exc
 
 
 PageDep = Annotated[PageQuery, Depends()]

@@ -2,7 +2,7 @@
 
 A self-hosted portfolio ledger for Hong Kong and US securities, designed for a single owner with multiple brokerage accounts. Monetary values use exact decimal arithmetic and historical exchange rates, not floating-point estimates.
 
-> **Development status:** authentication, master-data management, and the trade ledger API are implemented. Other financial workflows/forms, providers, valuations, and encrypted offline/backup features remain under development. This is not a complete portfolio application or a production release. No live provider coverage or target NAS validation is claimed.
+> **Development status:** authentication, master-data management, trade/cash/expense APIs, and native-wallet balance reads are implemented. Financial forms, transfers/actions, providers, valuations, and encrypted offline/backup features remain under development. This is not a complete portfolio application or a production release. No live provider coverage or target NAS validation is claimed.
 
 ## Local development
 
@@ -40,7 +40,7 @@ Before a schema change, the migration command checks integrity and retains a mod
 
 ## Owner authentication
 
-The authentication API and browser initialization/login/logout, master-data management, and password/session settings are implemented. Trade recording is currently available through the API only; financial browser forms remain under development.
+The authentication API and browser initialization/login/logout, master-data management, and password/session settings are implemented. Trade, manual cash, and operating-expense recording are currently available through the API only; financial browser forms remain under development.
 
 After migration, explicitly issue a cryptographically random setup token from a trusted local terminal. It is valid for ten minutes, consumed once, and never returned by an HTTP endpoint or automatically written to service/container logs. To create or replace it locally:
 
@@ -74,7 +74,7 @@ Portfolios, brokers, accounts, securities, identifiers, and provider symbols hav
 - New securities are unverified. Manual verification requires an explanation. Creating a security does not guess provider aliases, contact a provider, or promise live coverage.
 - Identifier and provider-alias periods cannot overlap ambiguously. Audited period corrections use the nested mapping PATCH endpoints with `If-Match` and an explanation. Ticker validity defaults to the exchange-local creation date unless explicitly supplied; historical validity is not invented.
 
-Account creation can optionally post an initial cash balance. Supply `opening_cash` as a decimal string and an explicit non-future `opening_cash_date`; USD also requires a locked `opening_fx_rate_hkd`. This creates one audited **start-of-day** balance adjustment atomically, **not** an external deposit. Completeness defaults to UNKNOWN and must be asserted separately after reconciliation. Opening cash metadata is never added a second time to ledger balances. Backdated trade changes before that date append separately audited adjustments using the original opening FX, preserving the declared native opening balance without rewriting any existing fact. Ordinary trades on the opening date or later still change cash normally; an opening balance in one currency does not fund another. Direct opening-balance correction workflows are not yet available, and account metadata edits cannot overwrite the assertion.
+Account creation can optionally post an initial cash balance. Supply `opening_cash` as a decimal string and an explicit non-future `opening_cash_date`; USD also requires a locked `opening_fx_rate_hkd`. This creates one audited **start-of-day** balance adjustment atomically, **not** an external deposit. Completeness defaults to UNKNOWN and must be asserted separately after reconciliation. Opening cash metadata is never added a second time to ledger balances. Backdated trade, cash, or expense changes before that date append separately audited adjustments using the original opening FX, preserving the declared native opening balance without rewriting any existing fact. Only a nonzero net change to the declared currency before the opening date triggers this rebase; a note-only or FX-only revision does not silently repair an unrelated opening problem. Ordinary trades on the opening date or later still change cash normally; an opening balance in one currency does not fund another. Direct opening-balance correction workflows are not yet available, and account metadata edits cannot overwrite the assertion.
 
 All monetary inputs reject floats, scientific notation, excessive fractional digits, and INT64 overflow. SQLite guards reject REAL values in scaled financial columns even on a direct SQL path. No input is silently rounded.
 
@@ -86,7 +86,7 @@ Pure dividend arithmetic keeps one current accrual per stable event/account, pre
 
 ## Trade ledger API
 
-Trade create/read/list/revise/void operations are available at `/api/v1/trades`. They require the authentication/CSRF/idempotency headers described above. This records financial history; it never submits an order to a broker. Browser trade forms and the remaining cash/expense/transfer/action workflows are not available yet.
+Trade create/read/list/revise/void operations are available at `/api/v1/trades`. They require the authentication/CSRF/idempotency headers described above. This records financial history; it never submits an order to a broker. Financial browser forms and the remaining cash-transfer/security-transfer/corporate-action workflows are not available yet.
 
 A synthetic `POST /api/v1/trades` body is shown below. Replace the IDs, dates, amounts, and rate with explicitly reviewed evidence; the sample FX is **not** an application default or a live quote.
 
@@ -119,6 +119,43 @@ A synthetic `POST /api/v1/trades` body is shown below. Replace the IDs, dates, a
 
 An unchanged retry returns its original idempotent result without posting again; reread the record for its current state. Different input needs a new key. A stale version returns 412 without changing facts. Decimal input, conversion, aggregate position, or reversal overflow is rejected, never truncated. Passing these development tests does not make an installation suitable for real financial records.
 
+## Cash and operating-expense APIs
+
+`/api/v1/cash-entries` and `/api/v1/expenses` support authenticated list/create/read/full-revise/void operations. POST returns 201; individual reads and writes return the physical row's ETag. Revisions require the complete create body plus a trimmed `reason` of at least ten characters and `If-Match`; DELETE requires the same reason in a JSON body. Use the returned new ID/version after a revision, and retain the idempotency key for an unchanged retry.
+
+A synthetic native deposit request is shown below. Substitute reviewed account/date/amount evidence; a missing USD rate is deliberately unknown, not a default rate.
+
+```json
+{
+  "account_id": "00000000-0000-4000-8000-000000000002",
+  "effective_date": "2026-01-02",
+  "kind": "DEPOSIT",
+  "amount": "100.000001",
+  "currency": "USD",
+  "fx_rate_hkd": null,
+  "note": "Synthetic documentation example"
+}
+```
+
+- A DEPOSIT is positive and external; a WITHDRAW is negative and external. An ADJUSTMENT is signed, nonzero, non-external, and requires `reason`. If supplied, `external_flow` must agree with this classification. Single-leg TRANSFER_IN/TRANSFER_OUT requests are rejected; paired transfer support is still pending.
+- Cash amounts are actual native amounts, retained exactly to six places without silently rounding to cents. HKD uses identity FX 1. USD may retain null FX/booked HKD with `quality=MISSING_FX`; native receipt/charge evidence is still real even when its HKD recognition is not yet known. Explicitly revise to adopt a historical rate rather than rewriting the original posting. An `actual_hkd` override requires both historical FX and an evidence reason and does not change the native wallet currency.
+- Cash/expense dates record actual movements and cannot be in the future. An account must be active for a new/revised record; correcting a mistaken record by voiding remains available after archive.
+- Cash correction appends the original's exact reversal and a new primary journal row. `source_type=CASH_CORRECTION` and its immutable `source_id` identify the predecessor; `supersedes_id`/`superseded_by_id` expose that link. SQL permits one same-owner successor only after the manual predecessor has been reversed. Old dates, currency, amounts, FX and provenance remain intact.
+- Trade, expense, receipt, transfer, opening and derived rebase cash is source-managed and cannot be edited/voided through the generic cash endpoint (`SOURCE_MANAGED`). Use its owning workflow. The journal list intentionally includes original, reversed and reversal rows, since native balances sum the complete history.
+- An expense body uses `account_id`, `date`, `category`, `amount`, `currency`, optional historical `fx_rate_hkd`/`actual_hkd`, `reason`, and `note`. Positive amounts are charges; negative amounts are explicit refunds and require a reason. Zero expenses are rejected. Each expense posts its one signed native cash counterpart; revision/void retains its original fact and exact cash reversal. **Do not post trade fees again here:** they are already included in trade cost/proceeds.
+- Cash and expense lists use descending effective date/ID, bounded cursors, literal `q` search, owner-scoped account/portfolio filters, currency and date filters. Expenses exclude SUPERSEDED rows unless `include_history=true`; cash keeps all journal effects. Cash also filters `kind`, `source_type` and `entry_role`.
+
+### Native wallet balances, not an invented HKD valuation
+
+`GET /api/v1/accounts/{id}/cash-balances?as_of=YYYY-MM-DD` returns separate observed/default HKD/USD wallets. This is the corrected effective-date view, not a reconstruction of what was known at an earlier audit timestamp. The optional date cannot be in the future.
+
+- `recorded_balance` is the exact sum of recorded native movements, including reversals. It is not automatically the true cash balance.
+- `balance` is supplied only when the owner explicitly asserted COMPLETE history, the requested period is not before the dated opening, and the opening provenance/assertion is intact. Otherwise it is null with `balance_quality` UNKNOWN, PARTIAL, BEFORE_OPENING or NEEDS_REVIEW. Merely recording a movement never declares completeness.
+- `historical_booked_hkd_net` is an audit net of historical booking snapshots, **not live valuation of remaining foreign cash**. Missing unreversed bookings produce null/MISSING_FX. An exactly reversed unknown-FX pair cancels and does not permanently contaminate the current net.
+- Unlike currencies are never added together, no current FX is guessed, and no aggregate HKD/NAV/TWR value is fabricated. Computed total overflow is rejected rather than clipped; a read total can represent signed INT64_MIN even though an individual reversible posting cannot.
+
+These APIs share short atomic posting/reversal/audit/idempotency/invalidation transactions. Schema migration 0005 adds manual sign/flow, same-owner correction and unique-successor guards plus a source lookup index without changing existing financial values. Invalid existing correction graphs stop the upgrade atomically. Financial forms, paired transfers, corporate actions, valuations and direct correction of an opening assertion remain unfinished.
+
 ## Using the browser
 
 The interface defaults to Traditional Chinese and follows the operating system's light/dark preference. After issuing a local setup token, open the web address, enter the token, choose a unique passphrase, and confirm it. Later visits use the normal login form. Passwords and setup tokens are never placed in browser storage.
@@ -126,7 +163,7 @@ The interface defaults to Traditional Chinese and follows the operating system's
 1. Open `/settings/portfolios` and create a portfolio. Reporting currency is fixed to HKD. Leave cash completeness unknown until the entire relevant cash history has actually been reconciled.
 2. Open `/settings/brokers` and create a broker. Dividend collection fees are exact decimal strings and affect future estimates only, never past receipts.
 3. Open `/settings/accounts`, select the portfolio and an active broker, and choose HKD or USD. Reference lists support bounded name search; changing the search clears the previous selection so an invisible account association cannot be submitted.
-4. Leave an unknown opening balance blank; blank is not zero. An explicit balance needs its effective date, and a USD balance also needs the historical HKD conversion rate. There is no default FX rate. Existing starting balances cannot be rewritten through this metadata form; ledger corrections will be provided in the financial stage.
+4. Leave an unknown opening balance blank; blank is not zero. An explicit balance needs its effective date, and a USD balance also needs the historical HKD conversion rate. There is no default FX rate. Existing starting balances cannot be rewritten through this metadata form; direct correction of the opening assertion is still pending. Manual cash adjustments and expense corrections are API-only for now.
 5. Open `/settings/securities` to add an exchange-specific security. Preserve the actual ticker, including leading zeros and dots. Choose its quote currency and, when known, an explicit first identifier date. Manual verification needs an evidence explanation; it does not establish provider coverage.
 6. Use a security's detail link to manage dated identifiers and provider symbols. Period corrections require a reason and the version read by the browser. Yahoo and yfinance belong to the same source family, not independent corroboration.
 7. Open `/settings/security` to reauthenticate, change the password, or revoke a listed session. Changing the password revokes all sessions, including the current one, and returns to login.
@@ -159,7 +196,7 @@ SPM_E2E_BASE_URL=http://localhost:18083 npm run test:e2e
 docker compose -p spm-e2e-local-001 down
 ```
 
-The serial browser scenarios verify one-time initialization, authenticated rendering at 360/768/1440px, light/dark views, exact opening-cash input with required historical FX, non-overwriting 412 conflicts, archive/reopen without orphaning linked accounts, exchange-specific leading-zero/dotted tickers, dated mappings, disconnected read warnings, reauthentication, session revocation, and password-change revoke-all. Modal keyboard focus, background scroll locking, and the unchanged strict CSP are exercised against the actual Nginx/API/worker deployment. A third scenario uses authenticated **real HTTP requests**, not unavailable financial forms, to verify trade posting/retry, oversell rejection, stale versions, immutable revision/FX preservation, dependent-sale rollback, exact void/retry, opening preservation, and an unposted future draft. Screenshots after token consumption are local artifacts under `.local/`, excluded from Git. Use a fresh test project for each run: these scenarios intentionally change the synthetic owner's password. Remaining financial forms/workflows and encrypted-offline behavior will be implemented and tested in later stages.
+The serial browser scenarios verify one-time initialization, authenticated rendering at 360/768/1440px, light/dark views, exact opening-cash input with required historical FX, non-overwriting 412 conflicts, archive/reopen without orphaning linked accounts, exchange-specific leading-zero/dotted tickers, dated mappings, disconnected read warnings, reauthentication, session revocation, and password-change revoke-all. Modal keyboard focus, background scroll locking, and the unchanged strict CSP are exercised against the actual Nginx/API/worker deployment. A third scenario uses authenticated **real HTTP requests**, not unavailable financial forms, to verify trade posting/retry, oversell rejection, stale versions, immutable revision/FX preservation, dependent-sale rollback, exact void/retry, opening preservation, and an unposted future draft. A fourth verifies missing-FX native deposits, immutable cash corrections, operating expenses, a separate micro-HKD wallet, managed-source protection, and exact reversal/retry without rewriting opening cash. Screenshots after token consumption are local artifacts under `.local/`, excluded from Git. Use a fresh test project for each run: these scenarios intentionally change the synthetic owner's password. Remaining financial forms/workflows and encrypted-offline behavior will be implemented and tested in later stages.
 
 ## Data and privacy
 

@@ -8,7 +8,7 @@ from pydantic import AfterValidator, Field, StringConstraints, model_validator
 
 from spm_api.decimal_types import FxRate, IsoDate, Money, NonNegativeMoney, PositiveQuantity, Price
 from spm_api.errors import Model
-from spm_api.master_models import Currency
+from spm_api.master_models import ChangeReason, Currency, Note
 
 
 def _execution(value: str) -> str:
@@ -31,10 +31,6 @@ ExecutionTime = Annotated[
     ),
     AfterValidator(_execution),
 ]
-ChangeReason = Annotated[
-    str, StringConstraints(strict=True, strip_whitespace=True, min_length=10, max_length=1000)
-]
-Note = Annotated[str, Field(strict=True, max_length=1000)]
 
 
 class TradeCreate(Model):

@@ -55,6 +55,10 @@ ProviderCode = Annotated[
     ),
 ]
 Reason = Annotated[str, Field(max_length=1000)]
+ChangeReason = Annotated[
+    str, StringConstraints(strict=True, strip_whitespace=True, min_length=10, max_length=1000)
+]
+Note = Annotated[str, Field(strict=True, max_length=1000)]
 
 
 class PortfolioCreate(Model):

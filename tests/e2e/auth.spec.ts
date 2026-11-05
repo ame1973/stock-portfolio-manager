@@ -256,10 +256,7 @@ test("master-data management, dated mappings, conflicts, and session security", 
   expect(cspErrors).toEqual([]);
 });
 
-test("trade HTTP postings, oversell rejection, immutable correction, void, and scheduled draft", async ({ page }) => {
-  type Trade = components["schemas"]["TradeRecord"];
-  await page.goto("/settings/accounts");
-  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+async function signedRequests(page: Page) {
   const csrf = await (await page.request.get("/api/v1/auth/csrf")).json() as { csrf_token: string };
   const headers = (version?: number, key = randomUUID()) => ({
     Origin: process.env.SPM_E2E_BASE_URL!,
@@ -273,6 +270,14 @@ test("trade HTTP postings, oversell rejection, immutable correction, void, and s
     expect(response.headers()["cache-control"]).toBe("no-store");
     return await response.json() as T;
   }
+  return { headers, post };
+}
+
+test("trade HTTP postings, oversell rejection, immutable correction, void, and scheduled draft", async ({ page }) => {
+  type Trade = components["schemas"]["TradeRecord"];
+  await page.goto("/settings/accounts");
+  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  const { headers, post } = await signedRequests(page);
   const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E trade portfolio" });
   const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E trade broker" });
   const account = await post<components["schemas"]["Account"]>("accounts", {
@@ -351,6 +356,101 @@ test("trade HTTP postings, oversell rejection, immutable correction, void, and s
   const preserved = await (await page.request.get(`/api/v1/accounts/${account.id}`)).json() as components["schemas"]["Account"];
   expect(preserved.opening_cash).toBe("1000.000000");
   expect(preserved.opening_cash_date).toBe("2026-01-10");
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  await page.getByRole("button", { name: "登出", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();
+});
+
+test("native cash and expense HTTP corrections preserve FX, wallets, opening, and exact reversals", async ({ page }) => {
+  type Cash = components["schemas"]["CashEntry"];
+  type Expense = components["schemas"]["Expense"];
+  type Balances = components["schemas"]["AccountCashBalances"];
+  await page.goto("/settings/accounts");
+  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  const { headers, post } = await signedRequests(page);
+  const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E cash portfolio" });
+  const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E cash broker" });
+  const account = await post<components["schemas"]["Account"]>("accounts", {
+    portfolio_id: portfolio.id, broker_id: broker.id, name: "E2E cash account", default_currency: "USD",
+    opening_cash: "1000", opening_cash_date: "2026-01-01", opening_fx_rate_hkd: "7.8", cash_completeness: "COMPLETE",
+  });
+  const body = {
+    account_id: account.id, effective_date: "2026-01-02", kind: "DEPOSIT", currency: "USD",
+    amount: "10", fx_rate_hkd: null, note: "", external_flow: true,
+  } satisfies components["schemas"]["CashEntryCreate"];
+  const createHeaders = headers();
+  const first = await page.request.post("/api/v1/cash-entries", { headers: createHeaders, data: body });
+  expect(first.status()).toBe(201);
+  const original = await first.json() as Cash;
+  expect(original.quality).toBe("MISSING_FX");
+  expect(original.booked_hkd).toBeNull();
+  const replay = await page.request.post("/api/v1/cash-entries", { headers: createHeaders, data: body });
+  expect(replay.status()).toBe(201);
+  expect(await replay.json()).toEqual(original);
+  const initial = await (await page.request.get(`/api/v1/accounts/${account.id}/cash-balances`)).json() as Balances;
+  expect(initial.balances[0]!.balance).toBe("1010.000000");
+  expect(initial.balances[0]!.historical_booked_hkd_net).toBeNull();
+  const correction = { ...body, amount: "12", fx_rate_hkd: "7.9", reason: "Adopt synthetic historical cash evidence" };
+  const stale = await page.request.patch(`/api/v1/cash-entries/${original.id}`, { headers: headers(99), data: correction });
+  expect(stale.status()).toBe(412);
+  const changed = await page.request.patch(`/api/v1/cash-entries/${original.id}`, { headers: headers(1), data: correction });
+  expect(changed.status()).toBe(200);
+  const revised = await changed.json() as Cash;
+  expect(revised.supersedes_id).toBe(original.id);
+  expect(revised.booked_hkd).toBe("94.800000");
+  const retained = await (await page.request.get(`/api/v1/cash-entries/${original.id}`)).json() as Cash;
+  expect(retained.status).toBe("SUPERSEDED");
+  expect(retained.fx_rate_hkd).toBeNull();
+  expect(retained.amount).toBe("10.000000");
+  const expenseBody = {
+    account_id: account.id, date: "2026-01-03", category: "Custody fee", amount: "2.000001",
+    currency: "USD", fx_rate_hkd: "7.8", note: "",
+  } satisfies components["schemas"]["ExpenseCreate"];
+  const expense = await post<Expense>("expenses", expenseBody);
+  expect(expense.hkd_amount).toBe("15.600008");
+  const adjustment = await post<Cash>("cash-entries", {
+    account_id: account.id, effective_date: "2026-01-03", kind: "ADJUSTMENT", currency: "HKD",
+    amount: "0.000001", reason: "Synthetic reconciled micro adjustment",
+  });
+  expect(adjustment.external_flow).toBe(false);
+  expect(adjustment.booked_hkd).toBe("0.000001");
+  const current = await (await page.request.get(`/api/v1/accounts/${account.id}/cash-balances`)).json() as Balances;
+  const usd = current.balances.find(row => row.currency === "USD")!;
+  const hkd = current.balances.find(row => row.currency === "HKD")!;
+  expect(usd.balance).toBe("1009.999999");
+  expect(usd.historical_booked_hkd_net).toBe("7879.199992");
+  expect(usd.unvalued_entries).toBe(0);
+  expect(hkd.balance).toBe("0.000001");
+  const opening = await (await page.request.get("/api/v1/cash-entries", {
+    params: { account_id: account.id, source_type: "OPENING_BALANCE" },
+  })).json() as { items: Cash[] };
+  expect(opening.items).toHaveLength(1);
+  expect(opening.items[0]!.editable).toBe(false);
+  const protectedEntry = await page.request.delete(`/api/v1/cash-entries/${opening.items[0]!.id}`, {
+    headers: headers(1), data: { reason: "Synthetic disallowed opening edit" },
+  });
+  expect(protectedEntry.status()).toBe(409);
+  expect((await protectedEntry.json() as { code: string }).code).toBe("SOURCE_MANAGED");
+  const reason = { reason: "Void synthetic financial movement" };
+  const expenseVoid = await page.request.delete(`/api/v1/expenses/${expense.id}`, { headers: headers(1), data: reason });
+  expect(expenseVoid.status()).toBe(200);
+  for (const record of [revised, adjustment]) {
+    const voidHeaders = headers(1);
+    const voided = await page.request.delete(`/api/v1/cash-entries/${record.id}`, { headers: voidHeaders, data: reason });
+    expect(voided.status()).toBe(200);
+    const repeated = await page.request.delete(`/api/v1/cash-entries/${record.id}`, { headers: voidHeaders, data: reason });
+    expect(repeated.status()).toBe(200);
+    expect(await repeated.json()).toEqual(await voided.json());
+  }
+  const finalResponse = await page.request.get(`/api/v1/accounts/${account.id}/cash-balances`);
+  expect(finalResponse.headers()["cache-control"]).toBe("no-store");
+  const final = await finalResponse.json() as Balances;
+  expect(final.balances.find(row => row.currency === "USD")!.balance).toBe("1000.000000");
+  expect(final.balances.find(row => row.currency === "USD")!.historical_booked_hkd_net).toBe("7800.000000");
+  expect(final.balances.find(row => row.currency === "HKD")!.balance).toBe("0.000000");
+  const unchanged = await (await page.request.get(`/api/v1/accounts/${account.id}`)).json() as components["schemas"]["Account"];
+  expect(unchanged.opening_cash).toBe("1000.000000");
+  expect(unchanged.opening_cash_date).toBe("2026-01-01");
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
   await page.getByRole("button", { name: "登出", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();

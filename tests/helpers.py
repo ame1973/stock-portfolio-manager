@@ -6,9 +6,24 @@ from uuid import uuid4
 import httpx
 from sqlalchemy import Engine
 
+from spm_api.db import unit_of_work
 from spm_api.security import CSRF_COOKIE, issue_setup_token
 
 PASSWORD = "synthetic-owner-passphrase-2026"
+
+
+def database_snapshot(engine: Engine) -> dict[str, list[tuple[Any, ...]]]:
+    """Compare every value, including sequence and idempotency state, after a failed UoW."""
+    with unit_of_work(engine) as con:
+        tables = con.exec_driver_sql(
+            "SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name"
+        ).scalars()
+        return {
+            table: [
+                tuple(row) for row in con.exec_driver_sql(f'SELECT * FROM "{table}" ORDER BY rowid')
+            ]
+            for table in tables
+        }
 
 
 async def initialize(client: httpx.AsyncClient, engine: Engine) -> dict[str, Any]:

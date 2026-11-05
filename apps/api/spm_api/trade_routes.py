@@ -1,6 +1,5 @@
 """Private trade endpoints; all financial mutations share one short guarded UoW."""
 
-from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -10,10 +9,10 @@ from sqlalchemy import text
 from spm_api import trade_service as service
 from spm_api.db import unit_of_work
 from spm_api.decimal_types import IsoDate
-from spm_api.errors import ApiError, Error, Success
+from spm_api.errors import Error, Success
 from spm_api.master_service import owned_account, owned_portfolio, security_row
 from spm_api.mutations import mutate
-from spm_api.pagination import Page, PageDep, paginate
+from spm_api.pagination import Page, PageDep, paginate, validate_date_page
 from spm_api.security import AuthDep, VersionDep, WriteDep
 from spm_api.trade_models import TradeCreate, TradeRecord, TradeRevision, VoidTrade
 
@@ -37,14 +36,7 @@ def trades(
     root_id: UUID | None = None,
     include_history: bool = False,
 ) -> Page[TradeRecord]:
-    if from_date is not None and to_date is not None and from_date > to_date:
-        raise ApiError(422, "VALIDATION_ERROR", "Date range end precedes start")
-    if page.cursor_value is not None:
-        try:
-            if date.fromisoformat(page.cursor_value).isoformat() != page.cursor_value:
-                raise ValueError("Invalid date cursor")
-        except ValueError as exc:
-            raise ApiError(422, "INVALID_CURSOR", "Invalid trade date cursor") from exc
+    validate_date_page(page, from_date, to_date)
     with unit_of_work(request.app.state.engine) as con:
         owner = str(auth.owner.id)
         if portfolio_id is not None:
