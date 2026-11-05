@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from spm_api.cli import migrate
 from spm_api.config import Settings
-from spm_api.db import make_engine, migration_config, unit_of_work
+from spm_api.db import make_engine, migration_config, schema_head, unit_of_work
 
 NOW = "2026-01-01T00:00:00Z"
 
@@ -223,7 +223,7 @@ def test_upgrade_preserves_locked_actuals_revision_order_and_unknown_fx(
     with old_engine.connect() as con:
         assert (
             con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0004_ledger"
+            == schema_head()
         )
         for table, names in columns.items():
             after = [
