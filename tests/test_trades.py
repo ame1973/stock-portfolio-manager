@@ -1083,6 +1083,86 @@ async def test_moving_an_unposted_draft_does_not_rebase_its_unchanged_former_cas
         )
 
 
+@pytest.mark.parametrize("day", ["2026-01-10", "2026-01-11"])
+async def test_same_day_or_later_trade_does_not_repair_an_unrelated_reversed_opening(
+    client: httpx.AsyncClient, engine: Engine, anchored: dict[str, Any], day: str
+) -> None:
+    with unit_of_work(engine, write=True) as con:
+        opening = con.exec_driver_sql("SELECT * FROM cash_ledger_entries").mappings().one()
+        reverse_cash(con, opening, reason="Synthetic unresolved opening")
+    trade = await create(client, "trades", payload(anchored, trade_date=day))
+    assert trade["status"] == "ACTIVE"
+    with unit_of_work(engine) as con:
+        assert con.exec_driver_sql("SELECT count(*) FROM cash_ledger_entries").scalar_one() == 3
+        assert (
+            con.exec_driver_sql(
+                "SELECT count(*) FROM cash_ledger_entries WHERE source_type='OPENING_REBASE'"
+            ).scalar_one()
+            == 0
+        )
+
+
+async def test_other_currency_does_not_rebase_the_declared_wallet(
+    client: httpx.AsyncClient, engine: Engine, anchored: dict[str, Any]
+) -> None:
+    stock = await create(
+        client,
+        "securities",
+        {
+            "exchange_code": "HKG",
+            "display_ticker": "0006",
+            "name": "Synthetic separate wallet",
+            "quote_currency": "HKD",
+        },
+    )
+    with unit_of_work(engine, write=True) as con:
+        opening = con.exec_driver_sql("SELECT * FROM cash_ledger_entries").mappings().one()
+        reverse_cash(con, opening, reason="Synthetic unresolved USD opening")
+    trade = await create(
+        client,
+        "trades",
+        payload(
+            anchored,
+            security_id=stock["id"],
+            currency="HKD",
+            fx_rate_hkd=None,
+        ),
+    )
+    assert trade["booked_hkd"] == "1000.000000"
+    with unit_of_work(engine) as con:
+        assert con.exec_driver_sql("SELECT count(*) FROM cash_ledger_entries").scalar_one() == 3
+
+
+async def test_zero_net_native_revision_does_not_repair_an_unchanged_opening_assertion(
+    client: httpx.AsyncClient, engine: Engine, anchored: dict[str, Any]
+) -> None:
+    original = await create(client, "trades", payload(anchored))
+    with unit_of_work(engine, write=True) as con:
+        opening = (
+            con.exec_driver_sql(
+                "SELECT * FROM cash_ledger_entries WHERE source_type='OPENING_BALANCE'"
+            )
+            .mappings()
+            .one()
+        )
+        reverse_cash(con, opening, reason="Synthetic unresolved opening")
+    revised = await client.patch(
+        f"/api/v1/trades/{original['id']}",
+        json=payload(
+            anchored, note="Synthetic note correction", reason="Correct only the recorded note"
+        ),
+        headers=version_headers(client, 1),
+    )
+    assert revised.status_code == 200, revised.text
+    with unit_of_work(engine) as con:
+        assert (
+            con.exec_driver_sql(
+                "SELECT count(*) FROM cash_ledger_entries WHERE source_type='OPENING_REBASE'"
+            ).scalar_one()
+            == 1
+        )
+
+
 async def test_int64_share_boundary_remains_exact_and_full_closeout_clears_cost(
     client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
 ) -> None:

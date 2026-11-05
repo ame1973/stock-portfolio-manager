@@ -16,7 +16,7 @@ from spm_api.ledger_service import (
     allocate_sequence,
     money_integer,
     post_cash,
-    rebase_opening,
+    rebase_cash_changes,
     reverse_cash,
     validate_history,
 )
@@ -179,11 +179,11 @@ def _insert(con: Connection, values: dict[str, Any]) -> None:
     )
 
 
-def _post_settlement(con: Connection, row: RowMapping) -> None:
+def _post_settlement(con: Connection, row: RowMapping) -> str | None:
     if row["status"] != "ACTIVE":
-        return
+        return None
     sign = -1 if row["side"] == "BUY" else 1
-    post_cash(
+    return post_cash(
         con,
         account=row["account_id"],
         day=row["trade_date"],
@@ -212,7 +212,7 @@ def _retire(con: Connection, row: RowMapping, status: str) -> None:
         raise ApiError(412, "PRECONDITION_FAILED", "This trade changed; reload before editing")
 
 
-def _reverse_settlement(con: Connection, row: RowMapping, reason: str) -> None:
+def _reverse_settlement(con: Connection, row: RowMapping, reason: str) -> list[str]:
     entries = list(
         con.execute(
             text("""
@@ -224,18 +224,20 @@ def _reverse_settlement(con: Connection, row: RowMapping, reason: str) -> None:
     )
     if len(entries) != (1 if row["status"] == "ACTIVE" else 0):
         raise ApiError(409, "NEEDS_REVIEW", "The trade's settlement provenance is inconsistent")
-    for entry in entries:
-        reverse_cash(con, entry, reason=reason)
+    return [reverse_cash(con, entry, reason=reason) for entry in entries]
 
 
 def _finalize(
-    con: Connection, auth: Auth, rows: list[RowMapping], operation: str, request_id: str
+    con: Connection,
+    auth: Auth,
+    rows: list[RowMapping],
+    cash_entries: list[str],
+    request_id: str,
 ) -> None:
     economic = [row for row in rows if row["status"] == "ACTIVE"]
     for portfolio in {row["portfolio_id"] for row in economic}:
         validate_history(con, portfolio)
-    for account in {row["account_id"] for row in economic}:
-        rebase_opening(con, str(auth.owner.id), account, operation, request_id)
+    rebase_cash_changes(con, str(auth.owner.id), cash_entries, str(uuid4()), request_id)
     day = min(row["trade_date"] for row in rows)
     for portfolio in {row["portfolio_id"] for row in rows}:
         invalidate_portfolio(con, portfolio, rows[-1]["id"], "TRADE_FACT_CHANGED", day)
@@ -253,8 +255,8 @@ def create_trade(con: Connection, auth: Auth, body: TradeCreate, request_id: str
     )
     _insert(con, values)
     row = owned_trade(con, str(auth.owner.id), identifier)
-    _post_settlement(con, row)
-    _finalize(con, auth, [row], str(uuid4()), request_id)
+    settlement = _post_settlement(con, row)
+    _finalize(con, auth, [row], [settlement] if settlement is not None else [], request_id)
     result = as_trade(row)
     audit(
         con,
@@ -276,7 +278,7 @@ def revise_trade(
     check_version(before["version"], version)
     values = _prepare(con, auth, body)
     _retire(con, before, "SUPERSEDED")
-    _reverse_settlement(con, before, body.reason)
+    cash_entries = _reverse_settlement(con, before, body.reason)
     revised = str(uuid4())
     values.update(
         id=revised,
@@ -289,8 +291,10 @@ def revise_trade(
     )
     _insert(con, values)
     row = owned_trade(con, str(auth.owner.id), revised)
-    _post_settlement(con, row)
-    _finalize(con, auth, [before, row], str(uuid4()), request_id)
+    settlement = _post_settlement(con, row)
+    if settlement is not None:
+        cash_entries.append(settlement)
+    _finalize(con, auth, [before, row], cash_entries, request_id)
     result = as_trade(row)
     audit(
         con,
@@ -312,8 +316,8 @@ def void_trade(
     before = owned_trade(con, str(auth.owner.id), identifier)
     check_version(before["version"], version)
     _retire(con, before, "VOID")
-    _reverse_settlement(con, before, reason)
-    _finalize(con, auth, [before], str(uuid4()), request_id)
+    cash_entries = _reverse_settlement(con, before, reason)
+    _finalize(con, auth, [before], cash_entries, request_id)
     audit(
         con,
         str(auth.owner.id),

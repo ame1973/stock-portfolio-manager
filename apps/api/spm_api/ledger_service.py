@@ -1,5 +1,6 @@
 """Shared exact cash posting and validation of authoritative financial timelines."""
 
+from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
@@ -195,6 +196,40 @@ def rebase_opening(
         after={"anchor_balance_micro": account["opening_cash_micro"], "delta_micro": delta},
         reason="Derived from the existing owner-declared opening balance; not an external flow",
     )
+
+
+def rebase_cash_changes(
+    con: Connection,
+    owner: str,
+    entries: Sequence[str],
+    operation_id: str,
+    request_id: str,
+) -> None:
+    """Rebase only a nonzero native change strictly before that wallet's opening assertion."""
+    changes: dict[str, int] = {}
+    for identifier in entries:
+        row = (
+            con.execute(
+                text("""
+            SELECT c.*,a.default_currency,a.opening_cash_date FROM cash_ledger_entries c
+            JOIN accounts a ON a.id=c.account_id JOIN portfolios p ON p.id=a.portfolio_id
+            WHERE c.id=:id AND p.owner_id=:owner
+        """),
+                {"id": identifier, "owner": owner},
+            )
+            .mappings()
+            .one()
+        )
+        if (
+            row["opening_cash_date"] is not None
+            and row["currency"] == row["default_currency"]
+            and row["effective_date"] < row["opening_cash_date"]
+        ):
+            account = row["account_id"]
+            changes[account] = changes.get(account, 0) + row["amount_micro"]
+    for account, change in changes.items():
+        if change:
+            rebase_opening(con, owner, account, operation_id, request_id)
 
 
 def history_events(con: Connection, portfolio: str) -> tuple[list[Event], list[RowMapping]]:
