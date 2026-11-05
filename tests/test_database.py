@@ -89,7 +89,7 @@ def test_empty_and_repeat_upgrade(engine: Engine, settings: Settings) -> None:
                 "SELECT count(*) FROM sqlite_master WHERE type='table' "
                 "AND name NOT LIKE 'sqlite_%' AND name != 'alembic_version'"
             ).scalar()
-            == 39
+            == 40
         )
     assert not list(settings.data_dir.glob("pre-migration-*"))
 
@@ -145,8 +145,8 @@ def test_evidence_is_append_only(engine: Engine, table: str, operation: str) -> 
         (
             "INSERT INTO security_transfers(id,portfolio_id,source_account_id,target_account_id,"
             "security_id,transfer_date,quantity_e8,transferred_cost_hkd_micro,"
-            "created_at,created_sequence) "
-            "VALUES ('t','p1','a1','a2','s','2026-01-01',100000000,1000000,'now',2)",
+            "created_at,created_sequence,root_id) "
+            "VALUES ('t','p1','a1','a2','s','2026-01-01',100000000,1000000,'now',2,'t')",
             "TRANSFER_ACCOUNT_PORTFOLIO_MISMATCH",
         ),
         (

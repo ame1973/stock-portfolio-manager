@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from spm_api.cli import migrate
 from spm_api.config import Settings
-from spm_api.db import make_engine, migration_config, unit_of_work
+from spm_api.db import make_engine, migration_config, schema_head, unit_of_work
 from spm_api.ledger_service import reverse_cash
 
 NOW = "2026-01-02T00:00:00Z"
@@ -111,7 +111,7 @@ def test_upgrade_preserves_cash_fx_reversals_and_appends_one_schema_audit(
         assert rows(con) == before
         assert (
             con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0005_cash"
+            == schema_head()
         )
         assert (
             con.exec_driver_sql(
@@ -238,13 +238,14 @@ def test_sql_corrections_need_a_reversed_manual_parent_same_owner_and_one_succes
         )
 
 
-def test_cash_guard_downgrade_is_explicitly_non_destructive(engine: Engine) -> None:
-    with engine.connect() as con:
+def test_cash_guard_downgrade_is_explicitly_non_destructive(old_engine: Engine) -> None:
+    with old_engine.connect() as con:
         config = migration_config()
         config.attributes["connection"] = con
+        command.upgrade(config, "0005_cash")
         with pytest.raises(RuntimeError, match="validated pre-upgrade backup"):
             command.downgrade(config, "0004_ledger")
-    with unit_of_work(engine) as con:
+    with unit_of_work(old_engine) as con:
         assert (
             con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
             == "0005_cash"

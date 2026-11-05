@@ -921,8 +921,8 @@ async def test_trade_cannot_oversell_or_void_shares_already_transferred_to_anoth
             text(
                 "INSERT INTO security_transfers(id,created_sequence,portfolio_id,source_account_id,"
                 "target_account_id,security_id,transfer_date,quantity_e8,transferred_cost_hkd_micro,"
-                "created_at) VALUES (:id,:seq,:portfolio,:source,:target,:security,'2026-01-03',"
-                "400000000,3120000000,:now)"
+                "created_at,root_id) VALUES (:id,:seq,:portfolio,:source,:target,:security,"
+                "'2026-01-03',400000000,3120000000,:now,:id)"
             ),
             {
                 "id": identifier,

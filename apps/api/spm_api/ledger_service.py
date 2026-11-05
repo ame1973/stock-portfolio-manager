@@ -257,7 +257,10 @@ def history_events(con: Connection, portfolio: str) -> tuple[list[Event], list[R
             )
         )
     for row in con.execute(
-        text("SELECT * FROM security_transfers WHERE portfolio_id=:p AND status='ACTIVE'"),
+        text(
+            "SELECT * FROM security_transfers WHERE portfolio_id=:p "
+            "AND status='ACTIVE' AND is_current=1"
+        ),
         {"p": portfolio},
     ).mappings():
         events.append(
