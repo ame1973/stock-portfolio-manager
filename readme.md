@@ -78,6 +78,14 @@ Account creation can optionally post an initial cash balance. Supply `opening_ca
 
 All monetary inputs reject floats, scientific notation, excessive fractional digits, and INT64 overflow. SQLite guards reject REAL values in scaled financial columns even on a direct SQL path. No input is silently rounded.
 
+## Accounting behavior
+
+The internal accounting modules use immutable Decimal values and deterministic account/security replay. They implement moving-average cost, exact transfers, rational splits/reverse splits with fractional-residue review, locked historical HKD amounts, and strict ex-date cutoffs. Derived money is rounded HALF_UP only at persistence boundaries; inputs are never rounded into validity. Computed HKD/USD settlement defaults to cents, while explicit broker actuals retain their exact input precision and require an evidence explanation. Buy/sell fees are included once in cost/proceeds, not automatically posted again as operating expenses.
+
+Pure dividend arithmetic keeps one current accrual per stable event/account, preserves actual partial receipts, rejects duplicate counting, and flags mixed-currency reconciliation rather than subtracting unlike amounts. Missing quotes/FX and incomplete cash return unavailable metrics with reasons, not fabricated zeros. The unmodified financial fixtures and boundary tests exercise this library, including revision/receipt income separation.
+
+This is currently an **internal library, not an available financial transaction API**. Financial HTTP/DB workflows and browser forms remain unavailable. Passing pure arithmetic tests does not make a live installation suitable for real financial records.
+
 ## Using the browser
 
 The interface defaults to Traditional Chinese and follows the operating system's light/dark preference. After issuing a local setup token, open the web address, enter the token, choose a unique passphrase, and confirm it. Later visits use the normal login form. Passwords and setup tokens are never placed in browser storage.
