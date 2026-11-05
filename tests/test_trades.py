@@ -128,6 +128,54 @@ async def test_fin_001_posts_fees_once_and_replays_account_moving_average(
     assert read.headers["ETag"] == '"1"' and read.headers["Cache-Control"] == "no-store"
 
 
+async def test_fin_006_reference_fx_refresh_never_rebooks_trade_cash_or_cost(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    # fx_rates is a replaceable reference projection, not an append-only provider observation.
+    with unit_of_work(engine, write=True) as con:
+        con.exec_driver_sql(
+            "INSERT INTO fx_rates VALUES "
+            "('USD','HKD','2026-01-02','synthetic-reference',7800000000000,"
+            "'HISTORICAL','2026-01-02T00:00:00Z')"
+        )
+    original = await create(client, "trades", payload(book))
+    before = snapshot(engine)
+    with unit_of_work(engine, write=True) as con:
+        con.exec_driver_sql(
+            "UPDATE fx_rates SET rate_e12=7900000000000,"
+            "retrieved_at_utc='2026-01-03T00:00:00Z' "
+            "WHERE base_currency='USD' AND quote_currency='HKD' "
+            "AND as_of_date='2026-01-02' AND provider_id='synthetic-reference'"
+        )
+        assert (
+            con.exec_driver_sql(
+                "SELECT rate_e12 FROM fx_rates WHERE provider_id='synthetic-reference'"
+            ).scalar_one()
+            == 7900000000000
+        )
+    after = snapshot(engine)
+    assert before["fx_rates"] != after["fx_rates"]
+    assert {key: rows for key, rows in before.items() if key != "fx_rates"} == {
+        key: rows for key, rows in after.items() if key != "fx_rates"
+    }
+    read = await client.get(f"/api/v1/trades/{original['id']}")
+    assert read.status_code == 200 and read.json() == original
+    assert (original["fx_rate_hkd"], original["booked_hkd"]) == (
+        "7.800000000000",
+        "7800.000000",
+    )
+    journal = await client.get("/api/v1/cash-entries", params={"account_id": book["account"]["id"]})
+    assert journal.status_code == 200
+    cash = journal.json()["items"]
+    assert len(cash) == 1
+    assert (cash[0]["amount"], cash[0]["fx_rate_hkd"], cash[0]["booked_hkd"]) == (
+        "-1000.000000",
+        "7.800000000000",
+        "-7800.000000",
+    )
+    assert position(engine, book) == Position(Decimal("10"), Decimal("7800"))
+
+
 async def test_fin_008_oversell_changes_zero_database_rows(
     client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
 ) -> None:
