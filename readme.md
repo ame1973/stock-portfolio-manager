@@ -317,6 +317,16 @@ Brokers and accounts can be archived and explicitly reopened after confirmation.
 
 A disconnected page may display already loaded in-memory records with a warning; refresh and saves need a connection. This is **not** encrypted offline/PWA support, and no writes are automatically queued. Logout, session expiry, and password change cancel private reads and clear private query/mutation and view state. Offline snapshots/drafts, valuations, dividends, providers, and portable backup/restore remain future work.
 
+## Provider integration status
+
+The internal provider foundation includes a frozen capability catalogue for EODHD, Alpha Vantage, Massive, Yahoo, the optional yfinance wrapper, HKEX/SEC evidence and manual evidence. These are candidate access/market/origin definitions, **not configured availability, verified plan coverage or a license grant**. Every live validation remains NOT_TESTED; full raw-payload storage is disabled by this catalogue. No API key is included in it.
+
+Provider symbols must be explicit dated mappings. The resolver covers the complete inclusive requested window, splitting it at alias changes while retaining the original security ID, alias ID/version and validity periods. Missing heads/tails/interior days and overlapping/colliding identities return no fetch segments; display tickers are never guessed or rewritten. An unverified mapping stays labelled as such. Resolving an alias does not prove that an upstream service has any data for it.
+
+Bounded immutable observation models retain exact eight-place DPS strings, independent event currency, nullable dates and an explicit adjustment basis. Their canonical hashes distinguish changed source terms and regular/special events without overwriting prior evidence. Yahoo and yfinance derive the same YAHOO origin; manual/official references are not an additional vendor vote. Unknown/adjusted DPS remains unresolved rather than silently becoming as-declared income. Missing values and retrieval failures never imply zero dividends, and observations contain no receipt or verified-event status.
+
+HTTP adapters, provider credentials/rights configuration, durable job leases/quotas/retries, observation persistence and synchronization endpoints are still being implemented. The worker still only supervises leadership/heartbeat. This foundation does not fetch live data, reconcile canonical dividends, create receipts or claim a successful sync.
+
 ## Trusted HTTPS proxy
 
 For production, the NAS proxy must terminate TLS and **overwrite** `X-Forwarded-Proto` with `https` before forwarding to the loopback-only web port. Never publish the API port or attach untrusted containers to the application's private Compose network. Uvicorn trusts only the gateway's reserved internal IP (`WEB_INTERNAL_IP`, default `172.30.93.10`); Nginx overwrites `X-Forwarded-For` rather than accepting a caller-selected rate-limit address. `APP_SUBNET` defaults to `172.30.93.0/24`. Change both network settings together if they overlap a LAN/VPN/Docker network, or when running multiple instances concurrently. When a NAS proxy is present, the default login limit may therefore group devices behind that proxy into one bucket. The application also validates the exact public Origin and rejects insecure authentication requests.

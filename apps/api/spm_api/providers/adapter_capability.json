@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "providers": [
+    {
+      "provider_id": "eodhd",
+      "origin_group": "EODHD",
+      "markets": ["HK", "US"],
+      "access_mode": "API_KEY",
+      "documentation_url": "https://eodhd.com/financial-apis/api-splits-dividends",
+      "data_rights": "UNVERIFIED"
+    },
+    {
+      "provider_id": "alphavantage",
+      "origin_group": "ALPHAVANTAGE",
+      "markets": ["US"],
+      "access_mode": "API_KEY",
+      "documentation_url": "https://www.alphavantage.co/documentation/",
+      "data_rights": "UNVERIFIED"
+    },
+    {
+      "provider_id": "massive",
+      "origin_group": "MASSIVE",
+      "markets": ["US"],
+      "access_mode": "API_KEY",
+      "documentation_url": "https://massive.com/docs/rest/stocks/corporate-actions/dividends",
+      "data_rights": "UNVERIFIED"
+    },
+    {
+      "provider_id": "yahoo",
+      "origin_group": "YAHOO",
+      "markets": ["HK", "US"],
+      "access_mode": "PUBLIC_HTTP",
+      "documentation_url": "https://finance.yahoo.com/",
+      "data_rights": "UNVERIFIED"
+    },
+    {
+      "provider_id": "yfinance",
+      "origin_group": "YAHOO",
+      "markets": ["HK", "US"],
+      "access_mode": "OPTIONAL_SDK",
+      "documentation_url": "https://ranaroussi.github.io/yfinance/",
+      "data_rights": "UNVERIFIED"
+    },
+    {
+      "provider_id": "hkex_evidence",
+      "origin_group": "HKEX_OFFICIAL",
+      "markets": ["HK"],
+      "access_mode": "MANUAL_EVIDENCE",
+      "documentation_url": "https://www.hkexnews.hk/",
+      "data_rights": "MANUAL_EVIDENCE_ONLY"
+    },
+    {
+      "provider_id": "sec_evidence",
+      "origin_group": "SEC_OFFICIAL",
+      "markets": ["US"],
+      "access_mode": "MANUAL_EVIDENCE",
+      "documentation_url": "https://www.sec.gov/edgar",
+      "data_rights": "MANUAL_EVIDENCE_ONLY"
+    },
+    {
+      "provider_id": "manual",
+      "origin_group": "USER_VERIFIED",
+      "markets": ["HK", "US"],
+      "access_mode": "MANUAL_EVIDENCE",
+      "data_rights": "MANUAL_EVIDENCE_ONLY"
+    }
+  ]
+}
