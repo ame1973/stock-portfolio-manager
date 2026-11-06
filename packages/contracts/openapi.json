@@ -1650,6 +1650,317 @@
         "title": "CurrencyCashBalance",
         "type": "object"
       },
+      "DividendObservationRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_basis": {
+            "enum": [
+              "AS_DECLARED",
+              "SPLIT_ADJUSTED",
+              "UNKNOWN"
+            ],
+            "title": "Adjustment Basis",
+            "type": "string"
+          },
+          "announce_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Announce Date"
+          },
+          "canonical_adoption": {
+            "const": "NOT_ADOPTED",
+            "default": "NOT_ADOPTED",
+            "title": "Canonical Adoption",
+            "type": "string"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "enum": [
+                  "HKD",
+                  "USD"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "dps": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dps"
+          },
+          "event_type": {
+            "enum": [
+              "REGULAR",
+              "SPECIAL",
+              "INTERIM",
+              "FINAL",
+              "SUPPLEMENTAL",
+              "ETF_DISTRIBUTION",
+              "REIT_DISTRIBUTION",
+              "UNKNOWN"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicCitation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ex_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ex Date"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incomplete_reasons": {
+            "items": {
+              "maxLength": 100,
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "type": "string"
+            },
+            "title": "Incomplete Reasons",
+            "type": "array"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "normalized_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Normalized Sha256",
+            "type": "string"
+          },
+          "origin_group": {
+            "enum": [
+              "EODHD",
+              "ALPHAVANTAGE",
+              "MASSIVE",
+              "YAHOO",
+              "HKEX_OFFICIAL",
+              "SEC_OFFICIAL",
+              "USER_VERIFIED"
+            ],
+            "title": "Origin Group",
+            "type": "string"
+          },
+          "pay_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pay Date"
+          },
+          "provenance_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Provenance Version",
+            "type": "integer"
+          },
+          "provider_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Event Id"
+          },
+          "provider_id": {
+            "enum": [
+              "eodhd",
+              "alphavantage",
+              "massive",
+              "yahoo",
+              "yfinance",
+              "hkex_evidence",
+              "sec_evidence",
+              "manual"
+            ],
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "provider_run_id": {
+            "format": "uuid",
+            "title": "Provider Run Id",
+            "type": "string"
+          },
+          "provider_symbol": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9^][A-Za-z0-9.^=_-]*$",
+            "title": "Provider Symbol",
+            "type": "string"
+          },
+          "record_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Date"
+          },
+          "retrieved_at": {
+            "format": "date-time",
+            "title": "Retrieved At",
+            "type": "string"
+          },
+          "scope": {
+            "const": "SOURCE_ONLY",
+            "default": "SOURCE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "sightings_count": {
+            "minimum": 1.0,
+            "title": "Sightings Count",
+            "type": "integer"
+          },
+          "source_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Currency"
+          },
+          "source_frequency": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Frequency"
+          },
+          "source_period": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ANNUAL",
+                  "QUARTERLY",
+                  "MONTHLY",
+                  "WEEKLY",
+                  "INTERIM",
+                  "FINAL",
+                  "SPECIAL",
+                  "SUPPLEMENTAL",
+                  "OTHER"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Period"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "required": [
+          "id",
+          "provider_run_id",
+          "provider_id",
+          "origin_group",
+          "security_id",
+          "provider_symbol",
+          "provider_event_id",
+          "evidence",
+          "normalized_sha256",
+          "source_url",
+          "retrieved_at",
+          "sightings_count",
+          "last_seen_at",
+          "ex_date",
+          "announce_date",
+          "record_date",
+          "pay_date",
+          "event_type",
+          "dps",
+          "currency",
+          "source_currency",
+          "source_period",
+          "source_frequency",
+          "adjustment_basis",
+          "incomplete_reasons"
+        ],
+        "title": "DividendObservationRecord",
+        "type": "object"
+      },
       "Error": {
         "additionalProperties": false,
         "properties": {
@@ -2302,6 +2613,86 @@
           "reason"
         ],
         "title": "MappingPeriodUpdate",
+        "type": "object"
+      },
+      "ObservationPage_DividendObservationRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DividendObservationRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "legacy_records_omitted": {
+            "minimum": 0.0,
+            "title": "Legacy Records Omitted",
+            "type": "integer"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "scope": {
+            "const": "IMMUTABLE_SOURCE_V1",
+            "default": "IMMUTABLE_SOURCE_V1",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "legacy_records_omitted"
+        ],
+        "title": "ObservationPage[DividendObservationRecord]",
+        "type": "object"
+      },
+      "ObservationPage_SplitObservationRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SplitObservationRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "legacy_records_omitted": {
+            "minimum": 0.0,
+            "title": "Legacy Records Omitted",
+            "type": "integer"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "scope": {
+            "const": "IMMUTABLE_SOURCE_V1",
+            "default": "IMMUTABLE_SOURCE_V1",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "legacy_records_omitted"
+        ],
+        "title": "ObservationPage[SplitObservationRecord]",
         "type": "object"
       },
       "OpeningCashRecord": {
@@ -3659,6 +4050,55 @@
         "title": "ProviderSymbolCreate",
         "type": "object"
       },
+      "PublicCitation": {
+        "additionalProperties": false,
+        "description": "Citation identity/terms remain; query-bearing document links are withheld, not rewritten.",
+        "properties": {
+          "citation": {
+            "maxLength": 300,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Citation",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "url_withheld": {
+            "default": false,
+            "title": "Url Withheld",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "citation",
+          "reason"
+        ],
+        "title": "PublicCitation",
+        "type": "object"
+      },
       "RecordedSourcePage": {
         "additionalProperties": false,
         "description": "One completed immutable page, not an active probe or a complete-history assertion.",
@@ -4677,6 +5117,189 @@
           "skipped_unsupported"
         ],
         "title": "SourceJobResult",
+        "type": "object"
+      },
+      "SplitObservationRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_adoption": {
+            "const": "NOT_ADOPTED",
+            "default": "NOT_ADOPTED",
+            "title": "Canonical Adoption",
+            "type": "string"
+          },
+          "effect_scope": {
+            "const": "PROVIDER_ADJUSTMENT_ONLY",
+            "title": "Effect Scope",
+            "type": "string"
+          },
+          "effective_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Effective Date",
+            "type": "string"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicCitation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "normalized_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Normalized Sha256",
+            "type": "string"
+          },
+          "origin_group": {
+            "enum": [
+              "EODHD",
+              "ALPHAVANTAGE",
+              "MASSIVE",
+              "YAHOO",
+              "HKEX_OFFICIAL",
+              "SEC_OFFICIAL",
+              "USER_VERIFIED"
+            ],
+            "title": "Origin Group",
+            "type": "string"
+          },
+          "provenance_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Provenance Version",
+            "type": "integer"
+          },
+          "provider_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Event Id"
+          },
+          "provider_id": {
+            "enum": [
+              "eodhd",
+              "alphavantage",
+              "massive",
+              "yahoo",
+              "yfinance",
+              "hkex_evidence",
+              "sec_evidence",
+              "manual"
+            ],
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "provider_run_id": {
+            "format": "uuid",
+            "title": "Provider Run Id",
+            "type": "string"
+          },
+          "provider_symbol": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9^][A-Za-z0-9.^=_-]*$",
+            "title": "Provider Symbol",
+            "type": "string"
+          },
+          "ratio_denominator": {
+            "title": "Ratio Denominator",
+            "type": "string"
+          },
+          "ratio_numerator": {
+            "title": "Ratio Numerator",
+            "type": "string"
+          },
+          "retrieved_at": {
+            "format": "date-time",
+            "title": "Retrieved At",
+            "type": "string"
+          },
+          "scope": {
+            "const": "SOURCE_ONLY",
+            "default": "SOURCE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "sightings_count": {
+            "minimum": 1.0,
+            "title": "Sightings Count",
+            "type": "integer"
+          },
+          "source_adjustment_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "FORWARD_SPLIT",
+                  "REVERSE_SPLIT",
+                  "STOCK_DIVIDEND"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Adjustment Type"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "required": [
+          "id",
+          "provider_run_id",
+          "provider_id",
+          "origin_group",
+          "security_id",
+          "provider_symbol",
+          "provider_event_id",
+          "evidence",
+          "normalized_sha256",
+          "source_url",
+          "retrieved_at",
+          "sightings_count",
+          "last_seen_at",
+          "effective_date",
+          "ratio_numerator",
+          "ratio_denominator",
+          "source_adjustment_type",
+          "effect_scope"
+        ],
+        "title": "SplitObservationRecord",
         "type": "object"
       },
       "Status": {
@@ -10543,6 +11166,203 @@
         ]
       }
     },
+    "/api/v1/dividends/observations": {
+      "get": {
+        "operationId": "list_dividend_observations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "security_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Security Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "eodhd",
+                    "alphavantage",
+                    "massive",
+                    "yahoo",
+                    "yfinance",
+                    "hkex_evidence",
+                    "sec_evidence",
+                    "manual"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationPage_DividendObservationRecord_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Dividends",
+        "tags": [
+          "Source observations"
+        ]
+      }
+    },
     "/api/v1/dividends/sync": {
       "post": {
         "description": "Queue source work only; reconciliation and financial adoption do not run.",
@@ -12931,6 +13751,203 @@
         "summary": "Coverage",
         "tags": [
           "Providers"
+        ]
+      }
+    },
+    "/api/v1/providers/split-observations": {
+      "get": {
+        "operationId": "list_split_observations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "security_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Security Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "eodhd",
+                    "alphavantage",
+                    "massive",
+                    "yahoo",
+                    "yfinance",
+                    "hkex_evidence",
+                    "sec_evidence",
+                    "manual"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationPage_SplitObservationRecord_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Splits",
+        "tags": [
+          "Source observations"
         ]
       }
     },

@@ -12,7 +12,7 @@ from spm_api.errors import Error
 from spm_api.job_models import ItemStatus, JobStatus
 from spm_api.master_models import ProviderId
 from spm_api.mutations import mutate
-from spm_api.pagination import Page, PageDep, paginate
+from spm_api.pagination import Page, PageDep, paginate, validate_time_page
 from spm_api.security import AuthDep, WriteDep
 from spm_api.sync_models import (
     CancelJobRequest,
@@ -58,7 +58,7 @@ def jobs_list(
     status: JobStatus | None = None,
 ) -> Page[SourceJob]:
     """List supported managed source jobs, never unvalidated retained job payloads."""
-    service.validate_job_cursor(page)
+    validate_time_page(page)
     with unit_of_work(request.app.state.engine) as con:
         rows = (
             con.execute(

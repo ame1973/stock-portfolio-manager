@@ -62,7 +62,12 @@ export async function sourceJobApi(
   for (const row of coverage.items) {
     expect(row).toMatchObject({ security_id: securityId, status: "NOT_TESTED", coverage_start: null, coverage_end: null, coverage_basis: "NOT_ESTABLISHED", last_result: null, last_success_at: null, observations_count: 0, legacy_runs_omitted: 0, legacy_status_ignored: false });
   }
-  const data = JSON.stringify({ job, items, providers, health, coverage });
+  const dividends = await read<Schemas["ObservationPage_DividendObservationRecord_"]>("dividends/observations", { security_id: securityId });
+  const splits = await read<Schemas["ObservationPage_SplitObservationRecord_"]>("providers/split-observations", { security_id: securityId });
+  for (const observations of [dividends, splits]) {
+    expect(observations).toEqual({ items: [], next_cursor: null, legacy_records_omitted: 0, scope: "IMMUTABLE_SOURCE_V1" });
+  }
+  const data = JSON.stringify({ job, items, providers, health, coverage, dividends, splits });
   for (const privateField of ["request_json", "result_json", "profile_sha256", "profile_json", "lease_owner", "cursor_in", "credential_version", "terms_reference"]) expect(data).not.toContain(privateField);
   expect(await snapshot()).toEqual(before);
 }

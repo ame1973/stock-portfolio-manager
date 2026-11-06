@@ -9,9 +9,10 @@ NOT_TESTED.
 
 Owner-authenticated source enqueue/read/cancel APIs are available; see the
 [HTTP contract](JOBS.md#authenticated-http-intents-and-safe-diagnostics).
-Job-creation schedules, monitoring UI, observation/evidence APIs and key-import
-settings are still unfinished. Provider configuration/recorded-source reads are
-available through the [diagnostic API](DIAGNOSTICS.md), never as a live probe.
+Job-creation schedules, monitoring UI, cited evidence creation/review APIs and
+key-import settings are still unfinished. Provider configuration/recorded-source
+reads and [exact observation lists](OBSERVATIONS.md) are available separately,
+never as a live probe.
 No job or provider enablement is created at
 startup. Empty/unconfigured installations perform no upstream requests. Retained
 unmanaged jobs are not automatically adopted.

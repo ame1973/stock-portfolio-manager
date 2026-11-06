@@ -1,16 +1,17 @@
-"""Shared bounded keyset pagination, literal search, and financial date cursors."""
+"""Shared bounded keyset pagination, literal search, and strict date/timestamp cursors."""
 
 import base64
 import binascii
 import json
 from collections.abc import Callable, Sequence
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, Query
 from sqlalchemy import RowMapping
 
+from spm_api.audit import stamp
 from spm_api.errors import ApiError, Model
 
 
@@ -65,6 +66,17 @@ def validate_date_page(query: PageQuery, start: str | None, end: str | None) -> 
                 raise ValueError("Invalid date cursor")
         except ValueError as exc:
             raise ApiError(422, "INVALID_CURSOR", "Invalid financial date cursor") from exc
+
+
+def validate_time_page(query: PageQuery) -> None:
+    if query.cursor_value is None:
+        return
+    try:
+        value = datetime.fromisoformat(query.cursor_value)
+        if value.tzinfo is None or stamp(value.astimezone(UTC)) != query.cursor_value:
+            raise ValueError("Noncanonical timestamp cursor")
+    except (ValueError, OverflowError):
+        raise ApiError(422, "INVALID_CURSOR", "Invalid timestamp pagination cursor") from None
 
 
 PageDep = Annotated[PageQuery, Depends()]

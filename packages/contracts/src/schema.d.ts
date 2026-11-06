@@ -359,6 +359,23 @@ export interface paths {
         patch: operations["revise_corporate_action"];
         trace?: never;
     };
+    "/api/v1/dividends/observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dividends */
+        get: operations["list_dividend_observations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/sync": {
         parameters: {
             query?: never;
@@ -606,6 +623,23 @@ export interface paths {
          * @description A requested/parsed window is never returned as authoritative coverage_start/end.
          */
         get: operations["get_provider_coverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/split-observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Splits */
+        get: operations["list_split_observations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1484,6 +1518,103 @@ export interface components {
             /** Unvalued Entries */
             unvalued_entries: number;
         };
+        /** DividendObservationRecord */
+        DividendObservationRecord: {
+            /**
+             * Adjustment Basis
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /** Announce Date */
+            announce_date: string | null;
+            /**
+             * Canonical Adoption
+             * @default NOT_ADOPTED
+             * @constant
+             */
+            canonical_adoption: "NOT_ADOPTED";
+            /** Currency */
+            currency: ("HKD" | "USD") | null;
+            /** Dps */
+            dps: string | null;
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "REGULAR" | "SPECIAL" | "INTERIM" | "FINAL" | "SUPPLEMENTAL" | "ETF_DISTRIBUTION" | "REIT_DISTRIBUTION" | "UNKNOWN";
+            evidence: components["schemas"]["PublicCitation"] | null;
+            /** Ex Date */
+            ex_date: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incomplete Reasons */
+            incomplete_reasons: string[];
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Normalized Sha256 */
+            normalized_sha256: string;
+            /**
+             * Origin Group
+             * @enum {string}
+             */
+            origin_group: "EODHD" | "ALPHAVANTAGE" | "MASSIVE" | "YAHOO" | "HKEX_OFFICIAL" | "SEC_OFFICIAL" | "USER_VERIFIED";
+            /** Pay Date */
+            pay_date: string | null;
+            /**
+             * Provenance Version
+             * @default 1
+             * @constant
+             */
+            provenance_version: 1;
+            /** Provider Event Id */
+            provider_event_id: string | null;
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual";
+            /**
+             * Provider Run Id
+             * Format: uuid
+             */
+            provider_run_id: string;
+            /** Provider Symbol */
+            provider_symbol: string;
+            /** Record Date */
+            record_date: string | null;
+            /**
+             * Retrieved At
+             * Format: date-time
+             */
+            retrieved_at: string;
+            /**
+             * Scope
+             * @default SOURCE_ONLY
+             * @constant
+             */
+            scope: "SOURCE_ONLY";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Sightings Count */
+            sightings_count: number;
+            /** Source Currency */
+            source_currency: string | null;
+            /** Source Frequency */
+            source_frequency: number | null;
+            /** Source Period */
+            source_period: ("ANNUAL" | "QUARTERLY" | "MONTHLY" | "WEEKLY" | "INTERIM" | "FINAL" | "SPECIAL" | "SUPPLEMENTAL" | "OTHER") | null;
+            /** Source Url */
+            source_url: string | null;
+        };
         /** Error */
         Error: {
             /** Code */
@@ -1762,6 +1893,36 @@ export interface components {
             effective_to?: string | null;
             /** Reason */
             reason: string;
+        };
+        /** ObservationPage[DividendObservationRecord] */
+        ObservationPage_DividendObservationRecord_: {
+            /** Items */
+            items: components["schemas"]["DividendObservationRecord"][];
+            /** Legacy Records Omitted */
+            legacy_records_omitted: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Scope
+             * @default IMMUTABLE_SOURCE_V1
+             * @constant
+             */
+            scope: "IMMUTABLE_SOURCE_V1";
+        };
+        /** ObservationPage[SplitObservationRecord] */
+        ObservationPage_SplitObservationRecord_: {
+            /** Items */
+            items: components["schemas"]["SplitObservationRecord"][];
+            /** Legacy Records Omitted */
+            legacy_records_omitted: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Scope
+             * @default IMMUTABLE_SOURCE_V1
+             * @constant
+             */
+            scope: "IMMUTABLE_SOURCE_V1";
         };
         /** OpeningCashRecord */
         OpeningCashRecord: {
@@ -2204,6 +2365,28 @@ export interface components {
             verified: boolean;
         };
         /**
+         * PublicCitation
+         * @description Citation identity/terms remain; query-bearing document links are withheld, not rewritten.
+         */
+        PublicCitation: {
+            /** Citation */
+            citation: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason: string;
+            /** Url */
+            url?: string | null;
+            /**
+             * Url Withheld
+             * @default false
+             */
+            url_withheld: boolean;
+        };
+        /**
          * RecordedSourcePage
          * @description One completed immutable page, not an active probe or a complete-history assertion.
          */
@@ -2628,6 +2811,89 @@ export interface components {
             work_units: number;
             /** Work Units Done */
             work_units_done: number;
+        };
+        /** SplitObservationRecord */
+        SplitObservationRecord: {
+            /**
+             * Canonical Adoption
+             * @default NOT_ADOPTED
+             * @constant
+             */
+            canonical_adoption: "NOT_ADOPTED";
+            /**
+             * Effect Scope
+             * @constant
+             */
+            effect_scope: "PROVIDER_ADJUSTMENT_ONLY";
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            evidence: components["schemas"]["PublicCitation"] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Normalized Sha256 */
+            normalized_sha256: string;
+            /**
+             * Origin Group
+             * @enum {string}
+             */
+            origin_group: "EODHD" | "ALPHAVANTAGE" | "MASSIVE" | "YAHOO" | "HKEX_OFFICIAL" | "SEC_OFFICIAL" | "USER_VERIFIED";
+            /**
+             * Provenance Version
+             * @default 1
+             * @constant
+             */
+            provenance_version: 1;
+            /** Provider Event Id */
+            provider_event_id: string | null;
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual";
+            /**
+             * Provider Run Id
+             * Format: uuid
+             */
+            provider_run_id: string;
+            /** Provider Symbol */
+            provider_symbol: string;
+            /** Ratio Denominator */
+            ratio_denominator: string;
+            /** Ratio Numerator */
+            ratio_numerator: string;
+            /**
+             * Retrieved At
+             * Format: date-time
+             */
+            retrieved_at: string;
+            /**
+             * Scope
+             * @default SOURCE_ONLY
+             * @constant
+             */
+            scope: "SOURCE_ONLY";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Sightings Count */
+            sightings_count: number;
+            /** Source Adjustment Type */
+            source_adjustment_type: ("FORWARD_SPLIT" | "REVERSE_SPLIT" | "STOCK_DIVIDEND") | null;
+            /** Source Url */
+            source_url: string | null;
         };
         /** Status */
         Status: {
@@ -6206,6 +6472,79 @@ export interface operations {
             };
         };
     };
+    list_dividend_observations: {
+        parameters: {
+            query?: {
+                security_id?: string | null;
+                provider_id?: ("eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual") | null;
+                from_date?: string | null;
+                to_date?: string | null;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservationPage_DividendObservationRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     start_dividend_sync: {
         parameters: {
             query?: never;
@@ -7637,6 +7976,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_ProviderCoverage_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_split_observations: {
+        parameters: {
+            query?: {
+                security_id?: string | null;
+                provider_id?: ("eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual") | null;
+                from_date?: string | null;
+                to_date?: string | null;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservationPage_SplitObservationRecord_"];
                 };
             };
             /** @description Unauthorized */

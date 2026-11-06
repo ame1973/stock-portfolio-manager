@@ -1,7 +1,6 @@
 """Safe source-job DTOs and HTTP intents reuse the fenced controller, never performing HTTP."""
 
 from collections.abc import Mapping
-from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -115,17 +114,6 @@ def cancel(con: Connection, auth: Auth, job_id: UUID, request_id: str) -> Source
             409, "JOB_CANCEL_REJECTED", "The cancellation could not be accepted"
         ) from None
     return as_job(con, row)
-
-
-def validate_job_cursor(page: PageQuery) -> None:
-    if page.cursor_value is None:
-        return
-    try:
-        value = datetime.fromisoformat(page.cursor_value)
-        if value.tzinfo is None or jobs._clock(value) != page.cursor_value:
-            raise ValueError("Noncanonical job timestamp")
-    except (ValueError, OverflowError):
-        raise ApiError(422, "INVALID_CURSOR", "Invalid job pagination cursor") from None
 
 
 def validate_item_cursor(page: PageQuery) -> None:
