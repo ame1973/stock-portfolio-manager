@@ -1,7 +1,9 @@
 """Administrative commands; migrations never run implicitly inside HTTP requests."""
 
 import argparse
+import asyncio
 import fcntl
+import json
 import os
 import shutil
 import sqlite3
@@ -63,12 +65,25 @@ def _upgrade(engine: Engine) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stock Portfolio Manager administration")
-    parser.add_argument("command", choices=["migrate", "check", "setup-token"])
+    parser.add_argument("command", choices=["migrate", "check", "setup-token", "providers-check"])
     args = parser.parse_args()
     settings = Settings()
     if args.command == "migrate":
         migrate(settings)
         print("Migrations applied and database integrity verified.")
+    elif args.command == "providers-check":
+        from spm_api.providers.runtime import check_configurations
+
+        reports = asyncio.run(check_configurations(settings))
+        print(
+            json.dumps(
+                {
+                    "scope": "CONFIGURATION_ONLY",
+                    "providers": [report.model_dump(mode="json") for report in reports],
+                },
+                sort_keys=True,
+            )
+        )
     else:
         engine = make_engine(settings.database_path)
         try:

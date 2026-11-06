@@ -16,9 +16,9 @@ RUN case "$ENABLE_YFINANCE" in \
     esac \
     && groupadd --gid 10001 spm \
     && useradd --uid 10001 --gid spm --no-create-home spm \
-    && mkdir -p /data /backups \
-    && chown 10001:10001 /data /backups \
-    && chmod 700 /data /backups
+    && mkdir -p /data /backups /run/spm-provider-secrets \
+    && chown 10001:10001 /data /backups /run/spm-provider-secrets \
+    && chmod 700 /data /backups /run/spm-provider-secrets
 USER 10001:10001
 EXPOSE 8000
 CMD ["sh", "-c", "umask 077; spm-manage migrate && exec uvicorn spm_api.main:app --host 0.0.0.0 --port 8000 --no-access-log"]

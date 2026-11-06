@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     public_origin: str = "http://localhost:5173"
     data_dir: Path = ROOT / ".local/data"
     backup_dir: Path = ROOT / ".local/backups"
+    provider_secret_dir: Path = ROOT / "secrets"
     minimum_free_bytes: int = 100 * 1024 * 1024
 
     @model_validator(mode="after")

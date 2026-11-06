@@ -16,6 +16,8 @@ uploads
 exports
 **/*.db
 **/*.sqlite3
+**/*.key
+**/*.pem
 .venv
 **/node_modules
 **/dist

@@ -12,6 +12,7 @@ services:
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
       DATA_DIR: /data
       BACKUP_DIR: /backups
+      PROVIDER_SECRET_DIR: /run/spm-provider-secrets
       TZ: ${TZ:-Asia/Hong_Kong}
       # Trust forwarded metadata from the Nginx gateway only, not arbitrary peers.
       FORWARDED_ALLOW_IPS: ${WEB_INTERNAL_IP:-172.30.93.10}
@@ -19,6 +20,7 @@ services:
     volumes:
       - data:/data
       - backups:/backups
+      - provider_secrets:/run/spm-provider-secrets:ro
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -40,6 +42,7 @@ services:
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
       DATA_DIR: /data
       BACKUP_DIR: /backups
+      PROVIDER_SECRET_DIR: /run/spm-provider-secrets
       TZ: ${TZ:-Asia/Hong_Kong}
     depends_on:
       api:
@@ -47,6 +50,7 @@ services:
     volumes:
       - data:/data
       - backups:/backups
+      - provider_secrets:/run/spm-provider-secrets:ro
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -90,3 +94,4 @@ networks:
 volumes:
   data:
   backups:
+  provider_secrets:
