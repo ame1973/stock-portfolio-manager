@@ -1,13 +1,12 @@
 # Explicit source schedule timing
 
-**Current implementation:** the validated timing policy/date calculations and
-migration `0011_source_schedules` are installed internally. The migration adds
-owned disabled definitions and append-only occurrence storage, not automatic
-scheduling. Owner CRUD, the due-occurrence controller and worker/UI integration
-are **not yet installed**. Importing a policy or migrating the database creates
-no schedule, job, provider enablement, HTTP request or financial mutation. The
-existing manual source-job workspace remains available; this foundation is not
-a scheduler API.
+**Current implementation:** the validated timing policy/date calculations,
+migration `0011_source_schedules` and internal owned schedule controller are
+installed. Protected HTTP CRUD and automatic worker/UI integration are **not yet
+installed**. Importing a policy, migrating or reading due candidates creates no
+schedule, job, provider enablement, HTTP request or financial mutation. Explicit
+internal controller writes can create disabled definitions or materialize sealed
+SOURCE_ONLY jobs; this is not an available owner scheduler API.
 
 ## Explicit policy, no inferred scope
 
@@ -101,13 +100,14 @@ committed job-item set must agree. These are source jobs, not canonical adoption
 
 An occurrence insert advances the matching enabled definition/version atomically
 through an SQLite trigger; direct forged progress is rejected. Occurrences cannot
-be updated/deleted and schedule identity cannot be deleted. The future controller
-must enqueue the job, insert the occurrence and append its audit in the **same short
+be updated/deleted and schedule identity cannot be deleted. The internal controller
+enqueues the job, inserts the occurrence and appends its audit in the **same short
 writer transaction**. A late failure rolls all three and parent progress back.
 SQLite validates policy shape, catalogue market/timezone, civil dates and window
-arithmetic; callers must still verify canonical JSON/SHA-256 and exact `zoneinfo`
-slot/next-slot calculations. There is no SQL approximation of DST or a trusted
-exchange-session calendar, and no supported operator SQL activation workflow.
+arithmetic; the controller separately verifies canonical JSON/SHA-256 and exact
+`zoneinfo` slot/next-slot calculations. There is no SQL approximation of DST or a
+trusted exchange-session calendar, and no supported operator SQL activation
+workflow.
 
 Only one nonterminal job per schedule is permitted. QUEUED, LEASED, RUNNING,
 RETRYING and CANCEL_REQUESTED all exert backpressure; a durable
@@ -121,17 +121,48 @@ manual source request or a new disabled definition is required for another one.
 Pausing/editing metadata changes future scheduling, not already queued work;
 existing job cancellation remains a separate stop intent.
 
+## Internal controller, not protected owner routes
+
+`schedule_service` provides disabled creation, reasoned full-body CAS revision,
+owned reads, bounded due owner/ID candidates, frozen due evaluation and atomic
+materialization. Creation does not accept an enabled flag. Revision requires a
+strict explicit boolean/reason and the observed version; a worker advance also
+makes an older editor stale. Catalogue markets/timezones, not quote currency,
+determine scope. Explicit edits/re-enablement recompute the next slot from the
+server clock, without replaying earlier missed slots. Equality may schedule a
+not-yet-materialized current instant, but never reuse the last materialized slot.
+Pause retains existing work/history; no HTTP/secret-file access occurs in writers.
+
+A due evaluation coalesces elapsed slots to **one latest** market-local occurrence
+instead of emitting a potentially years-long backlog. Bounded scans return IDs so
+a future worker can isolate corrupt definitions. Materialization rechecks owner,
+enablement, version, policy, expected slot, latest elapsed slot and the first-job
+marker. If another slot elapsed while private selections were prepared, reevaluate
+rather than enqueue stale work. Each observed version has a deterministic internal
+intent and one immutable receipt. Concurrent writers/replays return the original
+receipt with zero additional writes, including after pause, job cancellation or
+configuration rotation; changed frozen intent conflicts instead of relabelling it.
+The receipt describes enqueue/skip, not completed provider work or financial income.
+
+Server-derived provider selections must exactly match the policy for a new job;
+missing configuration can remain explicitly null, never become enabled on replay.
+Replay and in-flight skips need no new selections. The caller owns the short
+writer UoW and must let failures unwind it; validation/audit/response errors must
+not be swallowed and committed as a partial write. Aware UTC clocks, finite
+calendar/window bounds, strict internal datetime types and fixed safe corruption
+errors prevent timestamp guessing, silent rehash/repair or private exception dumps.
+
 ## Integration still required
 
-The due controller must recheck owner/version/enablement, coalesce missed slots
-without an unbounded backlog, retain original occurrence receipts on replay, and
-atomically materialize unique jobs/audit/advance. Pin current private configuration
-outside writer transactions per occurrence, then reuse the existing sealed job
-controller, aliases, shared quotas/circuit and fenced worker. Actor-bound CRUD,
-CAS/idempotency, explicit enablement, safe diagnostics and actual worker/UI
-integration must pass their own gates before exposing owner controls. An enabled
-schedule never resets shared upstream spending or adopts dividends, receipts,
-shares, cash or historical FX.
+These are internal domain functions, not authenticated HTTP endpoints. Protected
+CRUD/list/occurrence DTOs still require session/CSRF/owner rechecks, HTTP idempotency,
+CAS, no-store handling and safe serialization before exposing owner controls.
+Automatic leader-worker scheduling must prepare private profiles outside writers,
+then call the controller and reuse existing aliases, shared quotas/circuit and
+fenced execution. There is no startup-created schedule, implicit provider
+permission, quota reset or automatic canonical dividend/receipt/share/cash/FX
+adoption. Worker stop/restart/backpressure and responsive owner UI need their own
+end-to-end acceptance.
 
 Paid/live providers, verified trading-session calendars, target NAS and production
 schedule acceptance remain NOT_TESTED.

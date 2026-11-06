@@ -406,7 +406,7 @@ Rows retain the original run, fingerprint and retrieval time plus distinct sight
 
 Automatic job-creation schedules, active settings/key-import management and cited evidence creation/review APIs are still being implemented; the [source workspace](docs/providers/WORKSPACE.md) provides explicit queueing/diagnostics without those unfinished controls. No job is created or provider enabled at startup. Source execution does not reconcile canonical dividends, create receipts, change ledger facts or claim a complete financial sync. Default unconfigured installations make no upstream requests.
 
-The internal [market-local source schedule foundation](docs/providers/SCHEDULES.md) includes DST-safe daily/week-pattern/weekly timing, exact recurring/initial windows, disabled owned definitions and immutable occurrence storage. It is **not an installed scheduler API**: owner controls, the due-job controller and worker/UI integration remain unfinished. Migration/evaluation creates no schedule, job, upstream request, financial fact or provider enablement; verified trading-session calendars are not available.
+The internal [market-local source schedule foundation](docs/providers/SCHEDULES.md) includes DST-safe timing/windows, disabled owned definitions, immutable receipts and a CAS-fenced controller that coalesces missed slots and atomically enqueues source-only work with backpressure/replay. It is **not an installed scheduler API**: protected owner routes and automatic worker/UI integration remain unfinished. Migration/due reads create no schedule, job, upstream request, financial fact or provider enablement; verified trading-session calendars are not available.
 
 ## Trusted HTTPS proxy
 

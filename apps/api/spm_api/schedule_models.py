@@ -1,14 +1,14 @@
-"""Explicit source-schedule policy; no enablement, credentials or financial adoption."""
+"""Explicit source schedule policies, owner intents and internal frozen timing fences."""
 
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, ConfigDict, Field, field_validator, model_validator
 
 from spm_api.decimal_types import IsoDate
 from spm_api.errors import Model
 from spm_api.job_models import SourceOperation
-from spm_api.master_models import ProviderId
+from spm_api.master_models import ChangeReason, Name, ProviderId
 from spm_api.providers.base import Market, registry
 
 
@@ -60,3 +60,27 @@ class SourceSchedulePolicy(Model):
     @property
     def exchange_timezone(self) -> str:
         return "Asia/Hong_Kong" if self.market == "HK" else "America/New_York"
+
+
+class SourceScheduleCreate(Model):
+    name: Name
+    policy: SourceSchedulePolicy
+
+
+class SourceScheduleUpdate(SourceScheduleCreate):
+    enabled: bool = Field(strict=True)
+    reason: ChangeReason
+
+
+class DueSchedule(Model):
+    """Internal frozen evaluation fence, not a caller-supplied scheduling API body."""
+
+    model_config = ConfigDict(frozen=True)
+
+    schedule_id: UUID
+    owner_id: UUID
+    version: int = Field(strict=True, ge=1, le=2147483647)
+    expected_run_at: Annotated[AwareDatetime, Field(strict=True)]
+    due_at: Annotated[AwareDatetime, Field(strict=True)]
+    policy: SourceSchedulePolicy
+    initial: bool = Field(strict=True)
