@@ -90,6 +90,7 @@ that no other dividends existed. Source-only split history starts with v1 storag
 
 This is installation-wide security/source history for the single-owner product,
 not a multi-tenant financial authorization model. Owner-scoped brokerage/job
-boundaries are unchanged. Cited evidence creation, canonical reconciliation/review,
-source UI, schedules and managed-key mutation remain subsequent work. Paid/live
+boundaries are unchanged. The [source workspace](WORKSPACE.md) reads these exact
+assertions without adoption. Cited evidence creation, canonical reconciliation/
+review, schedules and managed-key mutation remain subsequent work. Paid/live
 provider and target-NAS validation remains NOT_TESTED.

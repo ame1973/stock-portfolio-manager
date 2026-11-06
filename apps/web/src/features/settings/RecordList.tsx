@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Button } from "../../components/ui/button";
-import { FinancialTable, type LedgerColumn } from "../../components/ui/financial-table";
+import { FinancialTable, type LedgerColumn, type ServerOrder } from "../../components/ui/financial-table";
 import { useDesktop } from "../../lib/use-desktop";
 import { failureMessage } from "../../lib/api";
 import { usePageState } from "./data";
 
 type Page<T> = { items: T[]; next_cursor?: string | null };
-export function RecordList<T extends { id: string }>({ title, result, page, children, searchable = true, filtered = false, columns }: {
-  title: string; result: UseQueryResult<Page<T>>; page: ReturnType<typeof usePageState>; searchable?: boolean; filtered?: boolean; columns?: LedgerColumn<T>[];
+export function RecordList<T extends { id: string }>({ title, result, page, children, searchable = true, filtered = false, columns, emptyMessage, order }: {
+  title: string; result: UseQueryResult<Page<T>>; page: ReturnType<typeof usePageState>; searchable?: boolean; filtered?: boolean; columns?: LedgerColumn<T>[]; emptyMessage?: ReactNode; order?: ServerOrder;
   children: (record: T) => ReactNode;
 }) {
   const desktop = useDesktop();
@@ -31,8 +31,8 @@ export function RecordList<T extends { id: string }>({ title, result, page, chil
     </div>}
     {result.data && <>
       {result.data.items.length === 0 ? <div className="panel text-sm leading-7 text-secondary">
-        {filtered ? "這個篩選範圍沒有紀錄；請調整日期、搜尋或清除篩選。" : page.q ? "沒有符合搜尋的紀錄；請縮短名稱或清除搜尋。" : `尚未建立${title}；請使用新增按鈕開始。`}
-      </div> : desktop && columns ? <FinancialTable title={title} data={result.data.items} columns={columns}>{children}</FinancialTable> : <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+        {filtered ? "這個篩選範圍沒有紀錄；請調整日期、搜尋或清除篩選。" : page.q ? "沒有符合搜尋的紀錄；請縮短名稱或清除搜尋。" : emptyMessage ?? `尚未建立${title}；請使用新增按鈕開始。`}
+      </div> : desktop && columns ? <FinancialTable title={title} data={result.data.items} columns={columns} order={order}>{children}</FinancialTable> : <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
         {result.data.items.map(record => <li key={record.id} className="min-w-0 p-4 sm:p-5">{children(record)}</li>)}
       </ul>}
       <div className="flex flex-wrap items-center gap-3">

@@ -5,18 +5,19 @@ import { Button } from "./button";
 // Server keyset pagination owns navigation; no client pagination/sort/aggregate feature is enabled.
 const features = tableFeatures({});
 export type LedgerColumn<T extends { id: string }> = ColumnDef<typeof features, T>;
+export type ServerOrder = { description: string; direction: "ascending" | "descending" };
 
-export function FinancialTable<T extends { id: string }>({ title, data, columns, children }: {
-  title: string; data: T[]; columns: LedgerColumn<T>[]; children: (record: T) => ReactNode;
+export function FinancialTable<T extends { id: string }>({ title, data, columns, children, order = { description: "生效日期／ID 倒序", direction: "descending" } }: {
+  title: string; data: T[]; columns: LedgerColumn<T>[]; children: (record: T) => ReactNode; order?: ServerOrder;
 }) {
   const prefix = useId();
   const [expanded, setExpanded] = useState<string | null>(null);
   const table = useTable({ features, data, columns, getRowId: row => row.id });
   return <div role="region" aria-label={`${title}伺服器分頁表格`} tabIndex={0} className="min-w-0 overflow-x-auto rounded-lg border border-border bg-surface">
     <table className="w-full min-w-[48rem] border-collapse text-left text-sm">
-      <caption className="border-b border-border p-4 text-left leading-6 text-secondary">{title}：只列伺服器回傳的本頁 {data.length} 筆，非全部紀錄。生效日期／ID 倒序；不在瀏覽器重排或加總金融數值。</caption>
+      <caption className="border-b border-border p-4 text-left leading-6 text-secondary">{title}：只列伺服器回傳的本頁 {data.length} 筆，非全部紀錄。{order.description}；不在瀏覽器重排或加總金融數值。</caption>
       <thead className="bg-muted">{table.getHeaderGroups().map(group => <tr key={group.id}>
-        {group.headers.map((header, index) => <th key={header.id} scope="col" aria-sort={index === 0 ? "descending" : undefined} className="border-b border-border px-4 py-3 font-semibold">{header.isPlaceholder ? null : <table.FlexRender header={header} />}</th>)}
+        {group.headers.map((header, index) => <th key={header.id} scope="col" aria-sort={index === 0 ? order.direction : undefined} className="border-b border-border px-4 py-3 font-semibold">{header.isPlaceholder ? null : <table.FlexRender header={header} />}</th>)}
         <th scope="col" className="border-b border-border px-4 py-3 font-semibold">原值與操作</th>
       </tr>)}</thead>
       <tbody>{table.getRowModel().rows.map(row => <Fragment key={row.id}>

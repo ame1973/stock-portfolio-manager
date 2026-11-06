@@ -3,8 +3,9 @@
 This contract describes installed source-only enqueue/read/cancel HTTP APIs and
 server-side job control. The [worker](WORKER.md) dispatches explicitly queued
 source jobs through shared upstream reservation/circuit policy, with an independent
-heartbeat. Scheduled job creation, monitoring UI and canonical reconciliation are
-still unfinished. Startup creates no job or provider enablement, and paid/live
+heartbeat. The [source workspace](WORKSPACE.md) provides owner progress and
+cancellation UI; scheduled job creation and canonical reconciliation remain
+unfinished. Startup creates no job or provider enablement, and paid/live
 coverage remains NOT_TESTED.
 
 ## Authenticated HTTP intents and safe diagnostics

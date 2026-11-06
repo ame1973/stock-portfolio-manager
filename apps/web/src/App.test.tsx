@@ -60,13 +60,13 @@ describe("financial workspace navigation", () => {
     vi.spyOn(api, "GET").mockImplementation(async path => ({ data: path === "/api/v1/health/ready" ? { status: "ready" } : { items: [], next_cursor: null }, response: new Response() }));
   }
 
-  it("has six working desktop destinations and exactly five mobile destinations with labelled collapsed icons", async () => {
+  it("has seven working desktop destinations and exactly five mobile destinations with labelled collapsed icons", async () => {
     reads();
     renderApp();
     await screen.findByText("已連線，資料庫已就緒");
     const desktop = screen.getByRole("navigation", { name: "主要導覽" });
     const mobile = screen.getByRole("navigation", { name: "手機主要導覽" });
-    expect(within(desktop).getAllByRole("link")).toHaveLength(6);
+    expect(within(desktop).getAllByRole("link")).toHaveLength(7);
     expect(within(mobile).getAllByRole("link")).toHaveLength(5);
     expect(within(desktop).getByRole("link", { name: "服務連線" })).toHaveAttribute("aria-current", "page");
     fireEvent.click(screen.getByRole("button", { name: "收合導覽" }));
@@ -76,6 +76,28 @@ describe("financial workspace navigation", () => {
     expect(await screen.findByRole("heading", { name: "交易紀錄" })).toBeVisible();
     expect(within(desktop).getByRole("link", { name: "交易紀錄" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("main")).toHaveFocus();
+  });
+
+  it("reaches the data center from settings on mobile and isolates dividend/split memory filters", async () => {
+    reads();
+    renderApp("/settings/portfolios");
+    const settings = await screen.findByRole("navigation", { name: "設定分類" });
+    fireEvent.click(within(settings).getByRole("link", { name: "資料中心與來源擷取" }));
+    await screen.findByRole("heading", { name: "來源設定與候選能力" });
+    const tabs = screen.getByRole("navigation", { name: "資料中心分類" });
+    fireEvent.click(within(tabs).getByRole("link", { name: "股息觀測" }));
+    await screen.findByRole("heading", { name: "股息來源觀測" });
+    fireEvent.change(screen.getByLabelText("除淨起日"), { target: { value: "2026-01-02" } });
+    fireEvent.change(screen.getByLabelText("搜尋股息來源觀測"), { target: { value: "frozen source" } });
+    fireEvent.click(within(tabs).getByRole("link", { name: "拆股因子" }));
+    await screen.findByRole("heading", { name: "provider-only 拆股因子" });
+    expect(screen.getByLabelText("生效起日")).toHaveValue("");
+    expect(screen.getByLabelText("搜尋provider-only 拆股因子")).toHaveValue("");
+    fireEvent.click(within(tabs).getByRole("link", { name: "股息觀測" }));
+    await screen.findByRole("heading", { name: "股息來源觀測" });
+    expect(screen.getByLabelText("除淨起日")).toHaveValue("2026-01-02");
+    expect(screen.getByLabelText("搜尋股息來源觀測")).toHaveValue("frozen source");
+    expect(localStorage.length + sessionStorage.length).toBe(0);
   });
 
   it("restores financial filters/search when navigating back and removes individual chips without browser persistence", async () => {

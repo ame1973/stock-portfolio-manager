@@ -29,8 +29,8 @@ export function SelectField({ label, error, help, id, children, ...props }: Comp
   </div>;
 }
 
-export function FormFrame({ title, children, error, pending, onCancel, onSubmit, onChange }: {
-  title: string; children: ReactNode; error: string | null; pending: boolean;
+export function FormFrame({ title, children, error, pending, onCancel, onSubmit, onChange, submitLabel = "儲存", pendingLabel = "正在儲存…" }: {
+  title: string; children: ReactNode; error: string | null; pending: boolean; submitLabel?: string; pendingLabel?: string;
   onCancel: () => void; onSubmit: ComponentProps<"form">["onSubmit"]; onChange?: () => void;
 }) {
   return <form aria-label={title} aria-busy={pending} onSubmit={onSubmit} onChange={onChange} className="panel grid gap-5">
@@ -38,7 +38,7 @@ export function FormFrame({ title, children, error, pending, onCancel, onSubmit,
     <fieldset disabled={pending} className="grid gap-5 sm:grid-cols-2">{children}</fieldset>
     {error && <p role="alert" className="text-sm leading-6 text-danger">{error}</p>}
     <div className="flex flex-wrap gap-3">
-      <Button type="submit" disabled={pending}>{pending ? "正在儲存…" : "儲存"}</Button>
+      <Button type="submit" disabled={pending}>{pending ? pendingLabel : submitLabel}</Button>
       <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>取消</Button>
     </div>
   </form>;

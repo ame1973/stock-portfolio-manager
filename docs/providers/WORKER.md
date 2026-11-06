@@ -9,7 +9,8 @@ NOT_TESTED.
 
 Owner-authenticated source enqueue/read/cancel APIs are available; see the
 [HTTP contract](JOBS.md#authenticated-http-intents-and-safe-diagnostics).
-Job-creation schedules, monitoring UI, cited evidence creation/review APIs and
+The [source workspace](WORKSPACE.md) provides explicit queueing, progress and
+cancellation. Job-creation schedules, cited evidence creation/review APIs and
 key-import settings are still unfinished. Provider configuration/recorded-source
 reads and [exact observation lists](OBSERVATIONS.md) are available separately,
 never as a live probe.

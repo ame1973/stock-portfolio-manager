@@ -38,6 +38,13 @@ describe("server-owned financial table", () => {
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
   });
 
+  it("describes ascending source orders without changing the server rows or financial defaults", () => {
+    render(<FinancialTable title="來源診斷" data={rows} columns={columns} order={{ description: "來源 ID／證券 ID 升序", direction: "ascending" }}>{record => <article>{record.id}</article>}</FinancialTable>);
+    expect(screen.getByRole("caption")).toHaveTextContent("來源 ID／證券 ID 升序");
+    expect(screen.getByRole("columnheader", { name: "日期" })).toHaveAttribute("aria-sort", "ascending");
+    expect(screen.getAllByRole("row")[1]).toHaveTextContent("2050-01-02");
+  });
+
   it("expands only one physical record and retains the same detail/action renderer", () => {
     render(<FinancialTable title="測試事實" data={rows} columns={columns}>{record => <article aria-label={record.id}>原值 {record.ratio}<Button>依據更正</Button></article>}</FinancialTable>);
     fireEvent.click(screen.getAllByRole("button", { name: "查看原值與操作" })[0]!);

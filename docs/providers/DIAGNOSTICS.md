@@ -100,8 +100,9 @@ reports `legacy_status_ignored` when an unvalidated retained status row exists.
 Arbitrary old status/error/source metadata is neither dumped nor used to fill
 coverage/success. GET never backfills, deletes or adopts it.
 
-[Exact dividend/split observation lists](OBSERVATIONS.md) are available separately;
-cited evidence creation/review workflows, source UI, automatic schedules and
-managed key import/settings are subsequent work. These diagnostics do not complete
-canonical reconciliation or the full portfolio application.
+[Exact dividend/split observation lists](OBSERVATIONS.md) and the owner-facing
+[source workspace](WORKSPACE.md) are available separately; cited evidence creation/
+review workflows, automatic schedules and managed key import/settings are
+subsequent work. These diagnostics do not complete canonical reconciliation or
+the full portfolio application.
 Paid/live provider and target-NAS acceptance remains NOT_TESTED.

@@ -4,7 +4,7 @@ import type { components } from "../../packages/contracts/src/schema";
 type Schemas = components["schemas"];
 type Post = <T>(path: string, data: object) => Promise<T>;
 
-async function sheetGeometry(page: Page, name: string, trap = false) {
+export async function sheetGeometry(page: Page, name: string, trap = false) {
   const sheet = page.getByRole("dialog", { name, exact: true });
   await expect(sheet).toBeVisible();
   const close = sheet.getByRole("button", { name: "關閉編輯", exact: true });
@@ -37,7 +37,7 @@ async function sheetGeometry(page: Page, name: string, trap = false) {
   return sheet;
 }
 
-async function cancelSheet(page: Page, sheet: Locator, opener: Locator, allowContentFallback = false) {
+export async function cancelSheet(page: Page, sheet: Locator, opener: Locator, allowContentFallback = false) {
   await page.keyboard.press("Escape");
   await expect(sheet).toHaveCount(0);
   if (allowContentFallback) {
@@ -90,7 +90,7 @@ export async function workspaceBrowserForms(page: Page, post: Post) {
     if (item.key === "action") await expect(row).toContainText("9223372036854775806");
     await page.screenshot({ path: `.local/screenshots/workspace-table-${item.key}-1440.png`, fullPage: true });
     const sidebar = page.getByRole("navigation", { name: "主要導覽", exact: true });
-    await expect(sidebar.getByRole("link")).toHaveCount(6);
+    await expect(sidebar.getByRole("link")).toHaveCount(7);
     await page.getByRole("button", { name: "收合導覽", exact: true }).click();
     await expect(page.getByRole("button", { name: "展開導覽", exact: true })).toHaveAttribute("aria-expanded", "false");
     await expect(sidebar.getByRole("link", { name: "交易紀錄", exact: true })).toBeVisible();

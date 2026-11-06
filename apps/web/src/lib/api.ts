@@ -35,6 +35,10 @@ const messages: Record<string, string> = {
   INVALID_CURSOR: "分頁狀態已失效，請重新開始查詢。",
   MIGRATION_REQUIRED: "資料庫版本不符，請先完成遷移。",
   DATABASE_UNAVAILABLE: "資料庫暫時無法使用，請稍候重試。",
+  SOURCE_EVIDENCE_UNAVAILABLE: "來源證據未通過完整性檢查；沒有顯示或修補不安全內容，請核對伺服器記錄與有效備份。",
+  INVALID_SECURITY_SCOPE: "請核對明確選擇的穩定證券身分與數量；不會自動擴大擷取範圍。",
+  JOB_REQUEST_REJECTED: "未能建立來源工作，請核對證券、來源及日期後重試；不會自動啟用來源。",
+  JOB_CANCEL_REJECTED: "未能確認取消意圖，請重新載入工作狀態；不能視為已停止。",
 };
 
 export function errorMessage(error: { code?: string } | undefined) {

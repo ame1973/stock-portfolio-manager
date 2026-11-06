@@ -17,6 +17,12 @@ const BookingPage = lazy(() => import("./features/ledger/BookingPage").then(modu
 const AccountCashPage = lazy(() => import("./features/ledger/AccountCashPage").then(module => ({ default: module.AccountCashPage })));
 const TransferPage = lazy(() => import("./features/ledger/TransferPage").then(module => ({ default: module.TransferPage })));
 const ActionPage = lazy(() => import("./features/ledger/ActionPage").then(module => ({ default: module.ActionPage })));
+const DataCenterLayout = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.DataCenterLayout })));
+const ProvidersPage = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.ProvidersPage })));
+const CoveragePage = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.CoveragePage })));
+const ObservationsPage = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.ObservationsPage })));
+const JobsPage = lazy(() => import("./features/sources/JobsPage").then(module => ({ default: module.JobsPage })));
+const JobDetailPage = lazy(() => import("./features/sources/JobsPage").then(module => ({ default: module.JobDetailPage })));
 
 const navigation = [
   { to: "/", label: "服務連線", icon: "M3 11 12 3l9 8M5 10v11h5v-7h4v7h5V10" },
@@ -24,6 +30,7 @@ const navigation = [
   { to: "/cash", label: "現金帳", icon: "M3 5h18v15H3V5Zm12 5h6v5h-6v-5ZM7 5V3h11v2" },
   { to: "/transfers", label: "股票轉倉", icon: "M3 7h17m-4-4 4 4-4 4M21 17H4m4-4-4 4 4 4" },
   { to: "/corporate-actions", label: "企業行動", icon: "M12 3v7m0 0H5v8m7-8h7v8M2 18h6v4H2v-4Zm14 0h6v4h-6v-4Z" },
+  { to: "/data-center", label: "資料中心", icon: "M4 3h16v18H4V3Zm4 5h8M8 12h8M8 16h5" },
   { to: "/settings", label: "管理設定", icon: "M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6M10 15v6" },
 ];
 
@@ -79,6 +86,15 @@ function SignedInApp({ session }: { session: AuthSession }) {
             <Route path="/transfers" element={<TransferPage key="security" mode="security" />} />
             <Route path="/cash/accounts/:id" element={<AccountCashPage key={location.pathname} />} />
             <Route path="/corporate-actions" element={<ActionPage />} />
+            <Route path="/data-center" element={<DataCenterLayout />}>
+              <Route index element={<Navigate to="providers" replace />} />
+              <Route path="providers" element={<ProvidersPage />} />
+              <Route path="coverage" element={<CoveragePage />} />
+              <Route path="dividends" element={<ObservationsPage key="dividends" mode="dividends" />} />
+              <Route path="splits" element={<ObservationsPage key="splits" mode="splits" />} />
+              <Route path="jobs" element={<JobsPage />} />
+              <Route path="jobs/:id" element={<JobDetailPage key={location.pathname} />} />
+            </Route>
             <Route path="/settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="portfolios" replace />} />
               <Route path="portfolios" element={<PortfoliosPage />} />
@@ -95,7 +111,7 @@ function SignedInApp({ session }: { session: AuthSession }) {
       </div>
     </div>
     <nav aria-label="手機主要導覽" className="mobile-workspace-nav fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-surface lg:hidden">
-      {navigation.slice(1).map(item => <NavLink key={item.to} to={item.to} aria-label={item.label} className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-xs aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-primary"><NavIcon path={item.icon} /><span>{item.label}</span></NavLink>)}
+      {navigation.filter(item => item.to !== "/" && item.to !== "/data-center").map(item => <NavLink key={item.to} to={item.to} aria-label={item.label} className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-xs aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-primary"><NavIcon path={item.icon} /><span>{item.label}</span></NavLink>)}
     </nav>
   </div></ViewContext>;
 }
@@ -105,6 +121,7 @@ function SettingsLayout() {
   return <div className="grid gap-8">
     <nav aria-label="設定分類" className="flex flex-wrap gap-2 border-b border-border pb-4">
       {links.map(([path, label]) => <NavLink key={path} to={`/settings/${path}`} className="inline-flex min-h-11 items-center rounded-md border border-transparent px-4 text-sm font-medium aria-[current=page]:border-border aria-[current=page]:bg-surface aria-[current=page]:text-primary">{label}</NavLink>)}
+      <NavLink to="/data-center" className="inline-flex min-h-11 items-center rounded-md border border-transparent px-4 text-sm font-medium text-primary underline">資料中心與來源擷取</NavLink>
     </nav>
     <Outlet />
   </div>;
@@ -129,7 +146,7 @@ function ServiceStatus() {
       <h2 id="status-title" className="text-lg font-semibold">服務連線</h2>
       {health.isPending ? <p role="status" className="my-5 text-secondary">正在檢查服務狀態…</p>
         : health.isError ? <div role="alert" className="my-5 text-danger"><p>暫時無法使用</p><p className="mt-2 text-sm leading-6">{health.error.message}</p></div>
-          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供交易、現金／費用、轉倉、企業行動及期初設定；估值、供應商同步與完整離線／備份功能仍在開發。</p></div>}
+          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供交易、現金／費用、轉倉、企業行動、期初設定及來源擷取／觀測診斷；股息採納／實收、估值與完整離線／備份功能仍在開發。</p></div>}
       <Button variant="outline" onClick={() => void health.refetch()} disabled={health.isFetching}>重新檢查</Button>
     </section>
   </div>;
