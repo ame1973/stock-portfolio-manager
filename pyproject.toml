@@ -30,10 +30,16 @@ dev = [
   "ruff>=0.11,<1",
   "types-jsonschema>=4.23",
   "types-pyyaml>=6",
+  "yfinance==1.8.0",
 ]
 
 [project.scripts]
 spm-manage = "spm_api.cli:main"
+
+[project.optional-dependencies]
+yahoo-sdk = [
+    "yfinance==1.8.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["apps/api/spm_api", "apps/worker/spm_worker"]

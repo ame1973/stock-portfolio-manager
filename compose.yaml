@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: infra/api.Dockerfile
+      args:
+        ENABLE_YFINANCE: "${ENABLE_YFINANCE:-false}"
     image: spm-api:local
     environment:
       APP_ENV: ${APP_ENV:-development}

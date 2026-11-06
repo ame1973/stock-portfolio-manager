@@ -8,7 +8,12 @@ COPY apps/api ./apps/api
 COPY apps/worker ./apps/worker
 COPY alembic.ini ./
 COPY migrations ./migrations
-RUN uv sync --frozen --no-dev \
+ARG ENABLE_YFINANCE=false
+RUN case "$ENABLE_YFINANCE" in \
+        true) uv sync --frozen --no-dev --extra yahoo-sdk ;; \
+        false) uv sync --frozen --no-dev ;; \
+        *) printf 'ENABLE_YFINANCE must be true or false\n' >&2; exit 2 ;; \
+    esac \
     && groupadd --gid 10001 spm \
     && useradd --uid 10001 --gid spm --no-create-home spm \
     && mkdir -p /data /backups \

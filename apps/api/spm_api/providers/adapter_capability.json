@@ -45,7 +45,8 @@
       "markets": ["HK", "US"],
       "access_mode": "OPTIONAL_SDK",
       "documentation_url": "https://ranaroussi.github.io/yfinance/",
-      "data_rights": "UNVERIFIED"
+      "data_rights": "UNVERIFIED",
+      "operations": ["DIVIDENDS", "SPLITS"]
     },
     {
       "provider_id": "hkex_evidence",

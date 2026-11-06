@@ -3,6 +3,7 @@
 from calendar import timegm
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from spm_api.providers.adapters import AdapterHealth, FetchPage
@@ -60,7 +61,7 @@ def _dividend(row: dict[str, JsonValue], alias: AliasPeriod) -> DividendObservat
     assert isinstance(identifier, str)
     currency, original = source_currency(row.get("currency"))
     return DividendObservation(
-        provider_id="yahoo",
+        provider_id=alias.provider_id,
         security_id=alias.security_id,
         provider_symbol=alias.provider_symbol,
         provider_event_id=identifier,
@@ -84,7 +85,7 @@ def _split(row: dict[str, JsonValue], alias: AliasPeriod) -> SplitObservation:
     effective_date = source_date(row["_event_date"], required=True)
     assert effective_date is not None
     return SplitObservation(
-        provider_id="yahoo",
+        provider_id=alias.provider_id,
         security_id=alias.security_id,
         provider_symbol=alias.provider_symbol,
         provider_event_id=identifier,
@@ -97,13 +98,15 @@ def _split(row: dict[str, JsonValue], alias: AliasPeriod) -> SplitObservation:
 class YahooAdapter:
     """One chart request per operation; no cookies/crumb negotiation or hidden fallback."""
 
+    _provider_id: Literal["yahoo", "yfinance"] = "yahoo"
+
     def __init__(self, transport: ProviderHTTP) -> None:
         if transport.provider_id != "yahoo":
             raise ValueError("Yahoo adapter requires its own fixed-origin transport")
         self._http = transport
 
     def get_capabilities(self) -> ProviderDefinition:
-        return registry()["yahoo"]
+        return registry()[self._provider_id]
 
     async def healthcheck(self) -> AdapterHealth:
         return configuration_health(self._http)
@@ -120,6 +123,14 @@ class YahooAdapter:
     ) -> FetchPage[SplitObservation]:
         return await self._fetch(segment, cursor, "splits", _split, FetchPage[SplitObservation])
 
+    def _readiness_error(self) -> str | None:
+        return None
+
+    def _event_records(
+        self, records: dict[str, JsonValue], zone: ZoneInfo, resource: str
+    ) -> list[JsonValue]:
+        return _dated_events(records, zone)
+
     async def _fetch[T: SourceObservation](
         self,
         segment: AliasSegment,
@@ -128,7 +139,7 @@ class YahooAdapter:
         parse: Callable[[dict[str, JsonValue], AliasPeriod], T],
         page: type[FetchPage[T]],
     ) -> FetchPage[T]:
-        if segment.alias.provider_id != "yahoo":
+        if segment.alias.provider_id != self._provider_id:
             return page(
                 state=FetchState.UNSUPPORTED,
                 window=segment.window,
@@ -177,6 +188,9 @@ class YahooAdapter:
                 window=segment.window,
                 error_code="UNREPRESENTABLE_FETCH_WINDOW",
             )
+        readiness = self._readiness_error()
+        if readiness is not None:
+            return page(state=FetchState.UNCONFIGURED, window=segment.window, error_code=readiness)
         result = await self._http.get_json(
             f"/v8/finance/chart/{segment.alias.provider_symbol}", params=params
         )
@@ -241,10 +255,18 @@ class YahooAdapter:
             warnings.append("YAHOO_ADJUSTMENT_BASIS_UNDOCUMENTED")
             if events.get("capitalGains"):
                 warnings.append("CAPITAL_GAINS_NOT_DIVIDEND_EVIDENCE")
+        if self._provider_id == "yfinance":
+            warnings.append("YFINANCE_PARSER_ONLY")
+        try:
+            normalized = self._event_records(records, zone, resource)
+        except ValueError:
+            return page(
+                state=FetchState.PARSE_ERROR, error_code="PROVIDER_NORMALIZATION_ERROR", **common
+            )
         return parsed_page(
             segment,
             result,
-            _dated_events(records, zone),
+            normalized,
             parse,
             page,
             date_key="_event_date",
