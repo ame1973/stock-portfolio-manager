@@ -65,8 +65,15 @@ def _update(con: Connection, table: str, identifier: str, at: str, **values: Any
     )
 
 
-def _event(con: Connection, job: dict[str, Any], action: str, **values: Any) -> None:
-    audit(con, job["owner_id"], "job", job["id"], action, after=values)
+def _event(
+    con: Connection,
+    job: dict[str, Any],
+    action: str,
+    *,
+    request_id: str | None = None,
+    **values: Any,
+) -> None:
+    audit(con, job["owner_id"], "job", job["id"], action, after=values, request_id=request_id)
 
 
 def owned_job(con: Connection, owner_id: UUID, job_id: UUID) -> dict[str, Any]:
@@ -84,7 +91,13 @@ def owned_job(con: Connection, owner_id: UUID, job_id: UUID) -> dict[str, Any]:
 
 
 def enqueue(
-    con: Connection, owner_id: UUID, plan: SourceJobPlan, *, intent_id: UUID, at: datetime
+    con: Connection,
+    owner_id: UUID,
+    plan: SourceJobPlan,
+    *,
+    intent_id: UUID,
+    at: datetime,
+    request_id: str | None = None,
 ) -> dict[str, Any]:
     _writer(con)
     clock = _clock(at)
@@ -155,7 +168,13 @@ def enqueue(
                 ordinal += 1
     job = _row(con, "jobs", identifier)
     _event(
-        con, job, "JOB_CREATED", scope="SOURCE_ONLY", symbols=len(plan.security_ids), items=ordinal
+        con,
+        job,
+        "JOB_CREATED",
+        scope="SOURCE_ONLY",
+        symbols=len(plan.security_ids),
+        items=ordinal,
+        request_id=request_id,
     )
     return job
 
@@ -829,7 +848,13 @@ def finish(con: Connection, lease: JobLease, *, at: datetime) -> None:
     _event(con, job, "JOB_COMPLETED", status=status, progress_done=progress)
 
 
-def _cancel(con: Connection, job: dict[str, Any], clock: str) -> None:
+def _cancel(
+    con: Connection,
+    job: dict[str, Any],
+    clock: str,
+    *,
+    request_id: str | None = None,
+) -> None:
     for item in _items(con, job["id"]):
         if item["status"] not in _ITEM_TERMINAL:
             _update(
@@ -856,11 +881,16 @@ def _cancel(con: Connection, job: dict[str, Any], clock: str) -> None:
         progress_done=progress,
         result_json=result,
     )
-    _event(con, job, "JOB_CANCELLED", progress_done=progress)
+    _event(con, job, "JOB_CANCELLED", progress_done=progress, request_id=request_id)
 
 
 def request_cancel(
-    con: Connection, owner_id: UUID, job_id: UUID, *, at: datetime
+    con: Connection,
+    owner_id: UUID,
+    job_id: UUID,
+    *,
+    at: datetime,
+    request_id: str | None = None,
 ) -> dict[str, Any]:
     _writer(con)
     job, clock = owned_job(con, owner_id, job_id), _clock(at)
@@ -872,9 +902,9 @@ def request_cancel(
         raise JobError("JOB_CLOCK_REGRESSION")
     if job["lease_expires_at"] is not None and job["lease_expires_at"] > clock:
         _update(con, "jobs", job["id"], clock, status="CANCEL_REQUESTED")
-        _event(con, job, "JOB_CANCEL_REQUESTED")
+        _event(con, job, "JOB_CANCEL_REQUESTED", request_id=request_id)
     else:
-        _cancel(con, job, clock)
+        _cancel(con, job, clock, request_id=request_id)
     return _row(con, "jobs", job["id"])
 
 

@@ -1,9 +1,9 @@
 # Upstream budgets and attempt safety
 
 This is the installed server-side reservation/outcome contract, not a live
-provider dashboard or available sync API. The [worker dispatcher](WORKER.md)
-uses it for explicitly queued source jobs; automatic schedules remain unfinished.
-All paid/live plan and target-NAS validation remains NOT_TESTED. Software limits
+provider dashboard. The [worker dispatcher](WORKER.md) uses it for source jobs
+queued through the [authenticated HTTP API](JOBS.md); automatic schedules remain
+unfinished. All paid/live plan and target-NAS validation remains NOT_TESTED. Software limits
 are not a provider invoice, remaining-account quota probe, data-rights grant or
 proof of coverage.
 

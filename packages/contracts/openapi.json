@@ -420,6 +420,13 @@
         "title": "BrokerUpdate",
         "type": "object"
       },
+      "CancelJobRequest": {
+        "additionalProperties": false,
+        "description": "An optional empty body rejects accidental credential or financial inputs.",
+        "properties": {},
+        "title": "CancelJobRequest",
+        "type": "object"
+      },
       "CashEntry": {
         "additionalProperties": false,
         "properties": {
@@ -2071,6 +2078,68 @@
         "title": "IdentifierCreate",
         "type": "object"
       },
+      "ItemStatus": {
+        "enum": [
+          "PENDING",
+          "RUNNING",
+          "RETRYING",
+          "SUCCEEDED",
+          "PARTIAL",
+          "FAILED",
+          "SKIPPED",
+          "CANCELLED"
+        ],
+        "title": "ItemStatus",
+        "type": "string"
+      },
+      "JobCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_reconciliation": {
+            "const": "NOT_RUN",
+            "default": "NOT_RUN",
+            "title": "Canonical Reconciliation",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "SOURCE_ONLY",
+            "default": "SOURCE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "status": {
+            "const": "QUEUED",
+            "default": "QUEUED",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "JobCreated",
+        "type": "object"
+      },
+      "JobStatus": {
+        "enum": [
+          "QUEUED",
+          "LEASED",
+          "RUNNING",
+          "RETRYING",
+          "PARTIAL",
+          "SUCCEEDED",
+          "FAILED",
+          "CANCEL_REQUESTED",
+          "CANCELLED"
+        ],
+        "title": "JobStatus",
+        "type": "string"
+      },
       "Login": {
         "additionalProperties": false,
         "properties": {
@@ -2678,6 +2747,62 @@
           "items"
         ],
         "title": "Page[Security]",
+        "type": "object"
+      },
+      "Page_SourceJobItem_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SourceJobItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[SourceJobItem]",
+        "type": "object"
+      },
+      "Page_SourceJob_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SourceJob"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[SourceJob]",
         "type": "object"
       },
       "Page_TradeRecord_": {
@@ -3514,6 +3639,303 @@
         "title": "SetupStatus",
         "type": "object"
       },
+      "SourceJob": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_count": {
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "canonical_reconciliation": {
+            "const": "NOT_RUN",
+            "default": "NOT_RUN",
+            "title": "Canonical Reconciliation",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "DIVIDEND_SOURCE_SYNC",
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "progress_done": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress Done",
+            "type": "integer"
+          },
+          "progress_total": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Progress Total",
+            "type": "integer"
+          },
+          "result": {
+            "$ref": "#/components/schemas/SourceJobResult"
+          },
+          "scope": {
+            "const": "SOURCE_ONLY",
+            "default": "SOURCE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "progress_done",
+          "progress_total",
+          "attempt_count",
+          "version",
+          "last_error_code",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "next_run_at",
+          "result"
+        ],
+        "title": "SourceJob",
+        "type": "object"
+      },
+      "SourceJobItem": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_count": {
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "operation": {
+            "enum": [
+              "DIVIDENDS",
+              "SPLITS"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "ordinal": {
+            "maximum": 1599.0,
+            "minimum": 0.0,
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "provider_id": {
+            "enum": [
+              "eodhd",
+              "alphavantage",
+              "massive",
+              "yahoo",
+              "yfinance",
+              "hkex_evidence",
+              "sec_evidence",
+              "manual"
+            ],
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ItemStatus"
+          }
+        },
+        "required": [
+          "id",
+          "security_id",
+          "provider_id",
+          "operation",
+          "ordinal",
+          "status",
+          "attempt_count",
+          "next_run_at",
+          "last_error_code"
+        ],
+        "title": "SourceJobItem",
+        "type": "object"
+      },
+      "SourceJobResult": {
+        "additionalProperties": false,
+        "properties": {
+          "failures": {
+            "maximum": 1600.0,
+            "minimum": 0.0,
+            "title": "Failures",
+            "type": "integer"
+          },
+          "observations_new": {
+            "minimum": 0.0,
+            "title": "Observations New",
+            "type": "integer"
+          },
+          "pages_committed": {
+            "minimum": 0.0,
+            "title": "Pages Committed",
+            "type": "integer"
+          },
+          "provider_attempts": {
+            "minimum": 0.0,
+            "title": "Provider Attempts",
+            "type": "integer"
+          },
+          "provider_attempts_scope": {
+            "const": "RESERVED_OR_RECORDED_HTTP",
+            "title": "Provider Attempts Scope",
+            "type": "string"
+          },
+          "provider_attempts_unresolved": {
+            "minimum": 0.0,
+            "title": "Provider Attempts Unresolved",
+            "type": "integer"
+          },
+          "provider_http_recorded": {
+            "minimum": 0.0,
+            "title": "Provider Http Recorded",
+            "type": "integer"
+          },
+          "scanned_symbols": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Scanned Symbols",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "SOURCE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "skipped_unsupported": {
+            "maximum": 1600.0,
+            "minimum": 0.0,
+            "title": "Skipped Unsupported",
+            "type": "integer"
+          },
+          "work_units": {
+            "maximum": 1600.0,
+            "minimum": 1.0,
+            "title": "Work Units",
+            "type": "integer"
+          },
+          "work_units_done": {
+            "maximum": 1600.0,
+            "minimum": 0.0,
+            "title": "Work Units Done",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scope",
+          "provider_attempts",
+          "provider_attempts_scope",
+          "provider_http_recorded",
+          "provider_attempts_unresolved",
+          "scanned_symbols",
+          "work_units",
+          "work_units_done",
+          "observations_new",
+          "pages_committed",
+          "failures",
+          "skipped_unsupported"
+        ],
+        "title": "SourceJobResult",
+        "type": "object"
+      },
       "Status": {
         "additionalProperties": false,
         "properties": {
@@ -3543,6 +3965,81 @@
           }
         },
         "title": "Success",
+        "type": "object"
+      },
+      "SyncDividendRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          },
+          "from_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "From Date",
+            "type": "string"
+          },
+          "operations": {
+            "default": [
+              "DIVIDENDS"
+            ],
+            "items": {
+              "enum": [
+                "DIVIDENDS",
+                "SPLITS"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Operations",
+            "type": "array"
+          },
+          "provider_ids": {
+            "items": {
+              "enum": [
+                "eodhd",
+                "alphavantage",
+                "massive",
+                "yahoo",
+                "yfinance",
+                "hkex_evidence",
+                "sec_evidence",
+                "manual"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Provider Ids",
+            "type": "array"
+          },
+          "security_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Security Ids",
+            "type": "array"
+          },
+          "to_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "To Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "security_ids",
+          "from_date",
+          "to_date",
+          "provider_ids"
+        ],
+        "title": "SyncDividendRequest",
         "type": "object"
       },
       "TradeCreate": {
@@ -4125,6 +4622,29 @@
         ],
         "title": "VoidTrade",
         "type": "object"
+      },
+      "WorkError": {
+        "enum": [
+          "UNCONFIGURED",
+          "UNSUPPORTED",
+          "SYMBOL_NOT_FOUND",
+          "SYMBOL_AMBIGUOUS",
+          "ALIAS_CHANGED",
+          "CONFIG_CHANGED",
+          "PROVIDER_FAILED",
+          "PARSE_ERROR",
+          "RATE_LIMITED",
+          "TRANSIENT_ERROR",
+          "QUOTA_WAIT",
+          "CIRCUIT_OPEN",
+          "LEASE_EXPIRED",
+          "RETRIES_EXHAUSTED",
+          "WORKER_ERROR",
+          "PAGE_LIMIT",
+          "CURSOR_CYCLE"
+        ],
+        "title": "WorkError",
+        "type": "string"
       }
     },
     "securitySchemes": {
@@ -9280,6 +9800,127 @@
         ]
       }
     },
+    "/api/v1/dividends/sync": {
+      "post": {
+        "description": "Queue source work only; reconciliation and financial adoption do not run.",
+        "operationId": "start_dividend_sync",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncDividendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Sync Dividends",
+        "tags": [
+          "Source jobs"
+        ]
+      }
+    },
     "/api/v1/exchanges": {
       "get": {
         "operationId": "list_exchanges",
@@ -10195,6 +10836,584 @@
         "summary": "Health Ready",
         "tags": [
           "Health"
+        ]
+      }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "description": "List supported managed source jobs, never unvalidated retained job payloads.",
+        "operationId": "list_jobs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/JobStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_SourceJob_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Jobs List",
+        "tags": [
+          "Source jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{id}": {
+      "get": {
+        "operationId": "get_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Job",
+        "tags": [
+          "Source jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{id}/cancel": {
+      "post": {
+        "description": "Accept cancellation intent, not a claim that an in-flight response has already stopped.",
+        "operationId": "cancel_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CancelJobRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Cancel Job",
+        "tags": [
+          "Source jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{id}/items": {
+      "get": {
+        "operationId": "list_job_items",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ItemStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "eodhd",
+                    "alphavantage",
+                    "massive",
+                    "yahoo",
+                    "yfinance",
+                    "hkex_evidence",
+                    "sec_evidence",
+                    "manual"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "security_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Security Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_SourceJobItem_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Job Items",
+        "tags": [
+          "Source jobs"
         ]
       }
     },

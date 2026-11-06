@@ -7,7 +7,9 @@ canonical-dividend reconciler, announcement scraper, provider billing probe or
 proof of licensed live coverage. Paid/live providers and the target NAS remain
 NOT_TESTED.
 
-Job-creation schedules, owner-facing sync/job/monitoring HTTP APIs and key-import
+Owner-authenticated source enqueue/read/cancel APIs are available; see the
+[HTTP contract](JOBS.md#authenticated-http-intents-and-safe-diagnostics).
+Job-creation schedules, monitoring UI, provider-status/evidence APIs and key-import
 settings are still unfinished. No job or provider enablement is created at
 startup. Empty/unconfigured installations perform no upstream requests. Retained
 unmanaged jobs are not automatically adopted.

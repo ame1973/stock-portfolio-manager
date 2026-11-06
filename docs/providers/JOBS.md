@@ -1,11 +1,81 @@
 # Source-job control and recovery
 
-This contract describes installed server-side job control, not an available
-sync API or scheduled job-creation service. The [worker](WORKER.md) dispatches
-explicitly queued source jobs through shared upstream reservation/circuit policy,
-with an independent heartbeat. Manual-sync/job HTTP APIs and monitoring UI are
+This contract describes installed source-only enqueue/read/cancel HTTP APIs and
+server-side job control. The [worker](WORKER.md) dispatches explicitly queued
+source jobs through shared upstream reservation/circuit policy, with an independent
+heartbeat. Scheduled job creation, monitoring UI and canonical reconciliation are
 still unfinished. Startup creates no job or provider enablement, and paid/live
 coverage remains NOT_TESTED.
+
+## Authenticated HTTP intents and safe diagnostics
+
+All paths below have the `/api/v1` prefix and require an owner session. Mutations
+also require the exact public Origin, `X-CSRF-Token` and `Idempotency-Key` described
+in the [authentication guide](../../readme.md#owner-authentication). Responses are
+`Cache-Control: no-store`; no provider HTTP runs in a request handler.
+
+`POST /dividends/sync` requires explicit `security_ids` (1–100), `provider_ids`
+(1–8), `from_date` and `to_date`. Dates form an inclusive valid calendar window;
+there is no guessed history, security selection or paid-provider default. Optional
+`operations` defaults to `["DIVIDENDS"]`; select `SPLITS` explicitly if wanted.
+`force` defaults to false and is a strict JSON boolean, not a quota bypass. Input
+array bounds apply before duplicate removal; sets are canonicalized for intent
+comparison. Arbitrary fields, credentials, file paths and client profile hashes
+are rejected.
+
+A synthetic request, using an existing explicitly mapped security, is:
+
+```json
+{
+  "security_ids": ["00000000-0000-4000-8000-000000000003"],
+  "provider_ids": ["eodhd"],
+  "from_date": "2026-01-01",
+  "to_date": "2026-01-31",
+  "operations": ["DIVIDENDS"],
+  "force": false
+}
+```
+
+The response is **202 Accepted**, with `job_id`, `status=QUEUED`,
+`scope=SOURCE_ONLY`, `canonical_reconciliation=NOT_RUN` and a relative
+`Location: /api/v1/jobs/{job_id}`. This accepts source intent, not provider
+availability or financial synchronization. Unconfigured inputs can therefore
+queue successfully and later become explicit skipped/failed work without HTTP.
+A missing catalogue security rejects the entire request with 422.
+
+Private profile files are read before the writer UoW. The transaction rechecks
+session/CSRF and atomically commits job, items, audit and idempotent response; the
+creation/cancellation audit links to the server-minted HTTP request ID. Only the
+normalized public body participates in HTTP idempotency. An unchanged replay
+returns its original accepted response without new work, even after private-file
+rotation or worker completion. A changed body with the same key conflicts; use a
+new key for a deliberate rerun. The key is not required to be a UUID.
+
+- `GET /jobs` lists only the current owner's supported managed source jobs, newest
+  `created_at,id` first. It supports bounded keyset pagination, exact `status` and
+  literal `q` search over kind/ID. Retained legacy/unregistered jobs are not exposed
+  or automatically adopted.
+- `GET /jobs/{id}` returns the current typed control state, ETag and aggregates of
+  committed facts. Internal request/result JSON, worker ownership, profile hashes,
+  credential paths and upstream cursors are not returned. A stored opaque result
+  is neither trusted for serialization nor rewritten by the read.
+- `GET /jobs/{id}/items` lists safe per-security/provider/operation diagnostics in
+  ascending `ordinal,id` order. It supports bounded pagination, `status`,
+  `provider_id`, `security_id` and literal ticker/provider/operation search `q`.
+  Follow returned `next_cursor`; do not reuse another resource's cursor.
+- `POST /jobs/{id}/cancel` accepts no body or `{}` and returns **200** with the
+  current job and ETag. It does not require If-Match: this is an owner stop intent,
+  not replacement of a financial fact. A queued job can become CANCELLED; live
+  work becomes CANCEL_REQUESTED until worker acknowledgement/expiry. The response
+  does not claim an in-flight request has stopped. Already committed evidence and
+  spent reservations remain. An unchanged idempotent retry returns its original
+  response; reread the job for the later state.
+
+A foreign or unsupported job ID returns 404 for reads, item lists and cancellation.
+`provider_attempts` explicitly uses `RESERVED_OR_RECORDED_HTTP`, including uncertain
+spending, not verified billing. `observations_new` counts newly stored assertions;
+`pages_committed` counts checkpoints. Neither is verified income or market
+coverage. Cancellation never fabricates scanned progress or adopts/reverses cash.
 
 ## Sealed source-only work
 
@@ -26,8 +96,8 @@ The dedupe namespace includes owner, job kind and intent ID. Reusing that intent
 with the same sealed plan returns the existing job without writes/audit; changing
 it conflicts. A new intent permits a deliberate rerun. Security metadata remains
 an installation-wide catalogue, while jobs and their audit are owner-scoped.
-Inactive owners are not dispatched. HTTP authentication/CSRF/idempotency remains
-the future API boundary; these internal functions are not unauthenticated routes.
+Inactive owners are not dispatched. HTTP authentication/CSRF/idempotency wraps
+these internal functions; the controller is never exposed as an unprotected route.
 
 ## Work, progress and retry semantics
 

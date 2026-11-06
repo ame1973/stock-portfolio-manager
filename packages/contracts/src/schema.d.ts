@@ -359,6 +359,26 @@ export interface paths {
         patch: operations["revise_corporate_action"];
         trace?: never;
     };
+    "/api/v1/dividends/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Dividends
+         * @description Queue source work only; reconciliation and financial adoption do not run.
+         */
+        post: operations["start_dividend_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exchanges": {
         parameters: {
             query?: never;
@@ -439,6 +459,80 @@ export interface paths {
         };
         /** Health Ready */
         get: operations["health_ready"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Jobs List
+         * @description List supported managed source jobs, never unvalidated retained job payloads.
+         */
+        get: operations["list_jobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Job */
+        get: operations["get_job"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Job
+         * @description Accept cancellation intent, not a claim that an in-flight response has already stopped.
+         */
+        post: operations["cancel_job"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Job Items */
+        get: operations["list_job_items"];
         put?: never;
         post?: never;
         delete?: never;
@@ -854,6 +948,11 @@ export interface components {
             /** Status */
             status?: ("ACTIVE" | "ARCHIVED") | null;
         };
+        /**
+         * CancelJobRequest
+         * @description An optional empty body rejects accidental credential or financial inputs.
+         */
+        CancelJobRequest: Record<string, never>;
         /** CashEntry */
         CashEntry: {
             /**
@@ -1499,6 +1598,42 @@ export interface components {
             /** Identifier Value */
             identifier_value: string;
         };
+        /**
+         * ItemStatus
+         * @enum {string}
+         */
+        ItemStatus: "PENDING" | "RUNNING" | "RETRYING" | "SUCCEEDED" | "PARTIAL" | "FAILED" | "SKIPPED" | "CANCELLED";
+        /** JobCreated */
+        JobCreated: {
+            /**
+             * Canonical Reconciliation
+             * @default NOT_RUN
+             * @constant
+             */
+            canonical_reconciliation: "NOT_RUN";
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Scope
+             * @default SOURCE_ONLY
+             * @constant
+             */
+            scope: "SOURCE_ONLY";
+            /**
+             * Status
+             * @default QUEUED
+             * @constant
+             */
+            status: "QUEUED";
+        };
+        /**
+         * JobStatus
+         * @enum {string}
+         */
+        JobStatus: "QUEUED" | "LEASED" | "RUNNING" | "RETRYING" | "PARTIAL" | "SUCCEEDED" | "FAILED" | "CANCEL_REQUESTED" | "CANCELLED";
         /** Login */
         Login: {
             /**
@@ -1665,6 +1800,20 @@ export interface components {
         Page_Security_: {
             /** Items */
             items: components["schemas"]["Security"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[SourceJobItem] */
+        Page_SourceJobItem_: {
+            /** Items */
+            items: components["schemas"]["SourceJobItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[SourceJob] */
+        Page_SourceJob_: {
+            /** Items */
+            items: components["schemas"]["SourceJob"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2028,6 +2177,117 @@ export interface components {
             /** Requires Token */
             requires_token: boolean;
         };
+        /** SourceJob */
+        SourceJob: {
+            /** Attempt Count */
+            attempt_count: number;
+            /**
+             * Canonical Reconciliation
+             * @default NOT_RUN
+             * @constant
+             */
+            canonical_reconciliation: "NOT_RUN";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "DIVIDEND_SOURCE_SYNC";
+            last_error_code: components["schemas"]["WorkError"] | null;
+            /** Next Run At */
+            next_run_at: string | null;
+            /** Progress Done */
+            progress_done: number;
+            /** Progress Total */
+            progress_total: number;
+            result: components["schemas"]["SourceJobResult"];
+            /**
+             * Scope
+             * @default SOURCE_ONLY
+             * @constant
+             */
+            scope: "SOURCE_ONLY";
+            /** Started At */
+            started_at: string | null;
+            status: components["schemas"]["JobStatus"];
+            /** Version */
+            version: number;
+        };
+        /** SourceJobItem */
+        SourceJobItem: {
+            /** Attempt Count */
+            attempt_count: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            last_error_code: components["schemas"]["WorkError"] | null;
+            /** Next Run At */
+            next_run_at: string | null;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "DIVIDENDS" | "SPLITS";
+            /** Ordinal */
+            ordinal: number;
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            status: components["schemas"]["ItemStatus"];
+        };
+        /** SourceJobResult */
+        SourceJobResult: {
+            /** Failures */
+            failures: number;
+            /** Observations New */
+            observations_new: number;
+            /** Pages Committed */
+            pages_committed: number;
+            /** Provider Attempts */
+            provider_attempts: number;
+            /**
+             * Provider Attempts Scope
+             * @constant
+             */
+            provider_attempts_scope: "RESERVED_OR_RECORDED_HTTP";
+            /** Provider Attempts Unresolved */
+            provider_attempts_unresolved: number;
+            /** Provider Http Recorded */
+            provider_http_recorded: number;
+            /** Scanned Symbols */
+            scanned_symbols: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "SOURCE_ONLY";
+            /** Skipped Unsupported */
+            skipped_unsupported: number;
+            /** Work Units */
+            work_units: number;
+            /** Work Units Done */
+            work_units_done: number;
+        };
         /** Status */
         Status: {
             /** Status */
@@ -2045,6 +2305,35 @@ export interface components {
              * @default true
              */
             ok: boolean;
+        };
+        /** SyncDividendRequest */
+        SyncDividendRequest: {
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * From Date
+             * Format: date
+             */
+            from_date: string;
+            /**
+             * Operations
+             * @default [
+             *       "DIVIDENDS"
+             *     ]
+             */
+            operations: ("DIVIDENDS" | "SPLITS")[];
+            /** Provider Ids */
+            provider_ids: ("eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual")[];
+            /** Security Ids */
+            security_ids: string[];
+            /**
+             * To Date
+             * Format: date
+             */
+            to_date: string;
         };
         /** TradeCreate */
         TradeCreate: {
@@ -2288,6 +2577,11 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /**
+         * WorkError
+         * @enum {string}
+         */
+        WorkError: "UNCONFIGURED" | "UNSUPPORTED" | "SYMBOL_NOT_FOUND" | "SYMBOL_AMBIGUOUS" | "ALIAS_CHANGED" | "CONFIG_CHANGED" | "PROVIDER_FAILED" | "PARSE_ERROR" | "RATE_LIMITED" | "TRANSIENT_ERROR" | "QUOTA_WAIT" | "CIRCUIT_OPEN" | "LEASE_EXPIRED" | "RETRIES_EXHAUSTED" | "WORKER_ERROR" | "PAGE_LIMIT" | "CURSOR_CYCLE";
     };
     responses: never;
     parameters: never;
@@ -5571,6 +5865,87 @@ export interface operations {
             };
         };
     };
+    start_dividend_sync: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncDividendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobCreated"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     list_exchanges: {
         parameters: {
             query?: never;
@@ -6144,6 +6519,327 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Status"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_jobs: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["JobStatus"] | null;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SourceJob_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_job: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceJob"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    cancel_job: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CancelJobRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceJob"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_job_items: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ItemStatus"] | null;
+                provider_id?: ("eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual") | null;
+                security_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SourceJobItem_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Service Unavailable */

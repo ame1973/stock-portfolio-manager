@@ -43,6 +43,7 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
     identifiers = [op["operationId"] for op in actual.values()]
     assert len(identifiers) == len(set(identifiers))
     extensions = {
+        ("/api/v1/jobs/{id}/items", "get"): "list_job_items",
         ("/api/v1/auth/reauth", "post"): "reauthenticate",
         ("/api/v1/exchanges", "get"): "list_exchanges",
         ("/api/v1/cash-entries/{id}", "get"): "get_cash_entry",
