@@ -53,7 +53,8 @@
       "markets": ["HK"],
       "access_mode": "MANUAL_EVIDENCE",
       "documentation_url": "https://www.hkexnews.hk/",
-      "data_rights": "MANUAL_EVIDENCE_ONLY"
+      "data_rights": "MANUAL_EVIDENCE_ONLY",
+      "operations": ["DIVIDENDS", "SPLITS"]
     },
     {
       "provider_id": "sec_evidence",
@@ -61,14 +62,16 @@
       "markets": ["US"],
       "access_mode": "MANUAL_EVIDENCE",
       "documentation_url": "https://www.sec.gov/edgar",
-      "data_rights": "MANUAL_EVIDENCE_ONLY"
+      "data_rights": "MANUAL_EVIDENCE_ONLY",
+      "operations": ["DIVIDENDS", "SPLITS"]
     },
     {
       "provider_id": "manual",
       "origin_group": "USER_VERIFIED",
       "markets": ["HK", "US"],
       "access_mode": "MANUAL_EVIDENCE",
-      "data_rights": "MANUAL_EVIDENCE_ONLY"
+      "data_rights": "MANUAL_EVIDENCE_ONLY",
+      "operations": ["DIVIDENDS", "SPLITS"]
     }
   ]
 }

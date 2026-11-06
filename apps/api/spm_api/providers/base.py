@@ -12,10 +12,10 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field, StringConstraints
 
-from spm_api.action_models import JsonRatio
+from spm_api.action_models import EvidenceUrl, JsonRatio
 from spm_api.decimal_types import Dps, IsoDate
 from spm_api.errors import Model
-from spm_api.master_models import Currency, ProviderCode, ProviderId
+from spm_api.master_models import ChangeReason, Currency, ProviderCode, ProviderId
 
 Market = Literal["HK", "US"]
 OriginGroup = Literal[
@@ -120,6 +120,26 @@ def independent_vendor_origins(providers: Iterable[ProviderId]) -> frozenset[Ori
     )
 
 
+class EvidenceCitation(Model):
+    """A local citation identity and user assertion, never a fetched/verified document."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    url: EvidenceUrl | None = None
+    citation: Annotated[
+        str,
+        StringConstraints(
+            strict=True,
+            strip_whitespace=True,
+            min_length=1,
+            max_length=300,
+            pattern=r"^[^\x00-\x1f\x7f]+$",
+        ),
+    ]
+    reason: ChangeReason
+
+
 class SourceObservation(Model):
     """Bounded immutable source identity, never a canonical financial fact."""
 
@@ -137,6 +157,7 @@ class SourceObservation(Model):
         ]
         | None
     ) = None
+    evidence: EvidenceCitation | None = Field(default=None, repr=False)
 
     @property
     def origin_group(self) -> OriginGroup:
@@ -145,6 +166,8 @@ class SourceObservation(Model):
     @property
     def normalized_sha256(self) -> str:
         value = {**self.model_dump(mode="json"), "origin_group": self.origin_group}
+        if self.evidence is None:
+            del value["evidence"]
         canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
