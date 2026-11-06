@@ -52,6 +52,7 @@ class AliasSegment(Model):
     alias: AliasPeriod
     window: FetchWindow
     market: Market | None = None
+    exchange_timezone: str | None = Field(default=None, strict=True, min_length=1, max_length=64)
 
     @model_validator(mode="after")
     def within_identity(self) -> "AliasSegment":
@@ -96,6 +97,8 @@ def resolve_periods(
     market: Market,
     window: FetchWindow,
     aliases: list[AliasPeriod],
+    *,
+    exchange_timezone: str | None = None,
 ) -> SymbolResolution:
     """Mapping validity is not a claim of upstream coverage or verified dividend terms."""
     if market not in registry()[provider_id].markets:
@@ -133,7 +136,11 @@ def resolve_periods(
             return SymbolResolution(
                 state=ResolutionState.AMBIGUOUS, reason="ALIAS_IDENTITY_COLLISION"
             )
-        segments.append(AliasSegment(alias=item, window=clipped, market=market))
+        segments.append(
+            AliasSegment(
+                alias=item, window=clipped, market=market, exchange_timezone=exchange_timezone
+            )
+        )
         cursor = None if last == end else last + timedelta(days=1)
     if cursor is not None:
         return SymbolResolution(state=ResolutionState.NOT_FOUND, reason="ALIAS_WINDOW_GAP")
@@ -153,8 +160,8 @@ def resolve_symbol(
     security = (
         con.execute(
             text(
-                "SELECT e.market FROM securities s JOIN exchanges e ON e.code=s.exchange_code "
-                "WHERE s.id=:id"
+                "SELECT e.market,e.timezone FROM securities s JOIN exchanges e "
+                "ON e.code=s.exchange_code WHERE s.id=:id"
             ),
             {"id": str(security_id)},
         )
@@ -185,4 +192,6 @@ def resolve_symbol(
     aliases = [
         AliasPeriod.model_validate({**row, "verified": row["verified"] == 1}) for row in rows
     ]
-    return resolve_periods(security_id, provider_id, market, window, aliases)
+    return resolve_periods(
+        security_id, provider_id, market, window, aliases, exchange_timezone=security["timezone"]
+    )

@@ -255,6 +255,9 @@ async def test_source_dot_and_leading_zero_cases_use_real_explicit_mapping_witho
         assert result.state == ResolutionState.RESOLVED
         assert result.segments[0].alias.provider_symbol == expected
         assert str(result.segments[0].alias.security_id) == security["id"]
+        assert result.segments[0].exchange_timezone == (
+            "Asia/Hong_Kong" if exchange == "HKG" else "America/New_York"
+        )
     assert database_snapshot(engine) == before
     assert (await client.get(f"/api/v1/securities/{security['id']}")).json()[
         "display_ticker"
