@@ -36,6 +36,7 @@ class FetchPage[T: SourceObservation](Model):
     rows: tuple[T, ...] = ()
     complete: bool = Field(default=False, strict=True)
     issue_count: int = Field(default=0, strict=True, ge=0)
+    filtered_count: int = Field(default=0, strict=True, ge=0)
     warnings: Annotated[tuple[Code, ...], Field(max_length=32)] = ()
     next_cursor: str | None = Field(default=None, strict=True, max_length=4096, repr=False)
     raw_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None

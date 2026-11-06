@@ -17,7 +17,8 @@
       "markets": ["US"],
       "access_mode": "API_KEY",
       "documentation_url": "https://www.alphavantage.co/documentation/",
-      "data_rights": "UNVERIFIED"
+      "data_rights": "UNVERIFIED",
+      "operations": ["DIVIDENDS"]
     },
     {
       "provider_id": "massive",
@@ -25,7 +26,9 @@
       "markets": ["US"],
       "access_mode": "API_KEY",
       "documentation_url": "https://massive.com/docs/rest/stocks/corporate-actions/dividends",
-      "data_rights": "UNVERIFIED"
+      "data_rights": "UNVERIFIED",
+      "operations": ["DIVIDENDS", "SPLITS"],
+      "has_unadjusted_dividend": true
     },
     {
       "provider_id": "yahoo",

@@ -16,7 +16,7 @@ from email.utils import parsedate_to_datetime
 from enum import StrEnum
 from types import TracebackType
 from typing import Self, cast
-from urllib.parse import parse_qsl, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 from pydantic import ConfigDict, Field, SecretStr
@@ -369,6 +369,26 @@ class ProviderHTTP:
         if len(str(url)) > 4096:
             raise ValueError("Provider URL exceeds the request bound")
         return url
+
+    def pagination_reference(self, reference: str, *, expected_path: str) -> str:
+        """Retain only a validated query-safe relative link, never an upstream credential URL."""
+        if self.provider_id not in _ORIGINS:
+            raise ValueError("Provider does not support HTTP pagination")
+        url = self._url(reference, {})
+        if url.path != expected_path:
+            raise ValueError("Pagination cannot change the requested operation")
+        pairs = [
+            (key, value)
+            for key, value in url.params.multi_items()
+            if key.casefold() not in _CREDENTIAL_NAMES
+        ]
+        credential = self._access.credential
+        if credential is not None and any(
+            credential.get_secret_value() in value or credential.get_secret_value() in key
+            for key, value in pairs
+        ):
+            raise ValueError("Pagination reference contains a credential")
+        return urlunsplit(("", "", url.path, urlencode(sorted(pairs)), ""))
 
     async def get_json(
         self, reference: str, *, params: Mapping[str, str] | None = None

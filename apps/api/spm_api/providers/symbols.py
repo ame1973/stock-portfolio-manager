@@ -51,6 +51,7 @@ class AliasSegment(Model):
 
     alias: AliasPeriod
     window: FetchWindow
+    market: Market | None = None
 
     @model_validator(mode="after")
     def within_identity(self) -> "AliasSegment":
@@ -132,7 +133,7 @@ def resolve_periods(
             return SymbolResolution(
                 state=ResolutionState.AMBIGUOUS, reason="ALIAS_IDENTITY_COLLISION"
             )
-        segments.append(AliasSegment(alias=item, window=clipped))
+        segments.append(AliasSegment(alias=item, window=clipped, market=market))
         cursor = None if last == end else last + timedelta(days=1)
     if cursor is not None:
         return SymbolResolution(state=ResolutionState.NOT_FOUND, reason="ALIAS_WINDOW_GAP")

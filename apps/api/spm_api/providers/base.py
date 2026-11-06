@@ -161,6 +161,7 @@ class DividendObservation(SourceObservation):
     currency: Currency | None = None
     source_currency: Annotated[str, Field(strict=True, pattern=r"^[A-Z]{3}$")] | None = None
     source_period: SourcePeriod | None = None
+    source_frequency: int | None = Field(default=None, strict=True, ge=0, le=365)
     adjustment_basis: AdjustmentBasis = "UNKNOWN"
 
     @property
@@ -184,4 +185,7 @@ class SplitObservation(SourceObservation):
     effective_date: IsoDate
     ratio_numerator: JsonRatio
     ratio_denominator: JsonRatio
+    source_adjustment_type: Literal["FORWARD_SPLIT", "REVERSE_SPLIT", "STOCK_DIVIDEND"] | None = (
+        None
+    )
     effect_scope: Literal["PROVIDER_ADJUSTMENT_ONLY"] = "PROVIDER_ADJUSTMENT_ONLY"

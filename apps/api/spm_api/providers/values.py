@@ -42,13 +42,18 @@ def dps_string(value: object) -> str | None:
     return from_scaled(to_scaled(text, 8), 8)
 
 
-def split_ratio(value: object) -> tuple[int, int]:
-    if not isinstance(value, str) or len(value) > 129 or value.count("/") != 1:
-        raise ValueError("Provider split must contain bounded new/old terms")
-    numerator, denominator = (exact_number(part) for part in value.split("/"))
+def ratio_terms(new: object, old: object) -> tuple[int, int]:
+    numerator, denominator = exact_number(new), exact_number(old)
     if numerator <= 0 or denominator <= 0:
         raise ValueError("Provider split terms must be positive")
     ratio = Fraction(numerator) / Fraction(denominator)
     if ratio.numerator > INT64_MAX or ratio.denominator > INT64_MAX:
         raise ValueError("Reduced provider split exceeds INT64 terms")
     return ratio.numerator, ratio.denominator
+
+
+def split_ratio(value: object) -> tuple[int, int]:
+    if not isinstance(value, str) or len(value) > 129 or value.count("/") != 1:
+        raise ValueError("Provider split must contain bounded new/old terms")
+    first, second = value.split("/")
+    return ratio_terms(first, second)
