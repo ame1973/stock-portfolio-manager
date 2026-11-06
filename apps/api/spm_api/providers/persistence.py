@@ -134,20 +134,27 @@ def _pointer(prepared: PreparedFetch, page: FetchPage[Any]) -> None:
     )
     if page.source_url is not None and page.source_url != expected:
         raise ValueError("UNSAFE_PROVIDER_SOURCE")
-    if page.next_cursor is not None:
-        parsed = urlsplit(page.next_cursor)
-        if (
-            provider != "massive"
-            or parsed.scheme
-            or parsed.netloc
-            or parsed.fragment
-            or parsed.path != f"/stocks/v1/{operation.lower()}"
-        ):
-            raise ValueError("UNSAFE_PROVIDER_CURSOR")
-        pairs = parse_qsl(parsed.query, keep_blank_values=True, max_num_fields=32, errors="strict")
-        if any(name.casefold() in _CREDENTIAL_NAMES for name, _ in pairs):
-            raise ValueError("UNSAFE_PROVIDER_CURSOR")
-        _guard_credential(prepared, *(name for name, _ in pairs), *(value for _, value in pairs))
+    _cursor(prepared, page.next_cursor)
+
+
+def _cursor(prepared: PreparedFetch, value: str | None) -> None:
+    if value is None:
+        return
+    if type(value) is not str or not 1 <= len(value) <= 4096:
+        raise ValueError("UNSAFE_PROVIDER_CURSOR")
+    parsed = urlsplit(value)
+    if (
+        prepared.configuration.provider_id != "massive"
+        or parsed.scheme
+        or parsed.netloc
+        or parsed.fragment
+        or parsed.path != f"/stocks/v1/{prepared.operation.lower()}"
+    ):
+        raise ValueError("UNSAFE_PROVIDER_CURSOR")
+    pairs = parse_qsl(parsed.query, keep_blank_values=True, max_num_fields=32, errors="strict")
+    if any(name.casefold() in _CREDENTIAL_NAMES for name, _ in pairs):
+        raise ValueError("UNSAFE_PROVIDER_CURSOR")
+    _guard_credential(prepared, value, *(name for name, _ in pairs), *(value for _, value in pairs))
 
 
 def _utc(value: datetime) -> str:
@@ -190,6 +197,7 @@ def capture_page(
     finished_at: datetime,
     duration_ms: int,
     job_id: UUID | None = None,
+    requested_cursor: str | None = None,
 ) -> CaptureReceipt:
     """Persist already-fetched data; caller must recheck private config before/after HTTP."""
     if not con.in_transaction() or not con.get_execution_options().get("writer"):
@@ -202,6 +210,7 @@ def capture_page(
     if finished < started:
         raise ValueError("INVALID_CAPTURE_TIMING")
     _pointer(prepared, page)
+    _cursor(prepared, requested_cursor)
     metadata = prepared.metadata()
     snapshot = canonical(metadata)
     wire = canonical(page.model_dump(mode="json"))
@@ -217,6 +226,7 @@ def capture_page(
                 "started_at": started,
                 "finished_at": finished,
                 "duration_ms": duration_ms,
+                **({"requested_cursor": requested_cursor} if requested_cursor is not None else {}),
             }
         )
     )
@@ -346,6 +356,7 @@ def capture_page(
             "filtered_count": page.filtered_count,
             "warnings_json": canonical(page.warnings),
             "next_cursor": page.next_cursor,
+            "requested_cursor": requested_cursor,
             "retry_at": page.retry_at,
             "duration_ms": duration_ms,
             "attempted": int(attempted),
