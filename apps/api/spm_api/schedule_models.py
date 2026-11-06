@@ -1,0 +1,62 @@
+"""Explicit source-schedule policy; no enablement, credentials or financial adoption."""
+
+from typing import Annotated, Literal
+from uuid import UUID
+
+from pydantic import ConfigDict, Field, field_validator, model_validator
+
+from spm_api.decimal_types import IsoDate
+from spm_api.errors import Model
+from spm_api.job_models import SourceOperation
+from spm_api.master_models import ProviderId
+from spm_api.providers.base import Market, registry
+
+
+class SourceSchedulePolicy(Model):
+    """A bounded local week pattern, not a verified exchange-session calendar."""
+
+    model_config = ConfigDict(frozen=True)
+
+    schema_version: int = Field(default=1, strict=True, ge=1, le=1)
+    scope: Literal["SOURCE_ONLY"] = "SOURCE_ONLY"
+    calendar_basis: Literal["LOCAL_WEEK_PATTERN_NOT_TRADING_CALENDAR"] = (
+        "LOCAL_WEEK_PATTERN_NOT_TRADING_CALENDAR"
+    )
+    security_ids: Annotated[tuple[UUID, ...], Field(min_length=1, max_length=100)]
+    provider_ids: Annotated[tuple[ProviderId, ...], Field(min_length=1, max_length=8)]
+    operations: Annotated[tuple[SourceOperation, ...], Field(min_length=1, max_length=2)] = (
+        "DIVIDENDS",
+    )
+    market: Market
+    first_date: IsoDate
+    local_run_time: Annotated[str, Field(strict=True, pattern=r"^(1[6-9]|2[0-3]):[0-5][0-9]$")]
+    cadence: Literal["DAILY", "WEEKDAYS", "WEEKLY"]
+    weekday: Annotated[int, Field(strict=True, ge=0, le=6)] | None = None
+    lookback_days: Annotated[int, Field(strict=True, ge=1, le=3660)] | None = None
+    lookback_months: Annotated[int, Field(strict=True, ge=1, le=120)] | None = None
+    backfill_from_date: IsoDate | None = None
+
+    @field_validator("security_ids", "provider_ids", "operations")
+    @classmethod
+    def canonical_sets[T: str | UUID](cls, values: tuple[T, ...]) -> tuple[T, ...]:
+        return tuple(sorted(set(values), key=str))
+
+    @model_validator(mode="after")
+    def explicit_policy(self) -> "SourceSchedulePolicy":
+        if (self.cadence == "WEEKLY") != (self.weekday is not None):
+            raise ValueError("Only weekly schedules require an explicit weekday")
+        if (self.lookback_days is None) == (self.lookback_months is None):
+            raise ValueError("Exactly one recurring day or calendar-month window is required")
+        if self.backfill_from_date is not None and self.backfill_from_date > self.first_date:
+            raise ValueError(
+                "An explicit initial backfill cannot start after the first schedule date"
+            )
+        if any(
+            registry()[provider].access_mode == "MANUAL_EVIDENCE" for provider in self.provider_ids
+        ):
+            raise ValueError("Automated schedules cannot invent cited manual or official input")
+        return self
+
+    @property
+    def exchange_timezone(self) -> str:
+        return "Asia/Hong_Kong" if self.market == "HK" else "America/New_York"
