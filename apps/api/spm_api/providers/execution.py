@@ -118,6 +118,7 @@ def _reap(con: Connection, state: dict[str, Any], at: datetime) -> dict[str, Any
         .mappings()
         .all()
     )
+    changed = False
     for value in pending:
         reservation = dict(value)
         cancelled = reservation["job_status"] in {"CANCEL_REQUESTED", "CANCELLED"}
@@ -146,6 +147,7 @@ def _reap(con: Connection, state: dict[str, Any], at: datetime) -> dict[str, Any
             },
         )
         _audit(con, reservation, "UPSTREAM_ATTEMPT_ABANDONED", reason=reason)
+        changed = True
         if state["probe_attempt_id"] == reservation["id"]:
             state = _save(
                 con,
@@ -156,7 +158,20 @@ def _reap(con: Connection, state: dict[str, Any], at: datetime) -> dict[str, Any
                 circuit_until=stamp(later(at, COOLDOWN)),
                 consecutive_failures=FAILURE_THRESHOLD,
             )
+    if changed and state["updated_at"] != clock:
+        state = _save(con, state, clock, consecutive_failures=state["consecutive_failures"])
     return state
+
+
+def reconcile_attempts(con: Connection, *, at: datetime) -> None:
+    """Close stale/cancelled unknown results even when no new provider work is available."""
+    jobs._writer(con)
+    current, clock = aware(at), jobs._clock(at)
+    for row in (
+        con.exec_driver_sql("SELECT * FROM provider_budgets ORDER BY origin_group").mappings().all()
+    ):
+        if row["updated_at"] <= clock:
+            _reap(con, dict(row), current)
 
 
 def _refilled(state: dict[str, Any], limits: OriginLimits, at: datetime) -> int:
@@ -596,8 +611,14 @@ def abandon_attempt(
     *,
     at: datetime,
     reason: Literal["CONFIG_CHANGED", "WORKER_ERROR"] = "WORKER_ERROR",
+    error: WorkError = WorkError.WORKER_ERROR,
 ) -> None:
     jobs._writer(con)
+    if not isinstance(error, WorkError) or error not in {
+        WorkError.WORKER_ERROR,
+        WorkError.ALIAS_CHANGED,
+    }:
+        raise jobs.JobError("INVALID_UPSTREAM_DISCARD")
     clock = jobs._clock(at)
     reservation = _select(con, "SELECT * FROM upstream_attempts WHERE id=:id", id=str(attempt_id))
     if (
@@ -660,10 +681,8 @@ def abandon_attempt(
             lease,
             item_id,
             at=at,
-            status="FAILED",
-            error=WorkError.CONFIG_CHANGED
-            if reason == "CONFIG_CHANGED"
-            else WorkError.WORKER_ERROR,
+            status="PARTIAL" if jobs.last_checkpoint(con, item_id) is not None else "FAILED",
+            error=WorkError.CONFIG_CHANGED if reason == "CONFIG_CHANGED" else error,
         )
         if all(item["status"] in jobs._ITEM_TERMINAL for item in jobs._items(con, job["id"])):
             jobs.finish(con, lease, at=at)

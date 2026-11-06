@@ -48,9 +48,9 @@ There is deliberately no example key or guessed plan budget. Before enabling a n
 
 1. Check the actual provider terms, permitted normalized-data use, plan coverage and request budgets.
 2. Set `terms_reference` to a bounded non-secret reference and `terms_reason` to an explicit explanation (10–1000 characters), then acknowledge the terms. This is an operator assertion, **not verified licensing or live coverage**.
-3. Supply positive integer minute/daily limits from that plan. Enabled network profiles require both; booleans, strings, zero, negative values and values above 2147483647 are rejected. The loader validates these limits; durable token buckets/reservations/retries are **not implemented yet**.
+3. Supply positive integer minute/daily limits from that plan. Enabled network profiles require both; booleans, strings, zero, negative values and values above 2147483647 are rejected. The loader validates them; the worker enforces [durable shared-origin reservations and retry policy](BUDGETS.md).
 4. For EODHD/Alpha Vantage/Massive, provision the referenced private credential. Presence alone never enables traffic.
-5. Set `enabled` explicitly and inspect configuration status. The heartbeat-only worker still does not schedule fetches; synchronization endpoints remain under development.
+5. Set `enabled` explicitly and inspect configuration status. The [worker](WORKER.md) dispatches explicitly queued managed source jobs, but startup creates none. Automatic schedules and owner-facing sync/job endpoints remain under development.
 
 `version` and `credential_version` are explicit positive integers, at most 2147483647. `credential_source`/`credential_version` must appear together or both be null. Accepted sources are `LOCAL_FILE` and `DOCKER_SECRET`; no client-selected filename/path is accepted.
 

@@ -3,8 +3,9 @@
 Provider observations are source assertions, not financial facts. A successful
 capture does not verify a dividend, adopt a corporate action, recognize income,
 create a receipt, change shares/cash, or establish complete upstream coverage.
-The worker does not yet schedule captures; synchronization and evidence/review
-HTTP APIs remain unfinished. All paid/live coverage validation is NOT_TESTED.
+The [worker](WORKER.md) executes explicitly queued source jobs; automatic job
+schedules and synchronization/evidence/review HTTP APIs remain unfinished.
+All paid/live coverage validation is NOT_TESTED.
 
 ## Immutable records
 

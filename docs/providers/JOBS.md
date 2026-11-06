@@ -1,11 +1,11 @@
 # Source-job control and recovery
 
-This contract describes the installed server-side job-control library, not an
-available sync API or scheduled provider service. The worker still supervises
-leadership/heartbeat only. The [upstream reservation library](BUDGETS.md) supplies
-shared quota, attempt and circuit/backoff policy; the actual dispatcher,
-manual-sync/job HTTP APIs and monitoring UI are not yet connected. No default
-job/provider traffic is enabled, and paid/live coverage remains NOT_TESTED.
+This contract describes installed server-side job control, not an available
+sync API or scheduled job-creation service. The [worker](WORKER.md) dispatches
+explicitly queued source jobs through shared upstream reservation/circuit policy,
+with an independent heartbeat. Manual-sync/job HTTP APIs and monitoring UI are
+still unfinished. Startup creates no job or provider enablement, and paid/live
+coverage remains NOT_TESTED.
 
 ## Sealed source-only work
 
@@ -59,8 +59,9 @@ claimable before its earliest work is due. The upstream reservation/outcome
 library computes and enforces allowances, Retry-After, backoff and jitter; the
 dispatcher must use that library rather than calling an adapter directly.
 Repeated crashes while an item is RUNNING conservatively consume its started
-attempt; the fourth exhausted attempt fails that item without preventing another
-item from starting.
+attempt. Exhaustion with a committed prefix is PARTIAL; without one it is FAILED.
+A proven retained tail can finish on recovery without another request. Independent
+items remain dispatchable.
 
 ## Lease ownership and cancellation
 
@@ -103,8 +104,8 @@ input cursor cannot replay as the same attempt. Null-cursor fingerprints remain
 compatible with earlier captures. The safe fixed-provider/query-credential guards
 apply to both input and output cursors; queries never override trusted credentials.
 Reservation preflight checks input cursor cycles and the 256-page ceiling before
-spending quota. The dispatcher must still follow every continuation through the
-reservation/outcome library; no automatic HTTP pagination loop is running yet.
+spending quota. The worker follows continuations through the reservation/outcome
+library, using the same retained context and a new grant for each page.
 
 An identical already-committed page replay returns its original capture receipt
 with zero new rows, checkpoints, progress or audit, even after later cancellation

@@ -198,6 +198,24 @@ def _items(con: Connection, job_id: str) -> list[dict[str, Any]]:
     ]
 
 
+def last_checkpoint(con: Connection, item_id: UUID) -> dict[str, Any] | None:
+    """Return the retained page/context boundary, never an inferred upstream cursor."""
+    row = (
+        con.execute(
+            text("""
+        SELECT p.sequence,r.*,c.alias_json,c.profile_sha256,c.parser_version,c.normalization_version
+        FROM job_checkpoints p JOIN provider_runs r ON r.id=p.provider_run_id
+        JOIN provider_fetch_contexts c ON c.id=r.context_id
+        WHERE p.item_id=:id ORDER BY p.sequence DESC LIMIT 1
+    """),
+            {"id": str(item_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row is not None else None
+
+
 def claim(
     con: Connection, worker_id: UUID, *, at: datetime, lease_seconds: int = 90
 ) -> JobLease | None:
@@ -236,19 +254,41 @@ def claim(
     job = dict(value)
     recovering = job["status"] in {"LEASED", "RUNNING"}
     if recovering:
+        plan = SourceJobPlan.model_validate_json(job["request_json"])
         for item in _items(con, job["id"]):
             if item["status"] == "RUNNING":
                 exhausted = item["attempt_count"] >= job["max_attempts"]
+                last = last_checkpoint(con, UUID(item["id"]))
+                complete = (
+                    last is not None
+                    and last["next_cursor"] is None
+                    and last["requested_end"] == plan.window.end
+                )
+                status = (
+                    "SUCCEEDED"
+                    if complete
+                    else (
+                        "PARTIAL"
+                        if exhausted and last is not None
+                        else "FAILED"
+                        if exhausted
+                        else "RETRYING"
+                    )
+                )
                 _update(
                     con,
                     "job_items",
                     item["id"],
                     clock,
                     lease_generation=job["lease_generation"],
-                    status="FAILED" if exhausted else "RETRYING",
+                    status=status,
                     round_open=0,
-                    next_run_at=None if exhausted else clock,
-                    last_error_code="RETRIES_EXHAUSTED" if exhausted else "LEASE_EXPIRED",
+                    next_run_at=None if complete or exhausted else clock,
+                    last_error_code=None
+                    if complete
+                    else "RETRIES_EXHAUSTED"
+                    if exhausted
+                    else "LEASE_EXPIRED",
                 )
     generation = job["lease_generation"] + 1
     _update(
@@ -327,19 +367,7 @@ def _page_sequence(
     cursor_in: str | None,
 ) -> int:
     plan = SourceJobPlan.model_validate_json(job["request_json"])
-    previous = (
-        con.execute(
-            text("""
-        SELECT p.sequence,r.*,c.alias_json,c.profile_sha256,c.parser_version,c.normalization_version
-        FROM job_checkpoints p JOIN provider_runs r ON r.id=p.provider_run_id
-        JOIN provider_fetch_contexts c ON c.id=r.context_id
-        WHERE p.item_id=:id ORDER BY p.sequence DESC LIMIT 1
-    """),
-            {"id": item["id"]},
-        )
-        .mappings()
-        .first()
-    )
+    previous = last_checkpoint(con, UUID(item["id"]))
     if previous is None:
         valid = cursor_in is None and request["requested_start"] == plan.window.start
         sequence = 1
@@ -617,18 +645,7 @@ def finish_item(
     if status not in {"SUCCEEDED", "PARTIAL", "FAILED", "SKIPPED"}:
         raise JobError("INVALID_JOB_OUTCOME")
     if status == "SUCCEEDED":
-        last = (
-            con.execute(
-                text("""
-            SELECT r.next_cursor,r.requested_end FROM job_checkpoints p
-            JOIN provider_runs r ON r.id=p.provider_run_id WHERE p.item_id=:id
-            ORDER BY p.sequence DESC LIMIT 1
-        """),
-                {"id": item["id"]},
-            )
-            .mappings()
-            .first()
-        )
+        last = last_checkpoint(con, item_id)
         plan = SourceJobPlan.model_validate_json(job["request_json"])
         if (
             item["status"] != "RUNNING"
@@ -641,8 +658,7 @@ def finish_item(
     elif error is None or not isinstance(error, WorkError):
         raise JobError("JOB_ERROR_CODE_REQUIRED")
     if status == "PARTIAL" and (
-        item["status"] != "RUNNING"
-        or con.execute(
+        con.execute(
             text("""
             SELECT 1 FROM provider_runs r WHERE job_id=:job AND security_id=:security
               AND provider_id=:provider AND operation=:operation AND (observations_count>0

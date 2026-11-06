@@ -23,7 +23,7 @@ from spm_api.providers.persistence import prepare_fetch
 from spm_api.providers.runtime import configured_adapter
 from spm_api.providers.symbols import FetchWindow, resolve_symbol
 from tests.helpers import create, database_snapshot
-from tests.test_provider_configuration import KEY, provision
+from tests.test_provider_configuration import KEY, policy, provision
 from tests.test_provider_persistence import (
     FINISH,
     START,
@@ -112,7 +112,12 @@ def financial_same(before: Any, after: Any) -> None:
 
 
 async def massive_work(
-    book: dict[str, Any], client: httpx.AsyncClient, engine: Engine
+    book: dict[str, Any],
+    client: httpx.AsyncClient,
+    engine: Engine,
+    *,
+    minute: int = 5,
+    day: int = 50,
 ) -> dict[str, Any]:
     security = await create(
         client,
@@ -134,7 +139,11 @@ async def massive_work(
             "effective_from": "2020-01-01",
         },
     )
-    provision(book["settings"], "massive")
+    provision(
+        book["settings"],
+        "massive",
+        body=policy("massive", requests_per_minute=minute, requests_per_day=day),
+    )
     loaded = ProviderConfigurationStore(book["settings"]).load("massive")
     assert loaded.error_code is None and loaded.revision is not None
     with unit_of_work(engine) as con:

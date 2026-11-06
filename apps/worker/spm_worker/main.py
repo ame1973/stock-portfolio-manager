@@ -1,7 +1,9 @@
-"""Single-leader process supervision; job execution is added with provider integration."""
+"""Single-leader supervision and fenced, quota-enforced source dispatch."""
 
+import asyncio
 import fcntl
 import json
+import logging
 import os
 import signal
 import time
@@ -10,7 +12,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from threading import Event
 from types import FrameType
-from uuid import uuid4
+from uuid import UUID, uuid4
+
+from sqlalchemy import Engine
 
 from spm_api.config import Settings
 from spm_api.db import check_database, make_engine
@@ -47,6 +51,30 @@ def healthy(directory: Path, *, max_age: int = 30) -> bool:
         return False
 
 
+async def run_leader(settings: Settings, engine: Engine, leader: UUID, stop: Event) -> None:
+    from spm_worker.dispatcher import dispatch_once
+
+    async def pulse() -> None:
+        while not stop.is_set():
+            check_database(engine, settings)
+            heartbeat(settings.data_dir, str(leader))
+            await asyncio.sleep(5)
+
+    async def dispatch() -> None:
+        while not stop.is_set():
+            try:
+                worked = await dispatch_once(engine, settings, leader, stopping=stop.is_set)
+            except Exception:
+                logging.getLogger(__name__).error("SOURCE_DISPATCH_FAILED")
+                worked = False
+            if not worked:
+                await asyncio.sleep(1)
+
+    async with asyncio.TaskGroup() as group:
+        group.create_task(pulse())
+        group.create_task(dispatch())
+
+
 def main() -> None:
     settings = Settings()
     engine = make_engine(settings.database_path)
@@ -57,18 +85,17 @@ def main() -> None:
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
-    leader = str(uuid4())
+    leader = uuid4()
     try:
         check_database(engine, settings)
         while not stop.is_set():
             with leader_lock(settings.data_dir) as acquired:
                 if acquired:
-                    while not stop.is_set():
-                        check_database(engine, settings)
-                        heartbeat(settings.data_dir, leader)
-                        stop.wait(5)
+                    asyncio.run(run_leader(settings, engine, leader, stop))
                 else:
                     stop.wait(5)
+    except Exception:
+        raise SystemExit("Worker stopped after an internal failure.") from None
     finally:
         engine.dispose()
 

@@ -1,10 +1,11 @@
 # Upstream budgets and attempt safety
 
-This is the installed server-side reservation/outcome library contract, not a live
-provider dashboard, available sync API or running dispatcher. The worker still
-supervises leadership/heartbeat only. All paid/live plan and target-NAS validation
-remains NOT_TESTED. Software limits are not a provider invoice, remaining-account
-quota probe, data-rights grant or proof of coverage.
+This is the installed server-side reservation/outcome contract, not a live
+provider dashboard or available sync API. The [worker dispatcher](WORKER.md)
+uses it for explicitly queued source jobs; automatic schedules remain unfinished.
+All paid/live plan and target-NAS validation remains NOT_TESTED. Software limits
+are not a provider invoice, remaining-account quota probe, data-rights grant or
+proof of coverage.
 
 ## Explicit policy, shared upstream
 
@@ -148,5 +149,6 @@ exact integer/time storage, one unresolved item attempt and immutable outcomes.
 Late DDL failure restores schema/head/audit/all facts. Upgrade audit is append-only
 per existing owner and repeating the migration is a no-op. Restore a validated
 pre-upgrade backup instead of deleting quota/attempt history to downgrade or reset
-limits. Real dispatcher/scheduler/API/UI and licensed live validation are separate
-acceptance work; see [job control](JOBS.md) and [source evidence](EVIDENCE.md).
+limits. The [worker dispatcher](WORKER.md) uses this contract; automatic schedules,
+owner-facing API/UI and licensed live validation remain separate acceptance work.
+See [job control](JOBS.md) and [source evidence](EVIDENCE.md).
