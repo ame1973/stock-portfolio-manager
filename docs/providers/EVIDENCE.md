@@ -5,7 +5,9 @@ capture does not verify a dividend, adopt a corporate action, recognize income,
 create a receipt, change shares/cash, or establish complete upstream coverage.
 The [worker](WORKER.md) executes source jobs queued through the
 [authenticated enqueue/read/cancel API](JOBS.md); automatic schedules and
-provider-status/evidence/review HTTP APIs remain unfinished.
+observation/evidence/review HTTP APIs remain unfinished. The installed
+[provider diagnostics](DIAGNOSTICS.md) expose limited recorded-page history,
+not authoritative coverage or complete observation listings.
 All paid/live coverage validation is NOT_TESTED.
 
 ## Immutable records

@@ -20,6 +20,7 @@ from spm_api.db import check_database, make_engine
 from spm_api.errors import ApiError, Error, Status, error_response
 from spm_api.finance import FinanceError
 from spm_api.master_routes import router as master_router
+from spm_api.provider_routes import router as provider_router
 from spm_api.sync_routes import router as sync_router
 from spm_api.trade_routes import router as trade_router
 from spm_api.transfer_routes import router as transfer_router
@@ -111,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(transfer_router)
     app.include_router(action_router)
     app.include_router(sync_router)
+    app.include_router(provider_router)
     return app
 
 

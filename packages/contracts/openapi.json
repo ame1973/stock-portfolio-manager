@@ -273,6 +273,77 @@
         "title": "AccountUpdate",
         "type": "object"
       },
+      "AdapterHealth": {
+        "additionalProperties": false,
+        "description": "Local configuration diagnostics do not spend quota or pretend to probe an upstream.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "last_success_at": {
+            "title": "Last Success At",
+            "type": "null"
+          },
+          "live_validation": {
+            "const": "NOT_TESTED",
+            "default": "NOT_TESTED",
+            "title": "Live Validation",
+            "type": "string"
+          },
+          "provider_id": {
+            "enum": [
+              "eodhd",
+              "alphavantage",
+              "massive",
+              "yahoo",
+              "yfinance",
+              "hkex_evidence",
+              "sec_evidence",
+              "manual"
+            ],
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "quota_remaining": {
+            "title": "Quota Remaining",
+            "type": "null"
+          },
+          "reason": {
+            "maxLength": 100,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "scope": {
+            "const": "CONFIGURATION_ONLY",
+            "default": "CONFIGURATION_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FetchState"
+          }
+        },
+        "required": [
+          "provider_id",
+          "configured",
+          "state",
+          "reason"
+        ],
+        "title": "AdapterHealth",
+        "type": "object"
+      },
+      "Availability": {
+        "enum": [
+          "OBSERVATIONS_AVAILABLE",
+          "DATA_NOT_CONFIRMED",
+          "DATA_UNAVAILABLE",
+          "PROVIDER_UNSUPPORTED"
+        ],
+        "title": "Availability",
+        "type": "string"
+      },
       "Broker": {
         "additionalProperties": false,
         "properties": {
@@ -1957,6 +2028,45 @@
         "title": "ExpenseRevision",
         "type": "object"
       },
+      "FetchState": {
+        "enum": [
+          "OK_WITH_DATA",
+          "NO_DATA",
+          "EMPTY_CONFIRMED",
+          "UNSUPPORTED",
+          "UNCONFIGURED",
+          "RATE_LIMITED",
+          "AUTH_ERROR",
+          "TRANSIENT_ERROR",
+          "PARSE_ERROR",
+          "STALE"
+        ],
+        "title": "FetchState",
+        "type": "string"
+      },
+      "FetchWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "FetchWindow",
+        "type": "object"
+      },
       "Identifier": {
         "additionalProperties": false,
         "properties": {
@@ -2665,6 +2775,62 @@
         "title": "Page[Portfolio]",
         "type": "object"
       },
+      "Page_ProviderCoverage_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderCoverage"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[ProviderCoverage]",
+        "type": "object"
+      },
+      "Page_ProviderInfo_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderInfo"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[ProviderInfo]",
+        "type": "object"
+      },
       "Page_ProviderSymbol_": {
         "additionalProperties": false,
         "properties": {
@@ -2944,6 +3110,430 @@
         "title": "PortfolioUpdate",
         "type": "object"
       },
+      "ProviderCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "availability": {
+            "$ref": "#/components/schemas/Availability"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/AdapterHealth"
+          },
+          "coverage_basis": {
+            "const": "NOT_ESTABLISHED",
+            "default": "NOT_ESTABLISHED",
+            "title": "Coverage Basis",
+            "type": "string"
+          },
+          "coverage_end": {
+            "title": "Coverage End",
+            "type": "null"
+          },
+          "coverage_start": {
+            "title": "Coverage Start",
+            "type": "null"
+          },
+          "last_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedSourcePage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "legacy_runs_omitted": {
+            "minimum": 0.0,
+            "title": "Legacy Runs Omitted",
+            "type": "integer"
+          },
+          "legacy_status_ignored": {
+            "title": "Legacy Status Ignored",
+            "type": "boolean"
+          },
+          "live_validation": {
+            "const": "NOT_TESTED",
+            "default": "NOT_TESTED",
+            "title": "Live Validation",
+            "type": "string"
+          },
+          "observations_count": {
+            "minimum": 0.0,
+            "title": "Observations Count",
+            "type": "integer"
+          },
+          "operation": {
+            "enum": [
+              "DIVIDENDS",
+              "SPLITS"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "origin_group": {
+            "enum": [
+              "EODHD",
+              "ALPHAVANTAGE",
+              "MASSIVE",
+              "YAHOO",
+              "HKEX_OFFICIAL",
+              "SEC_OFFICIAL",
+              "USER_VERIFIED"
+            ],
+            "title": "Origin Group",
+            "type": "string"
+          },
+          "provider_id": {
+            "enum": [
+              "eodhd",
+              "alphavantage",
+              "massive",
+              "yahoo",
+              "yfinance",
+              "hkex_evidence",
+              "sec_evidence",
+              "manual"
+            ],
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "provider_symbol": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9^][A-Za-z0-9.^=_-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Symbol"
+          },
+          "scope": {
+            "const": "RECORDED_SOURCE_ONLY",
+            "default": "RECORDED_SOURCE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FetchState"
+              },
+              {
+                "const": "NOT_TESTED",
+                "type": "string"
+              }
+            ],
+            "title": "Status"
+          },
+          "supported_market": {
+            "title": "Supported Market",
+            "type": "boolean"
+          },
+          "supported_operation": {
+            "title": "Supported Operation",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "security_id",
+          "provider_id",
+          "origin_group",
+          "provider_symbol",
+          "operation",
+          "status",
+          "configuration",
+          "supported_market",
+          "supported_operation",
+          "availability",
+          "observations_count",
+          "last_result",
+          "last_success_at",
+          "legacy_runs_omitted",
+          "legacy_status_ignored"
+        ],
+        "title": "ProviderCoverage",
+        "type": "object"
+      },
+      "ProviderHealth": {
+        "additionalProperties": false,
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "pattern": "^[A-Z][A-Z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedSourcePage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "legacy_runs_omitted": {
+            "minimum": 0.0,
+            "title": "Legacy Runs Omitted",
+            "type": "integer"
+          },
+          "live_validation": {
+            "const": "NOT_TESTED",
+            "default": "NOT_TESTED",
+            "title": "Live Validation",
+            "type": "string"
+          },
+          "provider_id": {
+            "enum": [
+              "eodhd",
+              "alphavantage",
+              "massive",
+              "yahoo",
+              "yfinance",
+              "hkex_evidence",
+              "sec_evidence",
+              "manual"
+            ],
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "quota_remaining": {
+            "title": "Quota Remaining",
+            "type": "null"
+          },
+          "reason": {
+            "maxLength": 100,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "scope": {
+            "const": "LOCAL_CONFIGURATION_AND_RECORDED_SOURCE",
+            "default": "LOCAL_CONFIGURATION_AND_RECORDED_SOURCE",
+            "title": "Scope",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FetchState"
+          }
+        },
+        "required": [
+          "provider_id",
+          "configured",
+          "state",
+          "reason",
+          "last_result",
+          "last_success_at",
+          "last_error_code",
+          "legacy_runs_omitted"
+        ],
+        "title": "ProviderHealth",
+        "type": "object"
+      },
+      "ProviderInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "access_mode": {
+            "enum": [
+              "API_KEY",
+              "PUBLIC_HTTP",
+              "OPTIONAL_SDK",
+              "MANUAL_EVIDENCE"
+            ],
+            "title": "Access Mode",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "enum": [
+                "DIVIDENDS",
+                "SPLITS"
+              ],
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/AdapterHealth"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "coverage_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Start"
+          },
+          "data_rights": {
+            "enum": [
+              "UNVERIFIED",
+              "MANUAL_EVIDENCE_ONLY"
+            ],
+            "title": "Data Rights",
+            "type": "string"
+          },
+          "documentation_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentation Url"
+          },
+          "has_unadjusted_dividend": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Unadjusted Dividend"
+          },
+          "live_validation": {
+            "const": "NOT_TESTED",
+            "default": "NOT_TESTED",
+            "title": "Live Validation",
+            "type": "string"
+          },
+          "markets": {
+            "items": {
+              "enum": [
+                "HK",
+                "US"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Markets",
+            "type": "array"
+          },
+          "operations": {
+            "default": [],
+            "items": {
+              "enum": [
+                "DIVIDENDS",
+                "SPLITS"
+              ],
+              "type": "string"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "origin_group": {
+            "enum": [
+              "EODHD",
+              "ALPHAVANTAGE",
+              "MASSIVE",
+              "YAHOO",
+              "HKEX_OFFICIAL",
+              "SEC_OFFICIAL",
+              "USER_VERIFIED"
+            ],
+            "title": "Origin Group",
+            "type": "string"
+          },
+          "provider_id": {
+            "enum": [
+              "eodhd",
+              "alphavantage",
+              "massive",
+              "yahoo",
+              "yfinance",
+              "hkex_evidence",
+              "sec_evidence",
+              "manual"
+            ],
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "raw_payload_storage": {
+            "const": false,
+            "default": false,
+            "title": "Raw Payload Storage",
+            "type": "boolean"
+          },
+          "scope": {
+            "const": "CANDIDATE_METADATA_AND_LOCAL_CONFIGURATION",
+            "default": "CANDIDATE_METADATA_AND_LOCAL_CONFIGURATION",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "origin_group",
+          "markets",
+          "access_mode",
+          "data_rights",
+          "configured",
+          "capabilities",
+          "configuration"
+        ],
+        "title": "ProviderInfo",
+        "type": "object"
+      },
       "ProviderSymbol": {
         "additionalProperties": false,
         "properties": {
@@ -3067,6 +3657,159 @@
           "effective_from"
         ],
         "title": "ProviderSymbolCreate",
+        "type": "object"
+      },
+      "RecordedSourcePage": {
+        "additionalProperties": false,
+        "description": "One completed immutable page, not an active probe or a complete-history assertion.",
+        "properties": {
+          "attempted": {
+            "title": "Attempted",
+            "type": "boolean"
+          },
+          "duration_ms": {
+            "minimum": 0.0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "pattern": "^[A-Z][A-Z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "filtered_count": {
+            "minimum": 0.0,
+            "title": "Filtered Count",
+            "type": "integer"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "maximum": 599.0,
+                "minimum": 100.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "issue_count": {
+            "minimum": 0.0,
+            "title": "Issue Count",
+            "type": "integer"
+          },
+          "observations_count": {
+            "minimum": 0.0,
+            "title": "Observations Count",
+            "type": "integer"
+          },
+          "operation": {
+            "enum": [
+              "DIVIDENDS",
+              "SPLITS"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "parse_complete": {
+            "title": "Parse Complete",
+            "type": "boolean"
+          },
+          "provider_symbol": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9^][A-Za-z0-9.^=_-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Symbol"
+          },
+          "scope": {
+            "const": "RECORDED_SOURCE_PAGE",
+            "default": "RECORDED_SOURCE_PAGE",
+            "title": "Scope",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FetchState"
+          },
+          "window": {
+            "$ref": "#/components/schemas/FetchWindow"
+          }
+        },
+        "required": [
+          "id",
+          "security_id",
+          "operation",
+          "state",
+          "provider_symbol",
+          "started_at",
+          "finished_at",
+          "duration_ms",
+          "attempted",
+          "http_status",
+          "error_code",
+          "window",
+          "parse_complete",
+          "has_more",
+          "observations_count",
+          "issue_count",
+          "filtered_count",
+          "source_url"
+        ],
+        "title": "RecordedSourcePage",
         "type": "object"
       },
       "Security": {
@@ -11936,6 +12679,355 @@
         "summary": "Update Portfolio",
         "tags": [
           "Master data"
+        ]
+      }
+    },
+    "/api/v1/providers": {
+      "get": {
+        "operationId": "list_providers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ProviderInfo_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Providers",
+        "tags": [
+          "Providers"
+        ]
+      }
+    },
+    "/api/v1/providers/coverage": {
+      "get": {
+        "description": "A requested/parsed window is never returned as authoritative coverage_start/end.",
+        "operationId": "get_provider_coverage",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "security_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Security Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "eodhd",
+                    "alphavantage",
+                    "massive",
+                    "yahoo",
+                    "yfinance",
+                    "hkex_evidence",
+                    "sec_evidence",
+                    "manual"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "operation",
+            "required": false,
+            "schema": {
+              "default": "DIVIDENDS",
+              "enum": [
+                "DIVIDENDS",
+                "SPLITS"
+              ],
+              "title": "Operation",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ProviderCoverage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Coverage",
+        "tags": [
+          "Providers"
+        ]
+      }
+    },
+    "/api/v1/providers/{provider_id}/health": {
+      "get": {
+        "operationId": "get_provider_health",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "enum": [
+                "eodhd",
+                "alphavantage",
+                "massive",
+                "yahoo",
+                "yfinance",
+                "hkex_evidence",
+                "sec_evidence",
+                "manual"
+              ],
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderHealth"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Health",
+        "tags": [
+          "Providers"
         ]
       }
     },

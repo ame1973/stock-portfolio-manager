@@ -50,15 +50,15 @@ async def configured_adapter(
             yield _HTTP[provider_id](client)
 
 
+async def check_configuration(settings: Settings, provider_id: ProviderId) -> AdapterHealth:
+    """Read one local profile/dependency state without probing or reserving upstream traffic."""
+    loaded = ProviderConfigurationStore(settings).load(provider_id)
+    if loaded.error_code is not None:
+        return loaded.health
+    async with configured_adapter(loaded) as adapter:
+        return await adapter.healthcheck()
+
+
 async def check_configurations(settings: Settings) -> tuple[AdapterHealth, ...]:
     """Inspect files/local dependencies only; provider errors never become application unready."""
-    store = ProviderConfigurationStore(settings)
-    reports = []
-    for provider_id in registry():
-        loaded = store.load(provider_id)
-        if loaded.error_code is not None:
-            reports.append(loaded.health)
-        else:
-            async with configured_adapter(loaded) as adapter:
-                reports.append(await adapter.healthcheck())
-    return tuple(reports)
+    return tuple([await check_configuration(settings, provider_id) for provider_id in registry()])

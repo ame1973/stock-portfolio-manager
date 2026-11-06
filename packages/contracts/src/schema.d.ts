@@ -577,6 +577,60 @@ export interface paths {
         patch: operations["update_portfolio"];
         trace?: never;
     };
+    "/api/v1/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Providers */
+        get: operations["list_providers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Coverage
+         * @description A requested/parsed window is never returned as authoritative coverage_start/end.
+         */
+        get: operations["get_provider_coverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/{provider_id}/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health */
+        get: operations["get_provider_health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/securities": {
         parameters: {
             query?: never;
@@ -897,6 +951,43 @@ export interface components {
             /** Status */
             status?: ("ACTIVE" | "ARCHIVED") | null;
         };
+        /**
+         * AdapterHealth
+         * @description Local configuration diagnostics do not spend quota or pretend to probe an upstream.
+         */
+        AdapterHealth: {
+            /** Configured */
+            configured: boolean;
+            /** Last Success At */
+            last_success_at?: null;
+            /**
+             * Live Validation
+             * @default NOT_TESTED
+             * @constant
+             */
+            live_validation: "NOT_TESTED";
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual";
+            /** Quota Remaining */
+            quota_remaining?: null;
+            /** Reason */
+            reason: string;
+            /**
+             * Scope
+             * @default CONFIGURATION_ONLY
+             * @constant
+             */
+            scope: "CONFIGURATION_ONLY";
+            state: components["schemas"]["FetchState"];
+        };
+        /**
+         * Availability
+         * @enum {string}
+         */
+        Availability: "OBSERVATIONS_AVAILABLE" | "DATA_NOT_CONFIRMED" | "DATA_UNAVAILABLE" | "PROVIDER_UNSUPPORTED";
         /** Broker */
         Broker: {
             /** Dividend Fee */
@@ -1548,6 +1639,24 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /**
+         * FetchState
+         * @enum {string}
+         */
+        FetchState: "OK_WITH_DATA" | "NO_DATA" | "EMPTY_CONFIRMED" | "UNSUPPORTED" | "UNCONFIGURED" | "RATE_LIMITED" | "AUTH_ERROR" | "TRANSIENT_ERROR" | "PARSE_ERROR" | "STALE";
+        /** FetchWindow */
+        FetchWindow: {
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+        };
         /** Identifier */
         Identifier: {
             /**
@@ -1782,6 +1891,20 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[ProviderCoverage] */
+        Page_ProviderCoverage_: {
+            /** Items */
+            items: components["schemas"]["ProviderCoverage"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[ProviderInfo] */
+        Page_ProviderInfo_: {
+            /** Items */
+            items: components["schemas"]["ProviderInfo"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[ProviderSymbol] */
         Page_ProviderSymbol_: {
             /** Items */
@@ -1868,6 +1991,163 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** ProviderCoverage */
+        ProviderCoverage: {
+            availability: components["schemas"]["Availability"];
+            configuration: components["schemas"]["AdapterHealth"];
+            /**
+             * Coverage Basis
+             * @default NOT_ESTABLISHED
+             * @constant
+             */
+            coverage_basis: "NOT_ESTABLISHED";
+            /** Coverage End */
+            coverage_end?: null;
+            /** Coverage Start */
+            coverage_start?: null;
+            last_result: components["schemas"]["RecordedSourcePage"] | null;
+            /** Last Success At */
+            last_success_at: string | null;
+            /** Legacy Runs Omitted */
+            legacy_runs_omitted: number;
+            /** Legacy Status Ignored */
+            legacy_status_ignored: boolean;
+            /**
+             * Live Validation
+             * @default NOT_TESTED
+             * @constant
+             */
+            live_validation: "NOT_TESTED";
+            /** Observations Count */
+            observations_count: number;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "DIVIDENDS" | "SPLITS";
+            /**
+             * Origin Group
+             * @enum {string}
+             */
+            origin_group: "EODHD" | "ALPHAVANTAGE" | "MASSIVE" | "YAHOO" | "HKEX_OFFICIAL" | "SEC_OFFICIAL" | "USER_VERIFIED";
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual";
+            /** Provider Symbol */
+            provider_symbol: string | null;
+            /**
+             * Scope
+             * @default RECORDED_SOURCE_ONLY
+             * @constant
+             */
+            scope: "RECORDED_SOURCE_ONLY";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Status */
+            status: components["schemas"]["FetchState"] | "NOT_TESTED";
+            /** Supported Market */
+            supported_market: boolean;
+            /** Supported Operation */
+            supported_operation: boolean;
+        };
+        /** ProviderHealth */
+        ProviderHealth: {
+            /** Configured */
+            configured: boolean;
+            /** Last Error Code */
+            last_error_code: string | null;
+            last_result: components["schemas"]["RecordedSourcePage"] | null;
+            /** Last Success At */
+            last_success_at: string | null;
+            /** Legacy Runs Omitted */
+            legacy_runs_omitted: number;
+            /**
+             * Live Validation
+             * @default NOT_TESTED
+             * @constant
+             */
+            live_validation: "NOT_TESTED";
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual";
+            /** Quota Remaining */
+            quota_remaining?: null;
+            /** Reason */
+            reason: string;
+            /**
+             * Scope
+             * @default LOCAL_CONFIGURATION_AND_RECORDED_SOURCE
+             * @constant
+             */
+            scope: "LOCAL_CONFIGURATION_AND_RECORDED_SOURCE";
+            state: components["schemas"]["FetchState"];
+        };
+        /** ProviderInfo */
+        ProviderInfo: {
+            /**
+             * Access Mode
+             * @enum {string}
+             */
+            access_mode: "API_KEY" | "PUBLIC_HTTP" | "OPTIONAL_SDK" | "MANUAL_EVIDENCE";
+            /** Capabilities */
+            capabilities: ("DIVIDENDS" | "SPLITS")[];
+            configuration: components["schemas"]["AdapterHealth"];
+            /** Configured */
+            configured: boolean;
+            /** Coverage Start */
+            coverage_start?: string | null;
+            /**
+             * Data Rights
+             * @enum {string}
+             */
+            data_rights: "UNVERIFIED" | "MANUAL_EVIDENCE_ONLY";
+            /** Documentation Url */
+            documentation_url?: string | null;
+            /** Has Unadjusted Dividend */
+            has_unadjusted_dividend?: boolean | null;
+            /**
+             * Live Validation
+             * @default NOT_TESTED
+             * @constant
+             */
+            live_validation: "NOT_TESTED";
+            /** Markets */
+            markets: ("HK" | "US")[];
+            /**
+             * Operations
+             * @default []
+             */
+            operations: ("DIVIDENDS" | "SPLITS")[];
+            /**
+             * Origin Group
+             * @enum {string}
+             */
+            origin_group: "EODHD" | "ALPHAVANTAGE" | "MASSIVE" | "YAHOO" | "HKEX_OFFICIAL" | "SEC_OFFICIAL" | "USER_VERIFIED";
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual";
+            /**
+             * Raw Payload Storage
+             * @default false
+             * @constant
+             */
+            raw_payload_storage: false;
+            /**
+             * Scope
+             * @default CANDIDATE_METADATA_AND_LOCAL_CONFIGURATION
+             * @constant
+             */
+            scope: "CANDIDATE_METADATA_AND_LOCAL_CONFIGURATION";
+        };
         /** ProviderSymbol */
         ProviderSymbol: {
             /**
@@ -1922,6 +2202,67 @@ export interface components {
              * @default false
              */
             verified: boolean;
+        };
+        /**
+         * RecordedSourcePage
+         * @description One completed immutable page, not an active probe or a complete-history assertion.
+         */
+        RecordedSourcePage: {
+            /** Attempted */
+            attempted: boolean;
+            /** Duration Ms */
+            duration_ms: number;
+            /** Error Code */
+            error_code: string | null;
+            /** Filtered Count */
+            filtered_count: number;
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            /** Has More */
+            has_more: boolean;
+            /** Http Status */
+            http_status: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Count */
+            issue_count: number;
+            /** Observations Count */
+            observations_count: number;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "DIVIDENDS" | "SPLITS";
+            /** Parse Complete */
+            parse_complete: boolean;
+            /** Provider Symbol */
+            provider_symbol: string | null;
+            /**
+             * Scope
+             * @default RECORDED_SOURCE_PAGE
+             * @constant
+             */
+            scope: "RECORDED_SOURCE_PAGE";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Source Url */
+            source_url: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            state: components["schemas"]["FetchState"];
+            window: components["schemas"]["FetchWindow"];
         };
         /** Security */
         Security: {
@@ -7181,6 +7522,210 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_providers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ProviderInfo_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_provider_coverage: {
+        parameters: {
+            query?: {
+                security_id?: string | null;
+                provider_id?: ("eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual") | null;
+                operation?: "DIVIDENDS" | "SPLITS";
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ProviderCoverage_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_provider_health: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: "eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderHealth"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
