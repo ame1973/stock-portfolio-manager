@@ -1,4 +1,4 @@
-"""Single-leader supervision and fenced, quota-enforced source dispatch."""
+"""Single-leader source scheduling and fenced, quota-enforced dispatch."""
 
 import asyncio
 import fcntl
@@ -53,6 +53,7 @@ def healthy(directory: Path, *, max_age: int = 30) -> bool:
 
 async def run_leader(settings: Settings, engine: Engine, leader: UUID, stop: Event) -> None:
     from spm_worker.dispatcher import dispatch_once
+    from spm_worker.scheduler import schedule_once
 
     async def pulse() -> None:
         while not stop.is_set():
@@ -70,9 +71,20 @@ async def run_leader(settings: Settings, engine: Engine, leader: UUID, stop: Eve
             if not worked:
                 await asyncio.sleep(1)
 
+    async def schedule() -> None:
+        after = None
+        while not stop.is_set():
+            try:
+                after = await schedule_once(engine, settings, stopping=stop.is_set, after=after)
+            except Exception:
+                logging.getLogger(__name__).error("SOURCE_SCHEDULE_SCAN_FAILED")
+                after = None
+            await asyncio.sleep(1)
+
     async with asyncio.TaskGroup() as group:
         group.create_task(pulse())
         group.create_task(dispatch())
+        group.create_task(schedule())
 
 
 def main() -> None:

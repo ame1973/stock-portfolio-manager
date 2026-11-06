@@ -1,13 +1,13 @@
 # Explicit source schedule timing
 
-**Current implementation:** validated timing, durable storage, the internal
-controller and protected owner HTTP CRUD/receipt reads are installed. Automatic
-leader-worker materialization and scheduling UI are **not yet installed**.
-`automatic_materialization_installed=false` explicitly distinguishes persisted
-owner enablement from an operational automatic scheduler. Importing, migrating,
-creating a disabled definition or reading due candidates does not queue work,
-enable providers, send HTTP or mutate financial facts. Existing explicit source
-jobs remain available; schedule receipts describe queue/skip, never income.
+**Current implementation:** validated timing, durable storage, the protected
+owner API and automatic single-leader materialization are installed. Scheduling
+UI is **not yet installed**. `automatic_materialization_installed=true` describes
+an installed worker path, not a running/healthy leader or completed provider work.
+No default schedule is created. Importing, migrating, creating a disabled definition
+or reading due candidates does not queue work, enable providers, send HTTP or
+mutate financial facts. Only explicitly enabled, due definitions can be evaluated
+by the leader; schedule receipts describe queue/skip, never income.
 
 ## Explicit policy, no inferred scope
 
@@ -135,10 +135,12 @@ not-yet-materialized current instant, but never reuse the last materialized slot
 Pause retains existing work/history; no HTTP/secret-file access occurs in writers.
 
 A due evaluation coalesces elapsed slots to **one latest** market-local occurrence
-instead of emitting a potentially years-long backlog. Bounded scans return IDs so
-a future worker can isolate corrupt definitions. Materialization rechecks owner,
-enablement, version, policy, expected slot, latest elapsed slot and the first-job
-marker. If another slot elapsed while private selections were prepared, reevaluate
+instead of emitting a potentially years-long backlog. Bounded scans return IDs
+and use an in-memory UTC/ID keyset so corrupt early definitions cannot permanently
+starve later candidates. The scan wraps after its final page. Materialization
+rechecks owner, enablement, version, policy, retained count/progress/job scope,
+expected slot, latest elapsed slot and the first-job marker. If another slot
+elapsed while private selections were prepared, reevaluate
 rather than enqueue stale work. Each observed version has a deterministic internal
 intent and one immutable receipt. Concurrent writers/replays return the original
 receipt with zero additional writes, including after pause, job cancellation or
@@ -179,10 +181,11 @@ response commit together, including late validation/serialization rollback.
 
 Responses contain explicit SOURCE_ONLY/NOT_RUN scope, typed policy/timezone,
 enablement, UTC next/created/updated/last occurrence times, actual receipt count,
-first-backfill-queued flag and owned last-job reference. They deliberately report
-`automatic_materialization_installed=false`: enabled means a persisted owner
-intent, **not** an installed/healthy automatic scheduler or queued job. Current GET
-shows current state; idempotent mutation replay retains its original response and
+first-backfill-queued flag and owned last-job reference. They report
+`automatic_materialization_installed=true` for the installed automatic worker
+path. This is **not** heartbeat/readiness, successful execution, provider availability
+or verified coverage. Enablement alone does not mean that a job has been queued.
+Current GET shows current state; idempotent mutation replay retains its original response and
 ETag after later revisions. No schedule deletion, public materialize endpoint or
 implicit stop of an existing job is provided. Pause is a reasoned full revision;
 use the separate owned job cancellation API when work must be stopped.
@@ -199,15 +202,35 @@ cursors or credential metadata. Name/time cursor values are checked before SQL;
 clients must use the returned opaque cursor rather than reconstruct one from a
 formatted timestamp.
 
-## Integration still required
+## Automatic leader evaluation and recovery
 
-Automatic leader-worker scheduling must prepare private profiles outside writers,
-then call the controller and reuse existing aliases, shared quotas/circuit and
-fenced execution. There is no startup-created schedule, implicit provider
-permission, quota reset or automatic canonical dividend/receipt/share/cash/FX
-adoption. Worker stop/restart/backpressure and responsive scheduling UI need their
-own end-to-end acceptance. Current HTTP metadata enablement must not be presented
-as completed automatic source execution.
+The actual worker runs scheduling, source dispatch and heartbeat as independent
+supervised tasks, only while holding its existing OS leader lock. Each scheduler
+pass reads at most 25 candidates and yields between definitions. It freezes the
+due version/window, checks in-flight backpressure, and prepares any needed private
+provider selections on a thread outside all DB transactions. One slow profile
+read does not hold the event loop; awaited provider HTTP does not stop scheduling
+or heartbeat. An in-flight job needs no profile reload or additional spending.
 
-Paid/live providers, verified trading-session calendars, target NAS and production
-schedule acceptance remain NOT_TESTED.
+The short writer rechecks all fences and atomically creates one sealed source job,
+receipt, audit and progress update. Pauses/edits during preparation or a newly
+elapsed slot require a fresh evaluation. A blocker completing after the read hint
+cannot invent a skip or a job with missing selections: the next pass reevaluates.
+Corrupt retained progress fails closed with a fixed diagnostic and no repair;
+independent definitions continue. Error logs contain no private exception text.
+
+SIGTERM/SIGINT stops new evaluations before candidate/preparation work, after
+private preparation and again inside the writer before materialization. Already
+committed work is retained. Restart scans current due metadata; unique immutable
+receipts and deterministic intents prevent duplicate jobs. Missed slots coalesce
+to one latest occurrence, and initial backfill is never silently consumed twice.
+Stopping the worker does not reset quotas or refund unknown reserved HTTP spending.
+Existing job leases, alias/configuration fences, shared budgets/circuit and adapter
+execution remain the only upstream path; scheduling itself sends no provider HTTP.
+See [worker execution](WORKER.md) for dispatch shutdown and uncertain spending.
+
+There is no startup-created schedule, implicit provider permission, quota reset or
+automatic canonical dividend/receipt/share/cash/FX adoption. Responsive scheduling
+UI and managed key/citation mutations remain unfinished. Paid/live providers,
+verified trading-session calendars, target NAS and production schedule acceptance
+remain NOT_TESTED.

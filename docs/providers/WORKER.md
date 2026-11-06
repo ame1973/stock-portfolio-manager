@@ -10,12 +10,13 @@ NOT_TESTED.
 Owner-authenticated source enqueue/read/cancel APIs are available; see the
 [HTTP contract](JOBS.md#authenticated-http-intents-and-safe-diagnostics).
 The [source workspace](WORKSPACE.md) provides explicit queueing, progress and
-cancellation. Job-creation schedules, cited evidence creation/review APIs and
-key-import settings are still unfinished. Provider configuration/recorded-source
+cancellation. [Explicit schedules](SCHEDULES.md) also create source-only jobs through
+the same control/dispatch path; scheduling UI, cited evidence creation/review APIs
+and key-import settings are still unfinished. Provider configuration/recorded-source
 reads and [exact observation lists](OBSERVATIONS.md) are available separately,
-never as a live probe.
-No job or provider enablement is created at
-startup. Empty/unconfigured installations perform no upstream requests. Retained
+never as a live probe. No default schedule or provider enablement is created at
+startup; only explicitly enabled, due definitions can create scheduled work.
+Empty/unconfigured installations perform no upstream requests. Retained
 unmanaged jobs are not automatically adopted.
 
 ## Single leader, independent heartbeat
@@ -26,7 +27,9 @@ second claimant cannot execute the same job. The daemon polls for eligible work;
 future durable deadlines do not become loops that sleep while holding a writer.
 
 A separate asynchronous task checks database readiness and updates the heartbeat
-while provider I/O is awaited. A readiness-task failure stops the worker instead
+while provider I/O is awaited. Automatic schedule evaluation is another independent
+task; its private-file preparation runs outside the event loop and all DB writers.
+A readiness-task failure stops the worker instead
 of leaving a falsely healthy dispatcher. Unexpected dispatch failures log a fixed
 `SOURCE_DISPATCH_FAILED` code without exception text, credentials, paths, provider
 bodies or full upstream queries. Per-item errors remain bounded control codes.
@@ -102,5 +105,7 @@ conservative reservation spending and fenced lease recovery.
 An unfinished job is not owner-cancelled merely because its process stops. Its
 remaining lease must expire before another worker can recover it. Completed
 pages remain retained; an interrupted started logical round is conservatively
-consumed. No shutdown path deletes source, quota, job or audit history. Operational
-backup/restore quiescing and scheduled job creation remain separate work.
+consumed. No shutdown path deletes source, quota, job or audit history. Schedule
+evaluation also checks stop intent around preparation and before materialization;
+its committed receipts prevent duplicate queueing after restart. Operational
+backup/restore quiescing remains separate work.

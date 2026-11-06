@@ -213,21 +213,53 @@ def revise(
     return owned_schedule(con, owner_id, schedule_id)
 
 
-def due_ids(con: Connection, *, at: datetime, limit: int = 25) -> tuple[tuple[UUID, UUID], ...]:
-    """Return bounded owner/id candidates so one corrupt definition need not block its peers."""
+def due_ids(
+    con: Connection,
+    *,
+    at: datetime,
+    limit: int = 25,
+    after: tuple[str, UUID] | None = None,
+) -> tuple[tuple[UUID, UUID], ...]:
+    """Scan bounded keysets so corrupt due definitions cannot starve later candidates."""
     if type(limit) is not int or not 1 <= limit <= 100:
         raise ScheduleError("INVALID_SCHEDULE_LIMIT")
+    if after is not None:
+        try:
+            if type(after) is not tuple or len(after) != 2 or not isinstance(after[1], UUID):
+                raise ValueError("Invalid internal scan cursor")
+            _public_clock(after[0])
+        except (ValueError, TypeError, OverflowError):
+            raise ScheduleError("INVALID_SCHEDULE_CURSOR") from None
     return tuple(
         (UUID(row[0]), UUID(row[1]))
         for row in con.execute(
             text("""
         SELECT s.owner_id,s.id FROM source_schedules s JOIN owners o ON o.id=s.owner_id
         WHERE s.enabled=1 AND s.next_run_at<=:at AND o.is_active=1
+          AND (:after IS NULL OR s.next_run_at>:after
+               OR (s.next_run_at=:after AND s.id>:after_id))
         ORDER BY s.next_run_at,s.id LIMIT :limit
     """),
-            {"at": stamp(_clock(at)), "limit": limit},
+            {
+                "at": stamp(_clock(at)),
+                "limit": limit,
+                "after": after[0] if after is not None else None,
+                "after_id": str(after[1]) if after is not None else None,
+            },
         )
     )
+
+
+def blocking_job(con: Connection, owner_id: UUID, schedule_id: UUID) -> str | None:
+    """This read is only a hint before preparation; materialize rechecks it in the writer."""
+    previous = con.execute(
+        text("""
+        SELECT j.id,j.status FROM source_schedules s JOIN jobs j ON j.id=s.last_job_id
+        WHERE s.id=:id AND s.owner_id=:owner AND j.owner_id=:owner
+    """),
+        {"id": str(schedule_id), "owner": str(owner_id)},
+    ).first()
+    return previous[0] if previous is not None and previous[1] in _ACTIVE else None
 
 
 def _stored_slot(policy: SourceSchedulePolicy, encoded: str) -> datetime:
@@ -257,6 +289,7 @@ def due_schedule(
     if expected > clock:
         return None
     _scope(con, policy)
+    as_schedule(con, row)
     latest = latest_due(policy, clock)
     if latest is None or latest < expected:
         raise ScheduleError("SCHEDULE_SLOT_UNAVAILABLE")
@@ -325,16 +358,13 @@ def materialize(
     if latest_due(tick.policy, clock) != _clock(tick.due_at):
         raise ScheduleError("SCHEDULE_TICK_STALE")
     _scope(con, tick.policy)
+    as_schedule(con, row)
     try:
         window = occurrence_window(tick.policy, tick.due_at, initial=tick.initial)
     except ValueError as error:
         raise ScheduleError(str(error)) from None
     following = next_due(tick.policy, clock)
-    previous = con.execute(
-        text("SELECT id,status FROM jobs WHERE id=:id AND owner_id=:owner"),
-        {"id": row["last_job_id"], "owner": str(tick.owner_id)},
-    ).first()
-    blocking = previous[0] if previous is not None and previous[1] in _ACTIVE else None
+    blocking = blocking_job(con, tick.owner_id, tick.schedule_id)
     identifier = uuid5(tick.schedule_id, f"SOURCE_ONLY:{tick.version}")
     job_id = None
     if blocking is None:
@@ -615,7 +645,7 @@ def as_schedule(con: Connection, row: Mapping[str, Any] | RowMapping) -> SourceS
                 "exchange_timezone": policy.exchange_timezone,
                 "occurrence_count": count,
                 "initial_backfill_queued": bool(initials),
-                "automatic_materialization_installed": False,
+                "automatic_materialization_installed": True,
             }
         )
     except (ValueError, TypeError, KeyError, OverflowError):

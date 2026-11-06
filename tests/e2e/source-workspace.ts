@@ -163,6 +163,8 @@ export async function sourceBrowserForms(page: Page, post: Post, portfolioId: st
   await page.screenshot({ path: ".local/screenshots/source-dividends-1440.png", fullPage: true });
   for (const width of [768, 360]) {
     await page.setViewportSize({ width, height: 900 });
+    // Wait for the responsive branch, not the soon-to-unmount desktop expansion.
+    await expect(page.getByRole("table")).toHaveCount(0);
     const record = page.getByRole("article", { name: `SUI.US ${maximum.id}`, exact: true });
     await record.scrollIntoViewIfNeeded();
     await expect(record).toContainText("92233720368.54775807 幣別未知");

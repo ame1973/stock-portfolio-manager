@@ -108,7 +108,7 @@ async def test_create_is_disabled_audited_owned_and_truthful_about_dispatch(
     assert response.headers["etag"] == '"1"'
     assert record["enabled"] is False and record["next_run_at"] is None
     assert record["scope"] == "SOURCE_ONLY" and record["canonical_reconciliation"] == "NOT_RUN"
-    assert record["automatic_materialization_installed"] is False
+    assert record["automatic_materialization_installed"] is True
     assert record["exchange_timezone"] == "Asia/Hong_Kong"
     assert record["policy"]["operations"] == ["DIVIDENDS"]
     assert record["policy"]["calendar_basis"] == "LOCAL_WEEK_PATTERN_NOT_TRADING_CALENDAR"
@@ -153,7 +153,7 @@ async def test_full_cas_revision_enables_only_intent_and_pause_does_not_create_j
     safe(enabled)
     assert record["enabled"] is True and record["version"] == 2
     assert datetime.fromisoformat(record["next_run_at"]) == DUE
-    assert record["automatic_materialization_installed"] is False
+    assert record["automatic_materialization_installed"] is True
     assert enabled.headers["etag"] == '"2"'
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql("SELECT count(*) FROM jobs").scalar_one() == 0
