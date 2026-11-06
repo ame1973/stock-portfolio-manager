@@ -1,11 +1,12 @@
 """Owned source schedules and atomic due receipts; all private I/O stays with callers."""
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4, uuid5
 
 from pydantic import ValidationError
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection, RowMapping, text
 
 import spm_api.job_service as jobs
 from spm_api.audit import audit, canonical, digest, stamp
@@ -14,7 +15,9 @@ from spm_api.mutations import check_version
 from spm_api.schedule_models import (
     DueSchedule,
     SourceScheduleCreate,
+    SourceScheduleOccurrence,
     SourceSchedulePolicy,
+    SourceScheduleRecord,
     SourceScheduleUpdate,
 )
 from spm_api.schedule_time import _utc, latest_due, next_due, occurrence_window
@@ -405,3 +408,215 @@ def materialize(
         .mappings()
         .one()
     )
+
+
+def _public_clock(encoded: Any) -> datetime:
+    if not isinstance(encoded, str):
+        raise ValueError("Invalid retained schedule timestamp")
+    value = _clock(datetime.fromisoformat(encoded))
+    if stamp(value) != encoded:
+        raise ValueError("Noncanonical retained schedule timestamp")
+    return value
+
+
+def _receipt_job(con: Connection, row: Mapping[str, Any], policy: SourceSchedulePolicy) -> None:
+    if row["outcome"] == "SKIPPED_IN_FLIGHT":
+        if (
+            row["job_id"] is not None
+            or con.execute(
+                text("""
+            SELECT 1 FROM source_schedule_occurrences o JOIN jobs j ON j.id=o.job_id
+            WHERE o.schedule_id=:schedule AND o.owner_id=:owner AND o.sequence<:sequence
+              AND o.outcome='QUEUED' AND j.id=:job AND j.owner_id=:owner
+              AND j.runtime_version=1 AND j.kind=:kind
+        """),
+                {
+                    "schedule": row["schedule_id"],
+                    "owner": row["owner_id"],
+                    "sequence": row["sequence"],
+                    "job": row["blocking_job_id"],
+                    "kind": jobs.KIND,
+                },
+            ).first()
+            is None
+        ):
+            raise ValueError("Invalid retained blocking source job")
+        return
+    job = (
+        con.execute(
+            text("""
+        SELECT * FROM jobs WHERE id=:job AND owner_id=:owner AND runtime_version=1 AND kind=:kind
+    """),
+            {"job": row["job_id"], "owner": row["owner_id"], "kind": jobs.KIND},
+        )
+        .mappings()
+        .first()
+    )
+    if job is None or row["blocking_job_id"] is not None:
+        raise ValueError("Invalid retained queued source job")
+    plan = SourceJobPlan.model_validate_json(job["request_json"])
+    encoded = canonical(plan.model_dump(mode="json"))
+    intent = uuid5(UUID(row["schedule_id"]), f"SOURCE_ONLY:{row['schedule_version']}")
+    key = digest(canonical({"owner": row["owner_id"], "kind": jobs.KIND, "intent": str(intent)}))
+    count = con.execute(
+        text("SELECT count(*) FROM job_items WHERE job_id=:job"), {"job": row["job_id"]}
+    ).scalar_one()
+    if (
+        encoded != job["request_json"]
+        or key != job["dedupe_key"]
+        or digest(encoded) != job["request_sha256"]
+        or plan.force
+        or plan.security_ids != policy.security_ids
+        or plan.operations != policy.operations
+        or tuple(value.provider_id for value in plan.providers) != policy.provider_ids
+        or plan.window.start != row["window_start"]
+        or plan.window.end != row["window_end"]
+        or job["created_at"] != row["materialized_at"]
+        or count != len(plan.security_ids) * len(plan.providers) * len(plan.operations)
+    ):
+        raise ValueError("Inconsistent retained source job scope")
+
+
+def as_occurrence(con: Connection, row: Mapping[str, Any] | RowMapping) -> SourceScheduleOccurrence:
+    try:
+        raw = dict(row)
+        policy = policy_from_row(raw)
+        expected, due, materialized = (
+            _public_clock(raw[key]) for key in ("expected_run_at", "due_at", "materialized_at")
+        )
+        following = next_due(policy, materialized)
+        window = occurrence_window(policy, due, initial=raw["kind"] == "INITIAL_BACKFILL")
+        if (
+            not expected <= due <= materialized
+            or _stored_slot(policy, raw["expected_run_at"]) != expected
+            or raw["next_run_at"] != (stamp(following) if following else None)
+            or raw["window_start"] != window.start
+            or raw["window_end"] != window.end
+            or (raw["kind"] == "INITIAL_BACKFILL" and policy.backfill_from_date is None)
+        ):
+            raise ValueError("Inconsistent retained scheduling window")
+        _receipt_job(con, raw, policy)
+        return SourceScheduleOccurrence.model_validate(
+            {
+                **{
+                    key: raw[key]
+                    for key in (
+                        "id",
+                        "schedule_id",
+                        "sequence",
+                        "schedule_version",
+                        "expected_run_at",
+                        "due_at",
+                        "materialized_at",
+                        "next_run_at",
+                        "kind",
+                        "outcome",
+                        "job_id",
+                        "blocking_job_id",
+                    )
+                },
+                "policy": policy,
+                "window": window,
+            }
+        )
+    except (ValueError, TypeError, KeyError, OverflowError):
+        raise ScheduleError("SCHEDULE_RECORD_UNAVAILABLE") from None
+
+
+def as_schedule(con: Connection, row: Mapping[str, Any] | RowMapping) -> SourceScheduleRecord:
+    try:
+        raw = dict(row)
+        policy = policy_from_row(raw)
+        created, updated = (_public_clock(raw[key]) for key in ("created_at", "updated_at"))
+        if type(raw["enabled"]) is not int or raw["enabled"] not in (0, 1) or updated < created:
+            raise ValueError("Invalid retained schedule controls")
+        parameters = {"schedule": raw["id"], "owner": raw["owner_id"]}
+        count, maximum = con.execute(
+            text("""
+            SELECT count(*),max(sequence) FROM source_schedule_occurrences
+            WHERE schedule_id=:schedule AND owner_id=:owner
+        """),
+            parameters,
+        ).one()
+        if raw["last_sequence"] != count or (maximum or 0) != count:
+            raise ValueError("Inconsistent retained schedule count")
+        occurrences = (
+            con.execute(
+                text("""
+            SELECT * FROM source_schedule_occurrences
+            WHERE schedule_id=:schedule AND owner_id=:owner
+            ORDER BY sequence DESC LIMIT 1
+        """),
+                parameters,
+            )
+            .mappings()
+            .first()
+        )
+        latest = as_occurrence(con, occurrences) if occurrences is not None else None
+        last_due = stamp(latest.due_at) if latest is not None else None
+        last_materialized = stamp(latest.materialized_at) if latest is not None else None
+        if raw["last_due_at"] != last_due or raw["last_materialized_at"] != last_materialized:
+            raise ValueError("Inconsistent retained schedule progress")
+        if last_materialized is not None and last_materialized > raw["updated_at"]:
+            raise ValueError("Regressed retained schedule clock")
+        queued = (
+            con.execute(
+                text("""
+            SELECT * FROM source_schedule_occurrences
+            WHERE schedule_id=:schedule AND owner_id=:owner AND outcome='QUEUED'
+            ORDER BY sequence DESC LIMIT 1
+        """),
+                parameters,
+            )
+            .mappings()
+            .first()
+        )
+        if raw["last_job_id"] != (queued["job_id"] if queued is not None else None):
+            raise ValueError("Inconsistent retained latest job")
+        if queued is not None:
+            as_occurrence(con, queued)
+        initials = (
+            con.execute(
+                text("""
+            SELECT job_id FROM source_schedule_occurrences
+            WHERE schedule_id=:schedule AND owner_id=:owner
+                AND outcome='QUEUED' AND kind='INITIAL_BACKFILL' ORDER BY sequence LIMIT 2
+        """),
+                parameters,
+            )
+            .scalars()
+            .all()
+        )
+        if len(initials) > 1 or raw["initial_job_id"] != (initials[0] if initials else None):
+            raise ValueError("Inconsistent retained initial backfill")
+        following = next_due(
+            policy, updated, inclusive=last_due is None or raw["updated_at"] > last_due
+        )
+        if raw["next_run_at"] != (stamp(following) if raw["enabled"] and following else None):
+            raise ValueError("Inconsistent retained next slot")
+        return SourceScheduleRecord.model_validate(
+            {
+                **{
+                    key: raw[key]
+                    for key in (
+                        "id",
+                        "name",
+                        "version",
+                        "next_run_at",
+                        "last_job_id",
+                        "last_due_at",
+                        "last_materialized_at",
+                        "created_at",
+                        "updated_at",
+                    )
+                },
+                "enabled": bool(raw["enabled"]),
+                "policy": policy,
+                "exchange_timezone": policy.exchange_timezone,
+                "occurrence_count": count,
+                "initial_backfill_queued": bool(initials),
+                "automatic_materialization_installed": False,
+            }
+        )
+    except (ValueError, TypeError, KeyError, OverflowError):
+        raise ScheduleError("SCHEDULE_RECORD_UNAVAILABLE") from None

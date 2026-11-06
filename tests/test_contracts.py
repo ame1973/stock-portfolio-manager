@@ -43,6 +43,11 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
     identifiers = [op["operationId"] for op in actual.values()]
     assert len(identifiers) == len(set(identifiers))
     extensions = {
+        ("/api/v1/source-schedules", "get"): "list_source_schedules",
+        ("/api/v1/source-schedules", "post"): "create_source_schedule",
+        ("/api/v1/source-schedules/{id}", "get"): "get_source_schedule",
+        ("/api/v1/source-schedules/{id}", "patch"): "update_source_schedule",
+        ("/api/v1/source-schedules/{id}/occurrences", "get"): "list_source_schedule_occurrences",
         ("/api/v1/providers/split-observations", "get"): "list_split_observations",
         ("/api/v1/jobs/{id}/items", "get"): "list_job_items",
         ("/api/v1/auth/reauth", "post"): "reauthenticate",

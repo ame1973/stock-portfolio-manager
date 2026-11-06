@@ -22,6 +22,8 @@ from spm_api.finance import FinanceError
 from spm_api.master_routes import router as master_router
 from spm_api.observation_routes import router as observation_router
 from spm_api.provider_routes import router as provider_router
+from spm_api.schedule_routes import router as schedule_router
+from spm_api.schedule_service import ScheduleError
 from spm_api.sync_routes import router as sync_router
 from spm_api.trade_routes import router as trade_router
 from spm_api.transfer_routes import router as transfer_router
@@ -70,6 +72,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return error_response(request, status, exc.code, str(exc))
 
+    @app.exception_handler(ScheduleError)
+    async def schedule_error(request: Request, exc: ScheduleError) -> JSONResponse:
+        code = str(exc)
+        if code == "SCHEDULE_NOT_FOUND":
+            return error_response(request, 404, "NOT_FOUND", "Source schedule not found")
+        if code in {
+            "SCHEDULE_POLICY_UNAVAILABLE",
+            "SCHEDULE_SLOT_UNAVAILABLE",
+            "SCHEDULE_RECORD_UNAVAILABLE",
+        }:
+            return error_response(
+                request,
+                503,
+                "SOURCE_SCHEDULE_UNAVAILABLE",
+                "The stored source schedule cannot be read safely",
+            )
+        if code == "SCHEDULE_SECURITY_SCOPE":
+            return error_response(
+                request,
+                422,
+                "INVALID_SOURCE_SCHEDULE_SCOPE",
+                "The schedule securities do not match the requested market",
+            )
+        return error_response(
+            request,
+            409,
+            "SOURCE_SCHEDULE_CHANGE_REJECTED",
+            "The source schedule change could not be accepted",
+        )
+
     @app.exception_handler(IntegrityError)
     async def integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
         return error_response(request, 409, "CONFLICT", "The change violates a data constraint")
@@ -115,6 +147,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sync_router)
     app.include_router(provider_router)
     app.include_router(observation_router)
+    app.include_router(schedule_router)
     return app
 
 

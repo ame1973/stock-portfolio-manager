@@ -10,6 +10,7 @@ from spm_api.errors import Model
 from spm_api.job_models import SourceOperation
 from spm_api.master_models import ChangeReason, Name, ProviderId
 from spm_api.providers.base import Market, registry
+from spm_api.providers.symbols import FetchWindow
 
 
 class SourceSchedulePolicy(Model):
@@ -84,3 +85,46 @@ class DueSchedule(Model):
     due_at: Annotated[AwareDatetime, Field(strict=True)]
     policy: SourceSchedulePolicy
     initial: bool = Field(strict=True)
+
+
+class SourceScheduleRecord(Model):
+    """Owned schedule intent and committed progress, never private profile/lease state."""
+
+    id: UUID
+    name: Name
+    policy: SourceSchedulePolicy
+    enabled: bool
+    version: int = Field(strict=True, ge=1, le=2147483647)
+    scope: Literal["SOURCE_ONLY"] = "SOURCE_ONLY"
+    canonical_reconciliation: Literal["NOT_RUN"] = "NOT_RUN"
+    automatic_materialization_installed: bool
+    exchange_timezone: Literal["Asia/Hong_Kong", "America/New_York"]
+    next_run_at: AwareDatetime | None
+    occurrence_count: int = Field(strict=True, ge=0, le=2147483647)
+    initial_backfill_queued: bool
+    last_job_id: UUID | None
+    last_due_at: AwareDatetime | None
+    last_materialized_at: AwareDatetime | None
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class SourceScheduleOccurrence(Model):
+    """Immutable scheduling receipt, not provider success or financial adoption."""
+
+    id: UUID
+    schedule_id: UUID
+    sequence: int = Field(strict=True, ge=1, le=2147483647)
+    schedule_version: int = Field(strict=True, ge=1, le=2147483647)
+    scope: Literal["SOURCE_ONLY"] = "SOURCE_ONLY"
+    canonical_reconciliation: Literal["NOT_RUN"] = "NOT_RUN"
+    expected_run_at: AwareDatetime
+    due_at: AwareDatetime
+    materialized_at: AwareDatetime
+    next_run_at: AwareDatetime | None
+    policy: SourceSchedulePolicy
+    window: FetchWindow
+    kind: Literal["REGULAR", "INITIAL_BACKFILL"]
+    outcome: Literal["QUEUED", "SKIPPED_IN_FLIGHT"]
+    job_id: UUID | None
+    blocking_job_id: UUID | None

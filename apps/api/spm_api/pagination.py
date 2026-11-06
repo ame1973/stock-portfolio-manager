@@ -9,10 +9,14 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, Query
+from pydantic import TypeAdapter
 from sqlalchemy import RowMapping
 
 from spm_api.audit import stamp
 from spm_api.errors import ApiError, Model
+from spm_api.master_models import Name
+
+_NAME = TypeAdapter(Name)
 
 
 class Page[T: Model](Model):
@@ -55,6 +59,17 @@ class PageQuery:
             "search": f"%{escaped}%",
             "limit": self.limit + 1,
         }
+
+
+def validate_name_page(query: PageQuery) -> None:
+    if query.cursor_value is None:
+        return
+    try:
+        if _NAME.validate_python(query.cursor_value) == query.cursor_value:
+            return
+    except ValueError:
+        pass
+    raise ApiError(422, "INVALID_CURSOR", "Invalid name pagination cursor")
 
 
 def validate_date_page(query: PageQuery, start: str | None, end: str | None) -> None:

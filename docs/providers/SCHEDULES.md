@@ -1,12 +1,13 @@
 # Explicit source schedule timing
 
-**Current implementation:** the validated timing policy/date calculations,
-migration `0011_source_schedules` and internal owned schedule controller are
-installed. Protected HTTP CRUD and automatic worker/UI integration are **not yet
-installed**. Importing a policy, migrating or reading due candidates creates no
-schedule, job, provider enablement, HTTP request or financial mutation. Explicit
-internal controller writes can create disabled definitions or materialize sealed
-SOURCE_ONLY jobs; this is not an available owner scheduler API.
+**Current implementation:** validated timing, durable storage, the internal
+controller and protected owner HTTP CRUD/receipt reads are installed. Automatic
+leader-worker materialization and scheduling UI are **not yet installed**.
+`automatic_materialization_installed=false` explicitly distinguishes persisted
+owner enablement from an operational automatic scheduler. Importing, migrating,
+creating a disabled definition or reading due candidates does not queue work,
+enable providers, send HTTP or mutate financial facts. Existing explicit source
+jobs remain available; schedule receipts describe queue/skip, never income.
 
 ## Explicit policy, no inferred scope
 
@@ -39,7 +40,7 @@ limits apply before set canonicalization, as with manual source intents.
   cannot invent cited human input. Strict integer/boolean/date boundaries reject
   coercion; policy values are frozen and their JSON identity is canonical.
 
-A synthetic **internal policy**, not an available HTTP request, is:
+An explicit policy, used as the `policy` member of an HTTP create/update body, is:
 
 ```json
 {
@@ -121,7 +122,7 @@ manual source request or a new disabled definition is required for another one.
 Pausing/editing metadata changes future scheduling, not already queued work;
 existing job cancellation remains a separate stop intent.
 
-## Internal controller, not protected owner routes
+## Internal controller and HTTP boundary
 
 `schedule_service` provides disabled creation, reasoned full-body CAS revision,
 owned reads, bounded due owner/ID candidates, frozen due evaluation and atomic
@@ -152,17 +153,61 @@ not be swallowed and committed as a partial write. Aware UTC clocks, finite
 calendar/window bounds, strict internal datetime types and fixed safe corruption
 errors prevent timestamp guessing, silent rehash/repair or private exception dumps.
 
+## Protected owner API
+
+All paths are under `/api/v1`, authenticated and **no-store**. These handlers do
+not read private provider files, probe providers, reserve quota or reconcile facts.
+
+| Method and path | Meaning |
+| --- | --- |
+| `GET /source-schedules` | Owned definitions, bounded `q`/`enabled`/`limit`/`cursor`, SQLite NOCASE name then physical ID ascending |
+| `POST /source-schedules` | Create an explicitly named disabled policy, 201 + Location + version ETag |
+| `GET /source-schedules/{id}` | Current owned metadata/committed progress + version ETag |
+| `PATCH /source-schedules/{id}` | Full name/policy/strict enabled/reason body + quoted If-Match, 200 + new ETag |
+| `GET /source-schedules/{id}/occurrences` | Bounded immutable receipts, due UTC/ID descending, literal `q`/`limit`/`cursor` |
+
+Create accepts `{ "name": "Owner-selected source schedule", "policy": { ... } }`,
+where the complete policy is as documented above. It never accepts enabled, owner,
+credentials, force, caller-clock or server-progress fields. Update requires the
+complete name/policy plus an explicit real boolean `enabled` and a 10–1000-character
+reason. Both mutations require session/CSRF and Idempotency-Key, rechecked inside
+the short writer UoW. PATCH also binds its observed version into the idempotency
+fingerprint; a different If-Match under the same key conflicts instead of silently
+replaying a different command. A stale editor returns 412. Current required-header
+validation uses 422; invalid CSRF uses 403. Audit, metadata and serialized cached
+response commit together, including late validation/serialization rollback.
+
+Responses contain explicit SOURCE_ONLY/NOT_RUN scope, typed policy/timezone,
+enablement, UTC next/created/updated/last occurrence times, actual receipt count,
+first-backfill-queued flag and owned last-job reference. They deliberately report
+`automatic_materialization_installed=false`: enabled means a persisted owner
+intent, **not** an installed/healthy automatic scheduler or queued job. Current GET
+shows current state; idempotent mutation replay retains its original response and
+ETag after later revisions. No schedule deletion, public materialize endpoint or
+implicit stop of an existing job is provided. Pause is a reasoned full revision;
+use the separate owned job cancellation API when work must be stopped.
+
+Occurrence reads preserve the frozen policy/window, expected/due/materialization
+UTC times, observed version/sequence, next slot, queue/skip outcome and owned job
+links. They remain readable after key removal and do not inherit today's edited
+policy. Canonical hashes/zoneinfo windows, actual count/progress and complete
+managed-job scope/deterministic intent are validated before serialization. Invalid
+retained metadata/receipts fail with fixed **503 SOURCE_SCHEDULE_UNAVAILABLE**;
+GET never silently repairs, rehashes or echoes invalid private data. DTOs do not
+dump owner IDs, raw policy/request JSON, private profile hashes, leases, upstream
+cursors or credential metadata. Name/time cursor values are checked before SQL;
+clients must use the returned opaque cursor rather than reconstruct one from a
+formatted timestamp.
+
 ## Integration still required
 
-These are internal domain functions, not authenticated HTTP endpoints. Protected
-CRUD/list/occurrence DTOs still require session/CSRF/owner rechecks, HTTP idempotency,
-CAS, no-store handling and safe serialization before exposing owner controls.
 Automatic leader-worker scheduling must prepare private profiles outside writers,
 then call the controller and reuse existing aliases, shared quotas/circuit and
 fenced execution. There is no startup-created schedule, implicit provider
 permission, quota reset or automatic canonical dividend/receipt/share/cash/FX
-adoption. Worker stop/restart/backpressure and responsive owner UI need their own
-end-to-end acceptance.
+adoption. Worker stop/restart/backpressure and responsive scheduling UI need their
+own end-to-end acceptance. Current HTTP metadata enablement must not be presented
+as completed automatic source execution.
 
 Paid/live providers, verified trading-session calendars, target NAS and production
 schedule acceptance remain NOT_TESTED.

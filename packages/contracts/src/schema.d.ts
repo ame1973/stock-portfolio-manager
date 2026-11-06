@@ -842,6 +842,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/source-schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Schedules */
+        get: operations["list_source_schedules"];
+        put?: never;
+        /**
+         * Create Schedule
+         * @description Persist a disabled owner definition, not a claim of installed automatic scheduling.
+         */
+        post: operations["create_source_schedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/source-schedules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Schedule */
+        get: operations["get_source_schedule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Schedule */
+        patch: operations["update_source_schedule"];
+        trace?: never;
+    };
+    "/api/v1/source-schedules/{id}/occurrences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Occurrences */
+        get: operations["list_source_schedule_occurrences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/trades": {
         parameters: {
             query?: never;
@@ -2101,6 +2157,20 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[SourceScheduleOccurrence] */
+        Page_SourceScheduleOccurrence_: {
+            /** Items */
+            items: components["schemas"]["SourceScheduleOccurrence"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[SourceScheduleRecord] */
+        Page_SourceScheduleRecord_: {
+            /** Items */
+            items: components["schemas"]["SourceScheduleRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[TradeRecord] */
         Page_TradeRecord_: {
             /** Items */
@@ -2811,6 +2881,205 @@ export interface components {
             work_units: number;
             /** Work Units Done */
             work_units_done: number;
+        };
+        /** SourceScheduleCreate */
+        SourceScheduleCreate: {
+            /** Name */
+            name: string;
+            policy: components["schemas"]["SourceSchedulePolicy"];
+        };
+        /**
+         * SourceScheduleOccurrence
+         * @description Immutable scheduling receipt, not provider success or financial adoption.
+         */
+        SourceScheduleOccurrence: {
+            /** Blocking Job Id */
+            blocking_job_id: string | null;
+            /**
+             * Canonical Reconciliation
+             * @default NOT_RUN
+             * @constant
+             */
+            canonical_reconciliation: "NOT_RUN";
+            /**
+             * Due At
+             * Format: date-time
+             */
+            due_at: string;
+            /**
+             * Expected Run At
+             * Format: date-time
+             */
+            expected_run_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "REGULAR" | "INITIAL_BACKFILL";
+            /**
+             * Materialized At
+             * Format: date-time
+             */
+            materialized_at: string;
+            /** Next Run At */
+            next_run_at: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "QUEUED" | "SKIPPED_IN_FLIGHT";
+            policy: components["schemas"]["SourceSchedulePolicy"];
+            /**
+             * Schedule Id
+             * Format: uuid
+             */
+            schedule_id: string;
+            /** Schedule Version */
+            schedule_version: number;
+            /**
+             * Scope
+             * @default SOURCE_ONLY
+             * @constant
+             */
+            scope: "SOURCE_ONLY";
+            /** Sequence */
+            sequence: number;
+            window: components["schemas"]["FetchWindow"];
+        };
+        /**
+         * SourceSchedulePolicy
+         * @description A bounded local week pattern, not a verified exchange-session calendar.
+         */
+        SourceSchedulePolicy: {
+            /** Backfill From Date */
+            backfill_from_date?: string | null;
+            /**
+             * Cadence
+             * @enum {string}
+             */
+            cadence: "DAILY" | "WEEKDAYS" | "WEEKLY";
+            /**
+             * Calendar Basis
+             * @default LOCAL_WEEK_PATTERN_NOT_TRADING_CALENDAR
+             * @constant
+             */
+            calendar_basis: "LOCAL_WEEK_PATTERN_NOT_TRADING_CALENDAR";
+            /**
+             * First Date
+             * Format: date
+             */
+            first_date: string;
+            /** Local Run Time */
+            local_run_time: string;
+            /** Lookback Days */
+            lookback_days?: number | null;
+            /** Lookback Months */
+            lookback_months?: number | null;
+            /**
+             * Market
+             * @enum {string}
+             */
+            market: "HK" | "US";
+            /**
+             * Operations
+             * @default [
+             *       "DIVIDENDS"
+             *     ]
+             */
+            operations: ("DIVIDENDS" | "SPLITS")[];
+            /** Provider Ids */
+            provider_ids: ("eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual")[];
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /**
+             * Scope
+             * @default SOURCE_ONLY
+             * @constant
+             */
+            scope: "SOURCE_ONLY";
+            /** Security Ids */
+            security_ids: string[];
+            /** Weekday */
+            weekday?: number | null;
+        };
+        /**
+         * SourceScheduleRecord
+         * @description Owned schedule intent and committed progress, never private profile/lease state.
+         */
+        SourceScheduleRecord: {
+            /** Automatic Materialization Installed */
+            automatic_materialization_installed: boolean;
+            /**
+             * Canonical Reconciliation
+             * @default NOT_RUN
+             * @constant
+             */
+            canonical_reconciliation: "NOT_RUN";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Exchange Timezone
+             * @enum {string}
+             */
+            exchange_timezone: "Asia/Hong_Kong" | "America/New_York";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Initial Backfill Queued */
+            initial_backfill_queued: boolean;
+            /** Last Due At */
+            last_due_at: string | null;
+            /** Last Job Id */
+            last_job_id: string | null;
+            /** Last Materialized At */
+            last_materialized_at: string | null;
+            /** Name */
+            name: string;
+            /** Next Run At */
+            next_run_at: string | null;
+            /** Occurrence Count */
+            occurrence_count: number;
+            policy: components["schemas"]["SourceSchedulePolicy"];
+            /**
+             * Scope
+             * @default SOURCE_ONLY
+             * @constant
+             */
+            scope: "SOURCE_ONLY";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** SourceScheduleUpdate */
+        SourceScheduleUpdate: {
+            /** Enabled */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            policy: components["schemas"]["SourceSchedulePolicy"];
+            /** Reason */
+            reason: string;
         };
         /** SplitObservationRecord */
         SplitObservationRecord: {
@@ -9715,6 +9984,451 @@ export interface operations {
             };
             /** @description Too Many Requests */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_source_schedules: {
+        parameters: {
+            query?: {
+                enabled?: boolean | null;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SourceScheduleRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    create_source_schedule: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceScheduleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceScheduleRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_source_schedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceScheduleRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    update_source_schedule: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceScheduleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceScheduleRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_source_schedule_occurrences: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SourceScheduleOccurrence_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

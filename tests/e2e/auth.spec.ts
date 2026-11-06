@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import type { components } from "../../packages/contracts/src/schema";
 import { sourceJobApi } from "./source-jobs";
+import { sourceScheduleApi } from "./source-schedules";
 import { sourceBrowserForms } from "./source-workspace";
 import { workspaceBrowserForms } from "./workspace";
 
@@ -858,6 +859,7 @@ test("financial browser forms preserve exact facts, conflicts, reversals and ope
   await test.step("corporate-action forms: exact ratios, adopted terms and explicit review", () => actionBrowserForms(page));
   await test.step("responsive workspace: server tables, full-screen sheets, focus and pending-write protection", async () => workspaceBrowserForms(page, (await signedRequests(page)).post));
   await test.step("source-only job API: real unconfigured worker, safe progress and no financial changes", async () => sourceJobApi(page, (await signedRequests(page)).headers, stock.id, portfolio.id, account.id));
+  await test.step("source schedule API: owned intent, CAS, pause and no automatic dispatch claim", async () => sourceScheduleApi(page, (await signedRequests(page)).headers, stock.id, portfolio.id, account.id));
   await test.step("data center: explicit source queue, cancellation and exact network-disabled evidence", async () => sourceBrowserForms(page, (await signedRequests(page)).post, portfolio.id, account.id));
   expect(errors).toEqual([]);
   await page.getByRole("button", { name: "登出", exact: true }).click();
