@@ -12,6 +12,7 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field, StringConstraints
 
+from spm_api.action_models import JsonRatio
 from spm_api.decimal_types import Dps, IsoDate
 from spm_api.errors import Model
 from spm_api.master_models import Currency, ProviderCode, ProviderId
@@ -30,6 +31,19 @@ EventType = Literal[
     "ETF_DISTRIBUTION",
     "REIT_DISTRIBUTION",
     "UNKNOWN",
+]
+
+
+SourcePeriod = Literal[
+    "ANNUAL",
+    "QUARTERLY",
+    "MONTHLY",
+    "WEEKLY",
+    "INTERIM",
+    "FINAL",
+    "SPECIAL",
+    "SUPPLEMENTAL",
+    "OTHER",
 ]
 
 
@@ -76,6 +90,9 @@ class ProviderDefinition(Model):
     live_validation: Literal["NOT_TESTED"] = "NOT_TESTED"
     data_rights: Literal["UNVERIFIED", "MANUAL_EVIDENCE_ONLY"]
     raw_payload_storage: Literal[False] = False
+    operations: tuple[Literal["DIVIDENDS", "SPLITS"], ...] = ()
+    coverage_start: IsoDate | None = None
+    has_unadjusted_dividend: bool | None = Field(default=None, strict=True)
 
 
 class _Catalogue(Model):
@@ -103,8 +120,8 @@ def independent_vendor_origins(providers: Iterable[ProviderId]) -> frozenset[Ori
     )
 
 
-class DividendObservation(Model):
-    """One bounded source assertion, not a canonical event or receipt."""
+class SourceObservation(Model):
+    """Bounded immutable source identity, never a canonical financial fact."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -120,14 +137,6 @@ class DividendObservation(Model):
         ]
         | None
     ) = None
-    ex_date: IsoDate | None = None
-    announce_date: IsoDate | None = None
-    record_date: IsoDate | None = None
-    pay_date: IsoDate | None = None
-    event_type: EventType = "UNKNOWN"
-    dps: Dps | None = None
-    currency: Currency | None = None
-    adjustment_basis: AdjustmentBasis = "UNKNOWN"
 
     @property
     def origin_group(self) -> OriginGroup:
@@ -138,6 +147,21 @@ class DividendObservation(Model):
         value = {**self.model_dump(mode="json"), "origin_group": self.origin_group}
         canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+class DividendObservation(SourceObservation):
+    """One source assertion, not a canonical event or receipt."""
+
+    ex_date: IsoDate | None = None
+    announce_date: IsoDate | None = None
+    record_date: IsoDate | None = None
+    pay_date: IsoDate | None = None
+    event_type: EventType = "UNKNOWN"
+    dps: Dps | None = None
+    currency: Currency | None = None
+    source_currency: Annotated[str, Field(strict=True, pattern=r"^[A-Z]{3}$")] | None = None
+    source_period: SourcePeriod | None = None
+    adjustment_basis: AdjustmentBasis = "UNKNOWN"
 
     @property
     def incomplete_reasons(self) -> frozenset[str]:
@@ -152,3 +176,12 @@ class DividendObservation(Model):
         if self.adjustment_basis != "AS_DECLARED":
             reasons.add("UNRESOLVED_ADJUSTMENT")
         return frozenset(reasons)
+
+
+class SplitObservation(SourceObservation):
+    """A provider factor may include other adjustments; it never adopts ledger share terms."""
+
+    effective_date: IsoDate
+    ratio_numerator: JsonRatio
+    ratio_denominator: JsonRatio
+    effect_scope: Literal["PROVIDER_ADJUSTMENT_ONLY"] = "PROVIDER_ADJUSTMENT_ONLY"

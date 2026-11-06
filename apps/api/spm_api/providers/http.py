@@ -290,7 +290,8 @@ class ProviderHTTP:
         finally:
             _PROVIDER_LOG_SCOPE.reset(token)
 
-    def _access_error(self) -> TransportError | None:
+    def configuration_error(self) -> TransportError | None:
+        """Check local permission/credential shape, never upstream availability or live coverage."""
         if self.provider_id not in _ORIGINS:
             return TransportError.UNSUPPORTED_PROVIDER
         credential = self._access.credential
@@ -372,7 +373,7 @@ class ProviderHTTP:
     async def get_json(
         self, reference: str, *, params: Mapping[str, str] | None = None
     ) -> TransportResult:
-        error = self._access_error()
+        error = self.configuration_error()
         if error:
             return TransportResult(error=error)
         try:

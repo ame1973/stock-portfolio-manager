@@ -52,6 +52,14 @@ class AliasSegment(Model):
     alias: AliasPeriod
     window: FetchWindow
 
+    @model_validator(mode="after")
+    def within_identity(self) -> "AliasSegment":
+        if self.window.start < self.alias.effective_from or (
+            self.alias.effective_to is not None and self.window.end > self.alias.effective_to
+        ):
+            raise ValueError("Fetch segment must remain inside the explicit alias period")
+        return self
+
 
 class ResolutionState(StrEnum):
     RESOLVED = "RESOLVED"

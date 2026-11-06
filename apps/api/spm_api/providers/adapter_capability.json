@@ -7,7 +7,9 @@
       "markets": ["HK", "US"],
       "access_mode": "API_KEY",
       "documentation_url": "https://eodhd.com/financial-apis/api-splits-dividends",
-      "data_rights": "UNVERIFIED"
+      "data_rights": "UNVERIFIED",
+      "operations": ["DIVIDENDS", "SPLITS"],
+      "has_unadjusted_dividend": true
     },
     {
       "provider_id": "alphavantage",
