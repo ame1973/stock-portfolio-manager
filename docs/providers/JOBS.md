@@ -2,8 +2,9 @@
 
 This contract describes the installed server-side job-control library, not an
 available sync API or scheduled provider service. The worker still supervises
-leadership/heartbeat only. Quota reservations, circuit/backoff policy, dispatcher,
-manual-sync/job HTTP APIs and monitoring UI are not yet integrated. No default
+leadership/heartbeat only. The [upstream reservation library](BUDGETS.md) supplies
+shared quota, attempt and circuit/backoff policy; the actual dispatcher,
+manual-sync/job HTTP APIs and monitoring UI are not yet connected. No default
 job/provider traffic is enabled, and paid/live coverage remains NOT_TESTED.
 
 ## Sealed source-only work
@@ -46,15 +47,17 @@ The existing `max_attempts=4` is interpreted conservatively as **at most four
 logical work attempts including the initial attempt**, independently per item.
 A normal multi-page fetch remains one logical attempt; completed pages survive
 retry/restart. The job's `attempt_count` is the highest item attempt reached, not
-HTTP call count or lease generation. Upstream request spending will be counted
-separately by the quota/attempt layer; these values must not masquerade as live
-usage diagnostics.
+HTTP call count or lease generation. Upstream request spending is counted
+separately by the quota/attempt layer, with an explicit reserved/recorded basis;
+these values must not masquerade as verified live usage or provider billing.
 
 Waiting for a quota/circuit deadline does not increment the work-attempt count.
-Waits are absolute aware UTC times, persisted without a shorter arbitrary clamp.
-A waiting job releases its lease and is not claimable before its earliest work
-is due. Retry policy must separately honor Retry-After/backoff/jitter; the control
-library stores deadlines but does not yet compute or enforce upstream quotas.
+A mid-page wait preserves the open logical round across parking and a new lease,
+including in the fourth attempt. Waits are absolute aware UTC times, persisted
+without a shorter arbitrary clamp. A waiting job releases its lease and is not
+claimable before its earliest work is due. The upstream reservation/outcome
+library computes and enforces allowances, Retry-After, backoff and jitter; the
+dispatcher must use that library rather than calling an adapter directly.
 Repeated crashes while an item is RUNNING conservatively consume its started
 attempt; the fourth exhausted attempt fails that item without preventing another
 item from starting.
@@ -99,7 +102,9 @@ retained on runs and included in non-null attempt fingerprints, so a changed
 input cursor cannot replay as the same attempt. Null-cursor fingerprints remain
 compatible with earlier captures. The safe fixed-provider/query-credential guards
 apply to both input and output cursors; queries never override trusted credentials.
-The dispatcher still needs bounded full-pagination and pre-I/O cycle policy.
+Reservation preflight checks input cursor cycles and the 256-page ceiling before
+spending quota. The dispatcher must still follow every continuation through the
+reservation/outcome library; no automatic HTTP pagination loop is running yet.
 
 An identical already-committed page replay returns its original capture receipt
 with zero new rows, checkpoints, progress or audit, even after later cancellation

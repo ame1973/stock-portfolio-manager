@@ -405,6 +405,78 @@ async def test_unconfigured_or_changed_plan_cannot_capture_even_partial_or_faile
     assert database_snapshot(engine) == before
 
 
+@pytest.mark.parametrize("reason", [WorkError.QUOTA_WAIT, WorkError.CIRCUIT_OPEN])
+@pytest.mark.parametrize("previous_failures", [0, 3])
+async def test_mid_pagination_wait_resumes_the_same_logical_round_even_at_the_attempt_limit(
+    book: dict[str, Any], engine: Engine, reason: WorkError, previous_failures: int
+) -> None:
+    plan = plan_for(book)
+    with unit_of_work(engine, write=True) as con:
+        job = jobs.enqueue(con, UUID(book["owner"]["id"]), plan, intent_id=uuid4(), at=START)
+        item = UUID(
+            con.exec_driver_sql(
+                "SELECT id FROM job_items WHERE job_id=?", (job["id"],)
+            ).scalar_one()
+        )
+    lease = active(engine)
+    for index in range(previous_failures):
+        at = START + timedelta(seconds=index)
+        with unit_of_work(engine, write=True) as con:
+            jobs.begin_item(con, lease, item, at=at)
+            jobs.retry_item(
+                con,
+                lease,
+                item,
+                at=at,
+                until=at + timedelta(seconds=1),
+                error=WorkError.TRANSIENT_ERROR,
+            )
+    at = START + timedelta(seconds=previous_failures)
+    with unit_of_work(engine, write=True) as con:
+        jobs.begin_item(con, lease, item, at=at)
+    for start, end, event, seconds in [
+        ("2026-01-01", "2026-01-15", "2026-01-08", 5),
+        ("2026-01-16", "2026-01-31", "2026-01-20", 31),
+    ]:
+        with unit_of_work(engine) as con:
+            segment = resolve_symbol(
+                con, UUID(book["security"]["id"]), "eodhd", FetchWindow(start=start, end=end)
+            ).segments[0]
+        current = {
+            **book,
+            "prepared": prepare_fetch(
+                lease.owner_id, book["prepared"].configuration, segment, "DIVIDENDS"
+            ),
+        }
+        page = await fetched(current, payload=[{"date": event, "unadjustedValue": "0.9"}])
+        record(engine, lease, item, current, page, at=START + timedelta(seconds=seconds))
+        if end == "2026-01-15":
+            with unit_of_work(engine, write=True) as con:
+                jobs.defer_item(
+                    con,
+                    lease,
+                    item,
+                    at=START + timedelta(seconds=6),
+                    until=START + timedelta(seconds=30),
+                    error=reason,
+                )
+                jobs.park(con, lease, at=START + timedelta(seconds=6))
+            lease = active(engine, at=START + timedelta(seconds=30))
+            with unit_of_work(engine, write=True) as con:
+                assert (
+                    jobs.begin_item(con, lease, item, at=START + timedelta(seconds=30))[
+                        "attempt_count"
+                    ]
+                    == previous_failures + 1
+                )
+    with unit_of_work(engine, write=True) as con:
+        jobs.finish_item(con, lease, item, at=START + timedelta(seconds=32), status="SUCCEEDED")
+        jobs.finish(con, lease, at=START + timedelta(seconds=32))
+        final = jobs.owned_job(con, lease.owner_id, lease.job_id)
+    assert final["attempt_count"] == previous_failures + 1
+    assert json.loads(final["result_json"])["pages_committed"] == 2
+
+
 async def test_sealed_plan_canonical_sets_and_private_extras_rejected(book: dict[str, Any]) -> None:
     first = UUID(book["security"]["id"])
     second = uuid4()

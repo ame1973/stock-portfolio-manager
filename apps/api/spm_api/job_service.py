@@ -246,6 +246,7 @@ def claim(
                     clock,
                     lease_generation=job["lease_generation"],
                     status="FAILED" if exhausted else "RETRYING",
+                    round_open=0,
                     next_run_at=None if exhausted else clock,
                     last_error_code="RETRIES_EXHAUSTED" if exhausted else "LEASE_EXPIRED",
                 )
@@ -299,10 +300,10 @@ def begin_item(con: Connection, lease: JobLease, item_id: UUID, *, at: datetime)
     if (
         item["status"] not in {"PENDING", "RETRYING"}
         or (item["next_run_at"] is not None and item["next_run_at"] > clock)
-        or item["attempt_count"] >= job["max_attempts"]
+        or (item["attempt_count"] >= job["max_attempts"] and not item["round_open"])
     ):
         raise JobError("JOB_ITEM_NOT_READY")
-    attempt = item["attempt_count"] + 1
+    attempt = item["attempt_count"] + (0 if item["round_open"] else 1)
     _update(
         con,
         "job_items",
@@ -310,11 +311,121 @@ def begin_item(con: Connection, lease: JobLease, item_id: UUID, *, at: datetime)
         clock,
         lease_generation=job["lease_generation"],
         status="RUNNING",
+        round_open=1,
         attempt_count=attempt,
         next_run_at=None,
     )
     _update(con, "jobs", job["id"], clock, attempt_count=max(job["attempt_count"], attempt))
     return _row(con, "job_items", item["id"])
+
+
+def _page_sequence(
+    con: Connection,
+    job: dict[str, Any],
+    item: dict[str, Any],
+    request: dict[str, Any],
+    cursor_in: str | None,
+) -> int:
+    plan = SourceJobPlan.model_validate_json(job["request_json"])
+    previous = (
+        con.execute(
+            text("""
+        SELECT p.sequence,r.*,c.alias_json,c.profile_sha256,c.parser_version,c.normalization_version
+        FROM job_checkpoints p JOIN provider_runs r ON r.id=p.provider_run_id
+        JOIN provider_fetch_contexts c ON c.id=r.context_id
+        WHERE p.item_id=:id ORDER BY p.sequence DESC LIMIT 1
+    """),
+            {"id": item["id"]},
+        )
+        .mappings()
+        .first()
+    )
+    if previous is None:
+        valid = cursor_in is None and request["requested_start"] == plan.window.start
+        sequence = 1
+    else:
+        sequence = previous["sequence"] + 1
+        if previous["next_cursor"] is not None:
+            valid = cursor_in == previous["next_cursor"] and all(
+                request[key] == previous[key]
+                for key in (
+                    "requested_start",
+                    "requested_end",
+                    "alias_json",
+                    "profile_sha256",
+                    "parser_version",
+                    "normalization_version",
+                )
+            )
+        else:
+            valid = (
+                cursor_in is None
+                and previous["requested_end"] < plan.window.end
+                and request["requested_start"]
+                == (date.fromisoformat(previous["requested_end"]) + timedelta(days=1)).isoformat()
+            )
+    if not valid or request["requested_end"] > plan.window.end:
+        raise JobError("JOB_CHECKPOINT_GAP")
+    if sequence > 256:
+        raise JobError("JOB_PAGE_LIMIT")
+    if (
+        cursor_in is not None
+        and con.execute(
+            text("""
+        SELECT 1 FROM job_checkpoints p JOIN provider_runs r ON r.id=p.provider_run_id
+        WHERE p.item_id=:id AND p.cursor_in=:cursor
+          AND r.requested_start=:start AND r.requested_end=:end
+    """),
+            {
+                "id": item["id"],
+                "cursor": cursor_in,
+                "start": request["requested_start"],
+                "end": request["requested_end"],
+            },
+        ).first()
+    ):
+        raise JobError("JOB_CURSOR_CYCLE")
+    return sequence
+
+
+def validate_source_request(
+    con: Connection,
+    lease: JobLease,
+    item_id: UUID,
+    prepared: PreparedFetch,
+    *,
+    at: datetime,
+    cursor_in: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any], str]:
+    """Check the next immutable page prefix before spending quota or starting external I/O."""
+    job, clock = _fence(con, lease, at)
+    item = _item(con, job, item_id)
+    if (
+        prepared.owner_id != lease.owner_id
+        or str(prepared.segment.alias.security_id) != item["security_id"]
+        or prepared.segment.alias.provider_id != item["provider_id"]
+        or prepared.operation != item["operation"]
+    ):
+        raise JobError("JOB_PAGE_SCOPE_MISMATCH")
+    metadata = prepared.metadata()
+    plan = SourceJobPlan.model_validate_json(job["request_json"])
+    selection = next(
+        provider for provider in plan.providers if provider.provider_id == item["provider_id"]
+    )
+    if selection.profile_sha256 is None or selection.profile_sha256 != metadata["profile_sha256"]:
+        raise JobError("JOB_CONFIGURATION_CHANGED")
+    _page_sequence(
+        con,
+        job,
+        item,
+        {
+            **metadata,
+            "requested_start": prepared.segment.window.start,
+            "requested_end": prepared.segment.window.end,
+        },
+        cursor_in,
+    )
+    return job, item, clock
 
 
 def _checkpoint(
@@ -345,63 +456,7 @@ def _checkpoint(
         or run["operation"] != item["operation"]
     ):
         raise JobError("JOB_PAGE_SCOPE_MISMATCH")
-    plan = SourceJobPlan.model_validate_json(job["request_json"])
-    previous = (
-        con.execute(
-            text("""
-        SELECT p.sequence,r.*,c.alias_json,c.profile_sha256,c.parser_version,c.normalization_version
-        FROM job_checkpoints p JOIN provider_runs r ON r.id=p.provider_run_id
-        JOIN provider_fetch_contexts c ON c.id=r.context_id
-        WHERE p.item_id=:id ORDER BY p.sequence DESC LIMIT 1
-    """),
-            {"id": item["id"]},
-        )
-        .mappings()
-        .first()
-    )
-    if previous is None:
-        valid = cursor_in is None and run["requested_start"] == plan.window.start
-        sequence = 1
-    else:
-        sequence = previous["sequence"] + 1
-        if previous["next_cursor"] is not None:
-            valid = cursor_in == previous["next_cursor"] and all(
-                run[key] == previous[key]
-                for key in (
-                    "requested_start",
-                    "requested_end",
-                    "alias_json",
-                    "profile_sha256",
-                    "parser_version",
-                    "normalization_version",
-                )
-            )
-        else:
-            valid = (
-                cursor_in is None
-                and previous["requested_end"] < plan.window.end
-                and run["requested_start"]
-                == (date.fromisoformat(previous["requested_end"]) + timedelta(days=1)).isoformat()
-            )
-    if not valid or run["requested_end"] > plan.window.end:
-        raise JobError("JOB_CHECKPOINT_GAP")
-    if (
-        cursor_in is not None
-        and con.execute(
-            text("""
-        SELECT 1 FROM job_checkpoints p JOIN provider_runs r ON r.id=p.provider_run_id
-        WHERE p.item_id=:id AND p.cursor_in=:cursor
-          AND r.requested_start=:start AND r.requested_end=:end
-    """),
-            {
-                "id": item["id"],
-                "cursor": cursor_in,
-                "start": run["requested_start"],
-                "end": run["requested_end"],
-            },
-        ).first()
-    ):
-        raise JobError("JOB_CURSOR_CYCLE")
+    sequence = _page_sequence(con, job, item, dict(run), cursor_in)
     con.execute(
         text("""
         INSERT INTO job_checkpoints(item_id,sequence,provider_run_id,cursor_in,
@@ -452,18 +507,16 @@ def record_page(
         .first()
     )
     if existing is None:
-        job, clock = _fence(con, lease, at)
+        job, item, clock = validate_source_request(
+            con,
+            lease,
+            item_id,
+            prepared,
+            at=at,
+            cursor_in=cursor_in,
+        )
         if item["status"] != "RUNNING":
             raise JobError("JOB_ITEM_NOT_RUNNING")
-        plan = SourceJobPlan.model_validate_json(job["request_json"])
-        selection = next(
-            provider for provider in plan.providers if provider.provider_id == item["provider_id"]
-        )
-        if (
-            selection.profile_sha256 is None
-            or selection.profile_sha256 != prepared.metadata()["profile_sha256"]
-        ):
-            raise JobError("JOB_CONFIGURATION_CHANGED")
     elif existing["job_id"] != job["id"]:
         raise JobError("JOB_PAGE_SCOPE_MISMATCH")
     receipt = capture_page(
@@ -504,9 +557,29 @@ def _summary(con: Connection, job: dict[str, Any]) -> tuple[int, str]:
     """),
         {"job": job["id"]},
     ).scalar_one()
+    upstream = (
+        con.execute(
+            text("""
+        SELECT (SELECT count(*) FROM upstream_attempts WHERE job_id=:job) AS reserved,
+          (SELECT count(*) FROM upstream_attempts a WHERE a.job_id=:job AND NOT EXISTS(
+            SELECT 1 FROM upstream_outcomes o WHERE o.attempt_id=a.id
+              AND o.disposition='COMPLETED')) AS unresolved,
+          (SELECT count(*) FROM provider_runs r WHERE r.job_id=:job AND r.attempted=1) AS recorded,
+          (SELECT count(*) FROM provider_runs r WHERE r.job_id=:job AND r.attempted=1
+            AND NOT EXISTS(SELECT 1 FROM upstream_attempts a WHERE a.id=r.id)) AS unreserved
+    """),
+            {"job": job["id"]},
+        )
+        .mappings()
+        .one()
+    )
     return progress, canonical(
         {
             "scope": "SOURCE_ONLY",
+            "provider_attempts": upstream["reserved"] + upstream["unreserved"],
+            "provider_attempts_scope": "RESERVED_OR_RECORDED_HTTP",
+            "provider_http_recorded": upstream["recorded"],
+            "provider_attempts_unresolved": upstream["unresolved"],
             "scanned_symbols": progress,
             "work_units": len(items),
             "work_units_done": sum(
@@ -594,6 +667,7 @@ def finish_item(
         clock,
         lease_generation=job["lease_generation"],
         status=status,
+        round_open=0,
         next_run_at=None,
         last_error_code=error.value if error is not None else None,
     )
@@ -641,6 +715,7 @@ def retry_item(
         clock,
         lease_generation=job["lease_generation"],
         status="RETRYING",
+        round_open=0,
         next_run_at=deadline,
         last_error_code=error.value,
     )
@@ -659,7 +734,7 @@ def defer_item(
     job, clock = _fence(con, lease, at)
     item, deadline = _item(con, job, item_id), _clock(until)
     if (
-        item["status"] not in {"PENDING", "RETRYING"}
+        item["status"] not in {"PENDING", "RUNNING", "RETRYING"}
         or deadline <= clock
         or error not in {WorkError.QUOTA_WAIT, WorkError.CIRCUIT_OPEN}
     ):
@@ -748,6 +823,7 @@ def _cancel(con: Connection, job: dict[str, Any], clock: str) -> None:
                 clock,
                 lease_generation=job["lease_generation"],
                 status="CANCELLED",
+                round_open=0,
                 next_run_at=None,
             )
     progress, result = _summary(con, job)

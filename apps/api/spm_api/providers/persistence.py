@@ -169,6 +169,40 @@ def _insert(con: Connection, table: str, values: dict[str, Any]) -> None:
     con.execute(text(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"), values)
 
 
+def persist_context(con: Connection, prepared: PreparedFetch) -> None:
+    """Retain a checked non-secret request plan before I/O, without claiming an HTTP result."""
+    if not con.in_transaction() or not con.get_execution_options().get("writer"):
+        raise ValueError("WRITE_UNIT_OF_WORK_REQUIRED")
+    metadata = prepared.metadata()
+    _guard_credential(prepared, *metadata.values())
+    context_hash = _digest(canonical(metadata))
+    resolved = resolve_symbol(
+        con,
+        prepared.segment.alias.security_id,
+        prepared.segment.alias.provider_id,
+        prepared.segment.window,
+    )
+    if resolved.state != ResolutionState.RESOLVED or resolved.segments != (prepared.segment,):
+        raise ValueError("PROVIDER_ALIAS_CHANGED")
+    context = con.execute(
+        text("SELECT context_sha256 FROM provider_fetch_contexts WHERE id=:id"),
+        {"id": str(prepared.id)},
+    ).scalar_one_or_none()
+    if context is None:
+        _insert(
+            con,
+            "provider_fetch_contexts",
+            {
+                "id": str(prepared.id),
+                **metadata,
+                "context_sha256": context_hash,
+                "created_at": stamp(),
+            },
+        )
+    elif context != context_hash:
+        raise ValueError("PROVIDER_CONTEXT_CONFLICT")
+
+
 def _receipt(con: Connection, run_id: str, context_id: str, operation: Operation) -> CaptureReceipt:
     column = "dividend_observation_id" if operation == "DIVIDENDS" else "split_observation_id"
     identifiers = tuple(
@@ -246,31 +280,7 @@ def capture_page(
         ):
             raise ValueError("PROVIDER_ATTEMPT_CONFLICT")
         return _receipt(con, str(run_id), str(prepared.id), prepared.operation)
-    resolved = resolve_symbol(
-        con,
-        prepared.segment.alias.security_id,
-        prepared.segment.alias.provider_id,
-        prepared.segment.window,
-    )
-    if resolved.state != ResolutionState.RESOLVED or resolved.segments != (prepared.segment,):
-        raise ValueError("PROVIDER_ALIAS_CHANGED")
-    context = con.execute(
-        text("SELECT context_sha256 FROM provider_fetch_contexts WHERE id=:id"),
-        {"id": str(prepared.id)},
-    ).scalar_one_or_none()
-    if context is None:
-        _insert(
-            con,
-            "provider_fetch_contexts",
-            {
-                "id": str(prepared.id),
-                **metadata,
-                "context_sha256": context_hash,
-                "created_at": stamp(),
-            },
-        )
-    elif context != context_hash:
-        raise ValueError("PROVIDER_CONTEXT_CONFLICT")
+    persist_context(con, prepared)
     rows: list[DividendObservation | SplitObservation] = []
     manual = registry()[prepared.configuration.provider_id].access_mode == "MANUAL_EVIDENCE"
     dividend_model: type[DividendObservation] = DividendEvidence if manual else DividendObservation

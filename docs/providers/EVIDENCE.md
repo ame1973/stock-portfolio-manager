@@ -12,6 +12,8 @@ HTTP APIs remain unfinished. All paid/live coverage validation is NOT_TESTED.
   inclusive requested window, explicit dated alias ID/version and exchange
   context, parser label, normalization version, and non-secret operator profile.
   The profile includes rights references and configured budgets, not credentials.
+  A quota reservation may retain this planned context before external I/O; context
+  presence alone is not evidence of a request, response or completed capture.
 - `provider_runs` retains a **completed page attempt**, including sanitized state,
   timing, HTTP outcome where applicable, requested window, response fingerprint,
   decoded-payload checksum, query-free source pointer, parsing issues and a safe
@@ -69,8 +71,8 @@ Snapshots retain metadata and fixed versioned credential references only. Keys,
 full upstream queries, raw response bodies and arbitrary private configuration
 fields are not stored. Full raw-payload retention remains disabled. A checksum
 is not a license grant or permission to retain a payload. Configuration budgets
-are retained as evidence; durable quota reservation/enforcement is separate and
-not implemented by the capture library.
+are retained as evidence; durable quota reservation/enforcement belongs to the
+separate [upstream attempt library](BUDGETS.md), not this capture function.
 
 Network successes require a matching fixed-provider source pointer, a successful
 HTTP status and a decoded-payload checksum. Manual/HKEX/SEC assertions instead
