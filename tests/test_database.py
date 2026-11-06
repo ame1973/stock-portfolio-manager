@@ -85,7 +85,7 @@ def test_empty_and_repeat_upgrade(engine: Engine, settings: Settings) -> None:
                 "SELECT count(*) FROM sqlite_master WHERE type='table' "
                 "AND name NOT LIKE 'sqlite_%' AND name != 'alembic_version'"
             ).scalar()
-            == 48
+            == 50
         )
     assert not list(settings.data_dir.glob("pre-migration-*"))
 

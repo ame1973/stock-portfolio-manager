@@ -1,11 +1,13 @@
 # Explicit source schedule timing
 
-**Current implementation:** the validated, pure timing policy and its date/window
-calculations are available internally. Schedule persistence, owner CRUD, durable
-occurrence materialization and worker/UI integration are **not yet installed**.
-No schedule, job, provider enablement, HTTP request or financial mutation is
-created by importing or evaluating this policy. The existing manual source-job
-workspace remains available; do not mistake this foundation for a scheduler API.
+**Current implementation:** the validated timing policy/date calculations and
+migration `0011_source_schedules` are installed internally. The migration adds
+owned disabled definitions and append-only occurrence storage, not automatic
+scheduling. Owner CRUD, the due-occurrence controller and worker/UI integration
+are **not yet installed**. Importing a policy or migrating the database creates
+no schedule, job, provider enablement, HTTP request or financial mutation. The
+existing manual source-job workspace remains available; this foundation is not
+a scheduler API.
 
 ## Explicit policy, no inferred scope
 
@@ -80,17 +82,56 @@ underflow is rejected, never clipped to an arbitrary history origin. Unrepresent
 clocks fail explicitly; calendar exhaustion returns no next slot, not unavailable
 provider data or zero income.
 
+## Durable storage boundary, not an activation API
+
+`source_schedules` stores owner/name, the non-secret policy and its SHA-256,
+explicit enablement/version, UTC next-run/progress metadata and retained job
+references. New definitions must begin disabled at version 1 with no progress or
+next run. The migration leaves both new tables empty, preserves all existing
+facts/settings/jobs/spending and appends one schema audit per existing owner.
+Old settings JSON and unmanaged queue rows are never adopted as schedules.
+
+`source_schedule_occurrences` retains the frozen policy/window, observed schedule
+version/expected UTC slot, actual due/materialization times, sequence, next slot
+and either a newly queued managed source job or an in-flight blocking job.
+Schedule/owner foreign keys and unique slot/sequence/version/job identities prevent
+cross-owner references, duplicate occurrences and sharing one job between schedules.
+Queued job scope, operations, exact window, explicit `force=false` and the complete
+committed job-item set must agree. These are source jobs, not canonical adoption.
+
+An occurrence insert advances the matching enabled definition/version atomically
+through an SQLite trigger; direct forged progress is rejected. Occurrences cannot
+be updated/deleted and schedule identity cannot be deleted. The future controller
+must enqueue the job, insert the occurrence and append its audit in the **same short
+writer transaction**. A late failure rolls all three and parent progress back.
+SQLite validates policy shape, catalogue market/timezone, civil dates and window
+arithmetic; callers must still verify canonical JSON/SHA-256 and exact `zoneinfo`
+slot/next-slot calculations. There is no SQL approximation of DST or a trusted
+exchange-session calendar, and no supported operator SQL activation workflow.
+
+Only one nonterminal job per schedule is permitted. QUEUED, LEASED, RUNNING,
+RETRYING and CANCEL_REQUESTED all exert backpressure; a durable
+`SKIPPED_IN_FLIGHT` receipt advances the evaluated slot without another job,
+work round or upstream reservation. A skip is not NO_DATA, coverage or zero income.
+The first explicit backfill marker is consumed only when its job is **queued**,
+not when a slot is skipped or a provider succeeds. Failed/cancelled/uncertain
+initial work is not silently reissued as another full-history backfill. After
+that first initial enqueue, its backfill date cannot be rewritten; a deliberate
+manual source request or a new disabled definition is required for another one.
+Pausing/editing metadata changes future scheduling, not already queued work;
+existing job cancellation remains a separate stop intent.
+
 ## Integration still required
 
-The durable layer must validate actual catalogue markets/identities, default new
-schedules to disabled, recheck owner/version/enablement, materialize a unique
-occurrence/job/advance/audit atomically, and prevent concurrent/backlogged duplicate
-work. Pin current private configuration outside writer transactions per occurrence,
-then use the existing sealed job controller, aliases, shared quotas/circuit and
-fenced worker. A persisted initial-backfill marker, missed-slot/coalescing policy,
-pause/edit CAS/idempotency, cancellation meaning and safe diagnostics must be tested
-before exposing owner controls. An enabled schedule never resets shared upstream
-spending or adopts dividends, receipts, shares, cash or historical FX.
+The due controller must recheck owner/version/enablement, coalesce missed slots
+without an unbounded backlog, retain original occurrence receipts on replay, and
+atomically materialize unique jobs/audit/advance. Pin current private configuration
+outside writer transactions per occurrence, then reuse the existing sealed job
+controller, aliases, shared quotas/circuit and fenced worker. Actor-bound CRUD,
+CAS/idempotency, explicit enablement, safe diagnostics and actual worker/UI
+integration must pass their own gates before exposing owner controls. An enabled
+schedule never resets shared upstream spending or adopts dividends, receipts,
+shares, cash or historical FX.
 
 Paid/live providers, verified trading-session calendars, target NAS and production
 schedule acceptance remain NOT_TESTED.
