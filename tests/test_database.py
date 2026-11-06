@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from spm_api.cli import migrate
 from spm_api.config import Settings
 from spm_api.db import check_database, make_engine, migration_config, schema_head, unit_of_work
+from tests.provider_evidence_helpers import seed_evidence
 
 NOW = "2026-11-04T00:00:00Z"
 
@@ -60,12 +61,7 @@ def seed(engine: Engine) -> None:
             "VALUES ('ent','r1','a1',100000000,1000000,1000000,'HKD','ACCRUED',0,?)",
             (NOW,),
         )
-        con.exec_driver_sql(
-            "INSERT INTO dividend_observations(id,provider_id,origin_group,security_id,"
-            "provider_symbol,normalized_sha256,adjustment_basis,retrieved_at) "
-            "VALUES ('obs','manual','USER_VERIFIED','s','0005','hash','AS_DECLARED',?)",
-            (NOW,),
-        )
+        seed_evidence(con, "owner", "s")
         con.exec_driver_sql(
             "INSERT INTO audit_events(id,owner_id,entity_type,entity_id,action,created_at) "
             "VALUES ('audit','owner','test','s','CREATE',?)",
@@ -89,7 +85,7 @@ def test_empty_and_repeat_upgrade(engine: Engine, settings: Settings) -> None:
                 "SELECT count(*) FROM sqlite_master WHERE type='table' "
                 "AND name NOT LIKE 'sqlite_%' AND name != 'alembic_version'"
             ).scalar()
-            == 40
+            == 43
         )
     assert not list(settings.data_dir.glob("pre-migration-*"))
 
