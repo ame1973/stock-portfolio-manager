@@ -16,9 +16,10 @@ provider's diagnosis to read its recorded page separately. Yahoo/yfinance share
 one YAHOO origin and budget, not two vendor votes. Rights remain unverified;
 manual/official references do not add independent corroboration.
 
-Key import/settings and schedule editing are not available yet. Manage the
-existing operator files according to [configuration](CONFIGURATION.md). Merely
-viewing this page or possessing a key never enables a provider.
+Key import/settings are not available yet. Manage existing operator files according
+to [configuration](CONFIGURATION.md). Merely viewing this page or possessing a key
+never enables a provider. Explicit source schedule editing is available separately
+under **Source schedules**, not a credential/rights grant.
 
 `/data-center/coverage` requires an explicit stable security selection before
 loading bounded diagnostics. Select dividends or provider-only splits separately.
@@ -101,6 +102,53 @@ completed job shows its real terminal result, not invented cancellation success.
 Already saved source evidence and uncertain upstream spending remain; no ledger
 fact, receipt, locked FX, financial revision or quota is reset. See
 [job control](JOBS.md) for replay, ownership and worker guarantees.
+
+## Create and explicitly enable a source schedule
+
+At `/data-center/schedules`, choose **Create disabled source schedule**:
+
+1. Enter a name and an explicit HK/US market. Exchange catalogue identity, not a
+   USD/HKD quote, determines the market. Changing market clears confirmed security
+   selection; candidate search alone does not remove already-added IDs.
+2. Add the stable securities, select network providers and operations. Dividends
+   alone default on; no provider or whole-market scope is assumed. Unconfigured
+   profiles remain visible and may later skip without spending requests.
+3. Supply the earliest market date and explicit **16:00–23:59** local minute. HK
+   uses Asia/Hong_Kong, US America/New_York. The server applies historical DST;
+   this is not a NAS-time or verified closing-auction calculation.
+4. Choose DAILY (including weekends), literal WEEKDAYS or WEEKLY with an explicit
+   weekday. These are local week patterns, **not a verified exchange calendar**.
+5. Choose exactly one bounded recurring window: 1–3660 inclusive days or 1–120
+   calendar months with same-day/month-end clipping. Calendar months are never
+   silently converted to 30-day periods. Unit/cadence changes clear incompatible
+   quantity/weekday inputs for deliberate review.
+6. Optionally supply a first-backfill start no later than the earliest market
+   date. It is consumed on first actual queue, not success; failure/cancellation
+   does not automatically reissue it. Save the definition **disabled**.
+
+Open **Edit, enable or pause schedule** to change future intent. Edits require a
+specific reason and the version observed when the sheet opened; enabled intent
+also requires a fresh source-only acknowledgment. The complete policy and quoted
+If-Match are sent together. A concurrent owner or worker advance returns 412,
+preserves local input and asks for cancel/reload/review rather than overwriting.
+The consumed first-backfill date stays read-only and is retained in the body.
+Pause is not cancellation of already queued work; follow its separate job link
+when a stop intent is required. There is no delete or public run-now button.
+
+The list filters saved enablement and uses bounded name/ID server pages. The detail
+page `/data-center/schedules/{id}` shows current policy, actual receipt count,
+explicit UTC next/progress pointers and immutable due-UTC/ID receipt pages. Each
+receipt retains its original policy/window and QUEUED or SKIPPED_IN_FLIGHT state,
+with a link to the queued/blocking source job. A requested window is not proven
+coverage; a queue/skip/empty history is not provider success, zero dividends or
+income. Source-only terms and unverified session-calendar scope remain visible.
+
+Use **Reload schedule and evaluation history** to confirm current metadata; distant
+schedules do not continuously poll. A refreshed version refetches its receipt
+rows. Form sheets cannot close during an uncertain write and keep unchanged intent
+keys across retry/candidate-search/acknowledgment changes. Only a confirmed response
+shows saved state. No source mutation pretends to recalculate the financial ledger.
+See [schedule timing, API and worker semantics](SCHEDULES.md).
 
 All private responses are no-store. Filters/search/cursor stacks live only in the
 authenticated memory context, with distinct observation modes/job scopes. Reload,

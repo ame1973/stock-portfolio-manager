@@ -23,6 +23,8 @@ const CoveragePage = lazy(() => import("./features/sources/SourcePages").then(mo
 const ObservationsPage = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.ObservationsPage })));
 const JobsPage = lazy(() => import("./features/sources/JobsPage").then(module => ({ default: module.JobsPage })));
 const JobDetailPage = lazy(() => import("./features/sources/JobsPage").then(module => ({ default: module.JobDetailPage })));
+const SchedulesPage = lazy(() => import("./features/sources/SchedulesPage").then(module => ({ default: module.SchedulesPage })));
+const ScheduleDetailPage = lazy(() => import("./features/sources/SchedulesPage").then(module => ({ default: module.ScheduleDetailPage })));
 
 const navigation = [
   { to: "/", label: "服務連線", icon: "M3 11 12 3l9 8M5 10v11h5v-7h4v7h5V10" },
@@ -94,6 +96,8 @@ function SignedInApp({ session }: { session: AuthSession }) {
               <Route path="splits" element={<ObservationsPage key="splits" mode="splits" />} />
               <Route path="jobs" element={<JobsPage />} />
               <Route path="jobs/:id" element={<JobDetailPage key={location.pathname} />} />
+              <Route path="schedules" element={<SchedulesPage />} />
+              <Route path="schedules/:id" element={<ScheduleDetailPage key={location.pathname} />} />
             </Route>
             <Route path="/settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="portfolios" replace />} />

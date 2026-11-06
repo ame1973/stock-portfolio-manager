@@ -5,7 +5,9 @@ server-side job control. The [worker](WORKER.md) dispatches explicitly queued
 source jobs through shared upstream reservation/circuit policy, with an independent
 heartbeat. The [source workspace](WORKSPACE.md) provides owner progress and
 cancellation UI; [explicit source schedules](SCHEDULES.md) use the same sealed job
-path. Scheduling UI and canonical reconciliation remain unfinished. Startup creates
+path. The [schedule workspace](SCHEDULES.md#responsive-owner-workspace) provides
+reasoned owner editing and immutable receipts; canonical reconciliation remains
+unfinished. Startup creates
 no default schedule or provider enablement, and paid/live coverage remains NOT_TESTED.
 
 ## Authenticated HTTP intents and safe diagnostics

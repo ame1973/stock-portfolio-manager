@@ -14,7 +14,7 @@ import { ObservationDetails, RecordedPage, SourceLink, SourceReadState, SourceVa
 export function DataCenterLayout() {
   return <div className="grid min-w-0 gap-6">
     <header className="max-w-3xl"><h1 className="text-2xl font-semibold">資料中心</h1><p className="mt-2 text-sm leading-7 text-secondary">先核對來源與穩定證券身分，再以明確範圍擷取。來源觀測不是已驗證事件、收入或實收；缺資料不等於零，所有上游實測仍為未測試。</p></header>
-    <nav aria-label="資料中心分類" className="flex flex-wrap gap-2 border-b border-border pb-4">{[["providers", "來源設定"], ["coverage", "證券診斷"], ["dividends", "股息觀測"], ["splits", "拆股因子"], ["jobs", "擷取工作"]].map(([path, label]) => <NavLink key={path} to={`/data-center/${path}`} className="inline-flex min-h-11 items-center rounded-md border border-transparent px-4 text-sm font-medium aria-[current=page]:border-border aria-[current=page]:bg-surface aria-[current=page]:text-primary">{label}</NavLink>)}</nav>
+    <nav aria-label="資料中心分類" className="flex flex-wrap gap-2 border-b border-border pb-4">{[["providers", "來源設定"], ["coverage", "證券診斷"], ["dividends", "股息觀測"], ["splits", "拆股因子"], ["jobs", "擷取工作"], ["schedules", "來源排程"]].map(([path, label]) => <NavLink key={path} to={`/data-center/${path}`} className="inline-flex min-h-11 items-center rounded-md border border-transparent px-4 text-sm font-medium aria-[current=page]:border-border aria-[current=page]:bg-surface aria-[current=page]:text-primary">{label}</NavLink>)}</nav>
     <Outlet />
   </div>;
 }
@@ -38,7 +38,7 @@ export function ProvidersPage() {
   const result = useProviders();
   const [selected, setSelected] = useState<ProviderId | null>(null);
   return <div className="grid min-w-0 gap-5">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="text-xl font-semibold">來源設定與候選能力</h2><p className="mt-2 text-sm leading-7 text-secondary">這是候選目錄與唯讀本機診斷，不是即時來源健康、授權核准或市場覆蓋保證。密鑰匯入與排程編輯尚未提供；現有私有檔案由伺服器依部署文件管理。</p></div><Button variant="outline" disabled={result.isFetching} onClick={() => void result.refetch()}>重新載入來源設定</Button></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="text-xl font-semibold">來源設定與候選能力</h2><p className="mt-2 text-sm leading-7 text-secondary">這是候選目錄與唯讀本機診斷，不是即時來源健康、授權核准或市場覆蓋保證。密鑰匯入尚未提供；來源排程可從分類頁明確建立及修訂，現有私有檔案由伺服器依部署文件管理。</p></div><Button variant="outline" disabled={result.isFetching} onClick={() => void result.refetch()}>重新載入來源設定</Button></div>
     <SourceReadState result={result} label="來源設定" />
     {result.data && <><p className="text-sm text-secondary">已載入 {result.data.items.length} 個候選來源；Yahoo／yfinance 共用 YAHOO 上游與配額，不是兩個獨立來源。</p>
       <ul className="grid min-w-0 gap-4 xl:grid-cols-2">{result.data.items.map(row => <li key={row.provider_id} className="panel grid min-w-0 content-start gap-4" aria-label={providerNames[row.provider_id]}>

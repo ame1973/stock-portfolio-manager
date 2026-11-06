@@ -1,8 +1,8 @@
 # Explicit source schedule timing
 
 **Current implementation:** validated timing, durable storage, the protected
-owner API and automatic single-leader materialization are installed. Scheduling
-UI is **not yet installed**. `automatic_materialization_installed=true` describes
+owner API, automatic single-leader materialization and the responsive owner
+schedule workspace are installed. `automatic_materialization_installed=true` describes
 an installed worker path, not a running/healthy leader or completed provider work.
 No default schedule is created. Importing, migrating, creating a disabled definition
 or reading due candidates does not queue work, enable providers, send HTTP or
@@ -229,8 +229,47 @@ Existing job leases, alias/configuration fences, shared budgets/circuit and adap
 execution remain the only upstream path; scheduling itself sends no provider HTTP.
 See [worker execution](WORKER.md) for dispatch shutdown and uncertain spending.
 
+## Responsive owner workspace
+
+Use **Data center → Source schedules** at `/data-center/schedules` to create a
+named disabled definition, filter saved enablement and inspect bounded server
+pages. Desktop tables retain SQLite NOCASE name/ID ordering; mobile/tablet cards
+show the same typed state. Editors use the existing accessible side/full-screen
+sheet, with no automatic focus on a form field or private browser persistence.
+
+No market, security, source, cadence, clock, earliest date or window is inferred.
+Only dividends default on; provider-only splits are a separate explicit choice.
+Changing market clears confirmed securities/candidate selection, while changing
+candidate search alone preserves confirmed IDs. Changing cadence/window units
+clears incompatible weekday/quantity inputs. Calendar counts are bounded integers,
+not money or client-side scheduling calculations. Market-local DST/next-slot
+arithmetic stays on the server; UTC pointers are explicitly labelled and are not
+provider-success, market-session or coverage assertions.
+
+Creation never enables the definition. Open its editor separately to enable or
+pause with a complete observed policy/version and concrete reason. An enabled
+revision also requires a fresh source-only acknowledgment. The editor freezes
+its observed DTO/If-Match; a worker/owner version advance yields 412 and preserves
+local input, rather than silently merging a new version into old fields. A busy
+write cannot be discarded with Close/Escape; success is shown only after the
+actual response. Uncertain unchanged retries keep their key, and candidate or
+client-only acknowledgment changes do not mint another public intent. Pausing
+can retain selected IDs even when current provider diagnostics are unavailable;
+it never calls job cancellation or deletion. A consumed initial-backfill date is
+read-only and retained in the full body, not silently cleared or replayed.
+
+Open `/data-center/schedules/{id}` for current saved policy/progress and immutable
+receipt pages. Receipts are ordered by due UTC/ID descending and retain frozen
+policy/window/observed version, QUEUED versus SKIPPED_IN_FLIGHT and links to the
+actual queued/blocking source job. Empty history is not zero income. Reload to
+confirm current definition/history; far-future schedules are not continuously
+polled, and a refreshed version refetches the corresponding receipt page. Filters,
+search/cursor stacks are distinct per list/schedule, memory-only and cleared on
+reload/logout/expiry. Source edits invalidate only source queries, not financial
+projections. See the [workspace guide](WORKSPACE.md) for the complete flow.
+
 There is no startup-created schedule, implicit provider permission, quota reset or
-automatic canonical dividend/receipt/share/cash/FX adoption. Responsive scheduling
-UI and managed key/citation mutations remain unfinished. Paid/live providers,
+automatic canonical dividend/receipt/share/cash/FX adoption. Managed key/citation
+mutations remain unfinished. Paid/live providers,
 verified trading-session calendars, target NAS and production schedule acceptance
 remain NOT_TESTED.

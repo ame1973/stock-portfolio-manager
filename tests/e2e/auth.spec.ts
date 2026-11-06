@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import type { components } from "../../packages/contracts/src/schema";
 import { sourceJobApi } from "./source-jobs";
-import { sourceScheduleApi } from "./source-schedules";
+import { sourceScheduleApi, sourceScheduleBrowserForms } from "./source-schedules";
 import { sourceBrowserForms } from "./source-workspace";
 import { workspaceBrowserForms } from "./workspace";
 
@@ -723,7 +723,7 @@ test("action terms and opening assertion HTTP corrections preserve evidence and 
 });
 
 test("financial browser forms preserve exact facts, conflicts, reversals and opening assertions", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   type Trade = components["schemas"]["TradeRecord"];
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -859,8 +859,9 @@ test("financial browser forms preserve exact facts, conflicts, reversals and ope
   await test.step("corporate-action forms: exact ratios, adopted terms and explicit review", () => actionBrowserForms(page));
   await test.step("responsive workspace: server tables, full-screen sheets, focus and pending-write protection", async () => workspaceBrowserForms(page, (await signedRequests(page)).post));
   await test.step("source-only job API: real unconfigured worker, safe progress and no financial changes", async () => sourceJobApi(page, (await signedRequests(page)).headers, stock.id, portfolio.id, account.id));
-  await test.step("source schedule API: owned intent, CAS, pause and no automatic dispatch claim", async () => sourceScheduleApi(page, (await signedRequests(page)).headers, stock.id, portfolio.id, account.id));
+  await test.step("source schedule API: owned intent, actual daemon clock, CAS and restart dedup", async () => sourceScheduleApi(page, (await signedRequests(page)).headers, stock.id, portfolio.id, account.id));
   await test.step("data center: explicit source queue, cancellation and exact network-disabled evidence", async () => sourceBrowserForms(page, (await signedRequests(page)).post, portfolio.id, account.id));
+  await test.step("source schedule UI: responsive frozen editors, actual 412 and immutable 25+2 receipts", async () => sourceScheduleBrowserForms(page, (await signedRequests(page)).headers, stock.id, portfolio.id, account.id));
   expect(errors).toEqual([]);
   await page.getByRole("button", { name: "登出", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();

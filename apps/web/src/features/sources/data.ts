@@ -8,6 +8,14 @@ export type ProviderId = Provider["provider_id"];
 export type Job = Schemas["SourceJob"];
 export type JobItem = Schemas["SourceJobItem"];
 export type CreatedJob = Schemas["JobCreated"];
+export type Schedule = Schemas["SourceScheduleRecord"];
+export type SchedulePolicy = Schemas["SourceSchedulePolicy"];
+export type ScheduleOccurrence = Schemas["SourceScheduleOccurrence"];
+export const cadenceLabels = { DAILY: "每日（包括週末）", WEEKDAYS: "星期一至五（不是交易所日曆）", WEEKLY: "每週指定星期" } as const;
+export const weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"];
+export function scheduleTiming(policy: SchedulePolicy) {
+  return `${cadenceLabels[policy.cadence]}${policy.cadence === "WEEKLY" ? `／${weekdays[policy.weekday ?? -1] ?? "星期未確認"}` : ""} ${policy.local_run_time}`;
+}
 export type Operation = JobItem["operation"];
 export type Observation = Schemas["DividendObservationRecord"] | Schemas["SplitObservationRecord"];
 export type Coverage = Schemas["ProviderCoverage"] & { id: string };
@@ -55,6 +63,18 @@ export function useCoverage(page: PageInput, filters: { security_id: string; pro
   return useQuery({ queryKey: ["sources", "coverage", filters, page.q, page.cursor], enabled: !!filters.security_id, queryFn: async ({ signal }) =>
     checked(await api.GET("/api/v1/providers/coverage", { params: { query: { security_id: filters.security_id, provider_id: filters.provider_id || undefined, operation: filters.operation, q: page.q, cursor: page.cursor, limit: 25 } }, signal })),
   select: data => ({ ...data, items: data.items.map(row => ({ ...row, id: `${row.provider_id}:${row.security_id}` })) }) });
+}
+export function useSchedules(page: PageInput, enabled: "" | "true" | "false") {
+  return useQuery({ queryKey: ["sources", "schedules", enabled, page.q, page.cursor], queryFn: async ({ signal }) =>
+    checked(await api.GET("/api/v1/source-schedules", { params: { query: { q: page.q, cursor: page.cursor, limit: 25, enabled: enabled === "" ? undefined : enabled === "true" } }, signal })) });
+}
+export function useSchedule(id: string) {
+  return useQuery({ queryKey: ["sources", "schedule", id], enabled: !!id, queryFn: async ({ signal }) =>
+    checked(await api.GET("/api/v1/source-schedules/{id}", { params: { path: { id } }, signal })) });
+}
+export function useScheduleOccurrences(record: Schedule, page: PageInput) {
+  return useQuery({ queryKey: ["sources", "occurrences", record.id, record.version, page.q, page.cursor], queryFn: async ({ signal }) =>
+    checked(await api.GET("/api/v1/source-schedules/{id}/occurrences", { params: { path: { id: record.id }, query: { q: page.q, cursor: page.cursor, limit: 25 } }, signal })) });
 }
 export function useJobs(page: PageInput, status: "" | Job["status"]) {
   return useQuery({ queryKey: ["sources", "jobs", status, page.q, page.cursor], queryFn: async ({ signal }) =>
