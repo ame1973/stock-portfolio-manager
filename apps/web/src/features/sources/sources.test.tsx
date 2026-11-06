@@ -8,7 +8,7 @@ import { SyncForm } from "./SyncForm";
 import { CoveragePage, ObservationsPage, ProvidersPage } from "./SourcePages";
 import { JobDetailPage, JobsPage } from "./JobsPage";
 import { canCancel, pollJob, refreshSources } from "./data";
-import { SourceReadState } from "./details";
+import { SourceLink, SourceReadState } from "./details";
 
 type Schemas = components["schemas"];
 const security: Schemas["Security"] = { id: "11111111-1111-4111-8111-111111111111", name: "Synthetic source security", display_ticker: "0005", exchange_code: "HKG", quote_currency: "USD", security_type: "EQUITY", status: "DELISTED", isin: null, verified: false, version: 1 };
@@ -59,6 +59,23 @@ async function fillSync() {
   fireEvent.click(screen.getByRole("checkbox", { name: /^EODHD/ }));
   fireEvent.click(screen.getByRole("checkbox", { name: /我明白這只擷取來源觀測/ }));
 }
+
+describe("source references enforce an inert HTTP(S)-only boundary", () => {
+  it.each(["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "file:///private/document.pdf", "ftp://example.test/evidence", "//example.test/evidence", "not an absolute URL", "https://user:synthetic-password@example.test/evidence", `https://example.test/${"a".repeat(2049)}`])("does not render an actionable unsafe reference: %s", url => {
+    renderUI(<SourceLink url={url} label="來源文件" />);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getByText(/連結未通過安全檢查/)).toBeVisible();
+  });
+  it.each(["https://example.test/evidence.pdf", "http://example.test/evidence.pdf"])("retains a safe explicit reference without fetching it: %s", url => {
+    const get = vi.spyOn(api, "GET");
+    renderUI(<SourceLink url={url} label="來源文件" />);
+    const link = screen.getByRole("link");
+    expect(link).toHaveAttribute("href", url);
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(get).not.toHaveBeenCalled();
+  });
+});
 
 describe("explicit source-only intent and truthful observation UI", () => {
   it("has no guessed security/provider/date scope and does not submit an empty request", async () => {

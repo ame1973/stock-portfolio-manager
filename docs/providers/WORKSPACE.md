@@ -46,8 +46,11 @@ that no dividend or split exists. Repeated assertions retain the first identity,
 hash and time, not additional income. Typed document citations remain unverified
 user assertions. Query/fragment document links are withheld explicitly without
 rewriting the original assertion/hash. Links open only on explicit user action;
-the application does not fetch/verify those documents. Integrity failures show a
-safe error rather than repairing, rounding or silently dropping unsafe evidence.
+the application does not fetch/verify those documents. Shared link rendering also
+requires an absolute HTTP(S) URL of at most 2048 characters without embedded
+credentials; malformed or non-web references remain inert without echoing them.
+Integrity failures show a safe error rather than repairing, rounding or silently
+dropping unsafe evidence.
 See [observation reads](OBSERVATIONS.md) for the precise contract.
 
 ## Queue one explicit source intent

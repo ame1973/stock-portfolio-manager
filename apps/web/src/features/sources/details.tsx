@@ -18,7 +18,10 @@ export function SourceValues({ values }: { values: [string, ReactNode][] }) {
   return <dl className="grid gap-4 break-words text-sm leading-7 sm:grid-cols-2">{values.map(([label, value]) => <div key={label}><dt className="text-secondary">{label}</dt><dd className="mt-1 break-all">{value ?? "未知"}</dd></div>)}</dl>;
 }
 export function SourceLink({ url, label }: { url: string | null; label: string }) {
-  return url ? <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 max-w-full items-center break-all text-primary underline">{label}（另開視窗，應用程式未抓取）</a> : <span>未提供，不會猜測或抓取</span>;
+  let parsed: URL | null = null;
+  try { if (url && url.length <= 2048) parsed = new URL(url); } catch { parsed = null; }
+  const href = parsed && (parsed.protocol === "https:" || parsed.protocol === "http:") && !parsed.username && !parsed.password ? parsed.href : null;
+  return href ? <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 max-w-full items-center break-all text-primary underline">{label}（另開視窗，應用程式未抓取）</a> : <span>{url ? "來源連結未通過安全檢查，不會開啟或抓取" : "未提供，不會猜測或抓取"}</span>;
 }
 export function RecordedPage({ record }: { record: components["schemas"]["RecordedSourcePage"] | null }) {
   if (!record) return <p className="text-sm leading-7 text-secondary">尚無已記錄來源頁面；略過／未設定工作不會製造 NO_DATA 或確認沒有股息。</p>;
