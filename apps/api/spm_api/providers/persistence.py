@@ -18,7 +18,7 @@ from spm_api.providers.base import (
     SplitObservation,
     registry,
 )
-from spm_api.providers.configuration import LoadedConfiguration
+from spm_api.providers.configuration import LoadedConfiguration, ManagedPolicySnapshot
 from spm_api.providers.http import _CREDENTIAL_NAMES
 from spm_api.providers.manual import DividendEvidence, SplitEvidence
 from spm_api.providers.symbols import AliasSegment, ResolutionState, resolve_symbol
@@ -52,6 +52,8 @@ class PreparedFetch:
         revision = self.configuration.revision
         if self.configuration.error_code is not None or profile is None or revision is None:
             raise ValueError("PROVIDER_UNCONFIGURED")
+        if isinstance(profile, ManagedPolicySnapshot) and profile.owner_id != self.owner_id:
+            raise ValueError("PROVIDER_OWNER_MISMATCH")
         alias = self.segment.alias
         return {
             "owner_id": str(self.owner_id),

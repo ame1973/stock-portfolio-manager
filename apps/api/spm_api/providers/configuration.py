@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from decimal import DecimalException
 from pathlib import Path
 from typing import Literal, Self
+from uuid import UUID
 
 from pydantic import ConfigDict, Field, SecretStr, model_validator
 
@@ -74,6 +75,16 @@ class ProviderFile(ProviderPolicy):
         return self
 
 
+class ManagedPolicySnapshot(ProviderPolicy):
+    """Private owned decision identity, never an operator-file credential version."""
+
+    configuration_source: Literal["MANAGED_PROFILE"] = "MANAGED_PROFILE"
+    version: int = Field(strict=True, ge=1, le=2147483647)
+    revision_id: UUID = Field(repr=False)
+    owner_id: UUID = Field(repr=False)
+    credential_artifact_id: UUID | None = Field(repr=False)
+
+
 type FileSignature = tuple[int, int, int, int, int, int, int, int]
 
 
@@ -100,14 +111,24 @@ class ConfigurationRevision:
 
 
 @dataclass(frozen=True)
+class ManagedConfigurationRevision:
+    """Private managed metadata/edition identity; no invented profile-file signature or key hash."""
+
+    profile_sha256: str
+    credential_files: tuple[FileSignature, FileSignature] | None = None
+
+
+@dataclass(frozen=True)
 class LoadedConfiguration:
     """Server-only result; only health is suitable for diagnostics, never access/revision."""
 
     provider_id: ProviderId
     error_code: str | None = "CONFIG_NOT_LOADED"
-    profile: ProviderFile | None = field(default=None, repr=False)
+    profile: ProviderFile | ManagedPolicySnapshot | None = field(default=None, repr=False)
     access: ProviderAccess = field(default_factory=ProviderAccess, repr=False)
-    revision: ConfigurationRevision | None = field(default=None, repr=False)
+    revision: ConfigurationRevision | ManagedConfigurationRevision | None = field(
+        default=None, repr=False
+    )
 
     def __post_init__(self) -> None:
         if self.error_code is None and (

@@ -206,6 +206,40 @@ consumption and settings UI remain unfinished. Existing operator profiles remain
 the current runtime path; managed declarations/imports alone cause no provider
 request, quota reset or financial change.
 
+## Owned selection core, not installed runtime consumption
+
+The internal `OwnerConfigurationStore(settings, engine, owner_id)` now reads an
+explicitly supplied active owner's greatest managed decision. An owned decision
+always takes precedence, including disabled/cleared policies and missing or unsafe
+editions; it never chooses the last enabled version or another owner's key. Only
+an absent owned definition permits the existing installation-provisioned operator
+file fallback. Missing/inactive owners, unreadable/corrupt managed history and
+metadata races fail closed, not through operator recovery.
+
+Private file access occurs between closed read-only metadata UoWs. A second read
+must still match the observed decision after either operator-file or managed-edition
+loading. `unchanged` retains actual constant-time credential comparison as well as
+metadata/edition signatures; identical reported timestamps are insufficient.
+Shared Yahoo/yfinance budget snapshots use the same owned decisions and remaining
+operator peers, detect even changed unconfigured peer versions, and create no
+reservations or provider requests.
+
+`ManagedPolicySnapshot` records the real owner/revision/version/edition identity
+and `ManagedConfigurationRevision` retains the actual key/ready signatures. These
+are private types, not invented `LOCAL_FILE`/`DOCKER_SECRET` versions or filesystem
+profile signatures. Existing operator snapshots/hashes remain unchanged. Prepared
+managed contexts reject a different owner before capture or network use.
+
+**This library is not yet wired into production jobs, schedules or diagnostics.**
+The current SQLite context whitelist rejects managed snapshot metadata atomically;
+a subsequent explicit migration and writer-side selection fences are required
+before durable managed source execution. Current public records still report
+`runtime_selection_installed: false`; importing/disabling a definition remains
+no kill switch for operator-configured traffic. The default store and
+`providers-check` stay operator-only/no DB/bootstrap/probe. Direct adapter mock
+checks prove library compatibility, not quota-fenced worker execution, key validity,
+live coverage or an installed settings UI.
+
 ## Read-only diagnostics
 
 ```sh
