@@ -142,6 +142,35 @@ one short transaction. Runtime integration must recheck that committed selection
 and the private credential around provider I/O. None of those later workflows is
 installed by this schema, and no provider request or quota reset is introduced.
 
+## Internal versioned controller
+
+`providers/profiles.py` now provides internal `latest` and `save` operations over
+that history. Both operator files and managed definitions reuse the same frozen
+`ProviderPolicy` validation; operator credential-source/version rules and current
+file-loading behavior are unchanged. These are server library functions, **not
+HTTP routes, import commands, password checks or active runtime selection**.
+
+The caller supplies an already authorized owner, a server-minted request UUID,
+a full non-secret policy, a concrete reason and an aware server clock. Creation
+requires no prior version and remains disabled. Revision requires the observed
+positive version; stale versions return the shared 412 error. Retaining a
+credential uses explicit internal `KEEP`, clearing uses null, and binding uses a
+checked server-only `CredentialRef`, never a browser-selected path or UUID.
+Private preparation/rechecks must complete outside the writer before that call;
+the controller does not load a key or treat the reference itself as file proof.
+
+The short caller-owned writer appends one normalized revision and correlated
+audit together; a late audit failure rolls back both. Audit hashes cover only
+non-secret policy metadata and credential presence, never the credential or its
+plaintext hash. Reads select the greatest version even when disabled/cleared,
+validate canonical mirrored fields, contiguous progress and edition ownership,
+and reject corrupt retained rows with a fixed code without echo, repair or
+fallback. Reads write nothing. This does not install HTTP CSRF/reauthentication,
+sensitive idempotency, managed filesystem provisioning, diagnostics/runtime
+consumption or UI. Existing operator profiles remain the current runtime path;
+managed declarations alone cause no provider request, quota reset or financial
+change.
+
 ## Read-only diagnostics
 
 ```sh

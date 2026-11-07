@@ -20,21 +20,18 @@ from spm_api.providers.base import FetchState, OriginGroup, registry
 from spm_api.providers.http import ProviderAccess, exact_json
 
 
-class ProviderFile(Model):
-    """Trusted server-side metadata; credentials and caller-chosen paths are forbidden."""
+class ProviderPolicy(Model):
+    """Shared non-secret access declarations; no credential or filesystem selection."""
 
     model_config = ConfigDict(frozen=True)
 
     provider_id: ProviderId
-    version: int = Field(strict=True, ge=1, le=2147483647)
     enabled: bool = Field(default=False, strict=True)
     terms_acknowledged: bool = Field(default=False, strict=True)
     terms_reference: Note = ""
     terms_reason: ChangeReason | None = None
     requests_per_minute: int | None = Field(default=None, strict=True, ge=1, le=2147483647)
     requests_per_day: int | None = Field(default=None, strict=True, ge=1, le=2147483647)
-    credential_source: Literal["LOCAL_FILE", "DOCKER_SECRET"] | None = None
-    credential_version: int | None = Field(default=None, strict=True, ge=1, le=2147483647)
     raw_payload_storage: bool = Field(default=False, strict=True)
 
     @model_validator(mode="after")
@@ -46,10 +43,6 @@ class ProviderFile(Model):
             not self.terms_reference.strip() or self.terms_reason is None
         ):
             raise ValueError("Acknowledgment requires its explicit reference and reason")
-        if (self.credential_source is None) != (self.credential_version is None):
-            raise ValueError("Credential source and immutable version must be supplied together")
-        if mode != "API_KEY" and self.credential_source is not None:
-            raise ValueError("This provider profile does not accept API credentials")
         if mode == "MANUAL_EVIDENCE":
             if self.requests_per_minute is not None or self.requests_per_day is not None:
                 raise ValueError("Manual evidence cannot claim a network quota")
@@ -60,6 +53,25 @@ class ProviderFile(Model):
     @property
     def quota_group(self) -> OriginGroup:
         return registry()[self.provider_id].origin_group
+
+
+class ProviderFile(ProviderPolicy):
+    """Trusted operator metadata with fixed, versioned credential references only."""
+
+    version: int = Field(strict=True, ge=1, le=2147483647)
+    credential_source: Literal["LOCAL_FILE", "DOCKER_SECRET"] | None = None
+    credential_version: int | None = Field(default=None, strict=True, ge=1, le=2147483647)
+
+    @model_validator(mode="after")
+    def fixed_credential_reference(self) -> Self:
+        if (self.credential_source is None) != (self.credential_version is None):
+            raise ValueError("Credential source and immutable version must be supplied together")
+        if (
+            registry()[self.provider_id].access_mode != "API_KEY"
+            and self.credential_source is not None
+        ):
+            raise ValueError("This provider profile does not accept API credentials")
+        return self
 
 
 type FileSignature = tuple[int, int, int, int, int, int, int, int]
