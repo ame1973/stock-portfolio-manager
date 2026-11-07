@@ -181,3 +181,17 @@ class CredentialArtifactStore:
         return current.revision == observed.revision and hmac.compare_digest(
             current.credential.get_secret_value(), observed.credential.get_secret_value()
         )
+
+
+def managed_artifacts(settings: Settings) -> CredentialArtifactStore:
+    """Use explicit separate storage only; never create a root or fall back to operator secrets."""
+    root = settings.managed_provider_secret_dir
+    if root is None:
+        raise CredentialError("MANAGED_CREDENTIAL_STORAGE_NOT_CONFIGURED")
+    try:
+        resolved, operator = root.resolve(), settings.provider_secret_dir.resolve()
+    except (OSError, RuntimeError, ValueError):
+        raise CredentialError("UNSAFE_MANAGED_CREDENTIAL_LOCATION") from None
+    if resolved.is_relative_to(operator) or operator.is_relative_to(resolved):
+        raise CredentialError("UNSAFE_MANAGED_CREDENTIAL_LOCATION")
+    return CredentialArtifactStore(settings, directory=root)

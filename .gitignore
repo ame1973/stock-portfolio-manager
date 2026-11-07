@@ -16,6 +16,7 @@
 .env.*
 !.env.example
 /secrets/
+/managed-secrets/
 /data/
 /backups/
 /uploads/

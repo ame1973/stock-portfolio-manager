@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     data_dir: Path = ROOT / ".local/data"
     backup_dir: Path = ROOT / ".local/backups"
     provider_secret_dir: Path = ROOT / "secrets"
+    managed_provider_secret_dir: Path | None = Field(default=None, repr=False)
     minimum_free_bytes: int = 100 * 1024 * 1024
+
+    @field_validator("managed_provider_secret_dir", mode="before")
+    @classmethod
+    def optional_managed_directory(cls, value: object) -> object:
+        return None if value == "" else value
 
     @model_validator(mode="after")
     def validate_origin(self) -> "Settings":

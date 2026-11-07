@@ -13,6 +13,7 @@ services:
       DATA_DIR: /data
       BACKUP_DIR: /backups
       PROVIDER_SECRET_DIR: /run/spm-provider-secrets
+      MANAGED_PROVIDER_SECRET_DIR: /run/spm-managed-provider-secrets
       TZ: ${TZ:-Asia/Hong_Kong}
       # Trust forwarded metadata from the Nginx gateway only, not arbitrary peers.
       FORWARDED_ALLOW_IPS: ${WEB_INTERNAL_IP:-172.30.93.10}
@@ -21,6 +22,7 @@ services:
       - data:/data
       - backups:/backups
       - provider_secrets:/run/spm-provider-secrets:ro
+      - managed_provider_secrets:/run/spm-managed-provider-secrets
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -44,6 +46,7 @@ services:
       DATA_DIR: /data
       BACKUP_DIR: /backups
       PROVIDER_SECRET_DIR: /run/spm-provider-secrets
+      MANAGED_PROVIDER_SECRET_DIR: /run/spm-managed-provider-secrets
       TZ: ${TZ:-Asia/Hong_Kong}
     depends_on:
       api:
@@ -52,6 +55,7 @@ services:
       - data:/data
       - backups:/backups
       - provider_secrets:/run/spm-provider-secrets:ro
+      - managed_provider_secrets:/run/spm-managed-provider-secrets:ro
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -96,3 +100,4 @@ volumes:
   data:
   backups:
   provider_secrets:
+  managed_provider_secrets:

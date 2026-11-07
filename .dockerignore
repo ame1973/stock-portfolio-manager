@@ -11,6 +11,7 @@ docs/16_ADRS_AND_OPEN_QUESTIONS.md
 .env
 .env.*
 secrets
+managed-secrets
 data
 backups
 uploads

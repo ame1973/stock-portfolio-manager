@@ -22,6 +22,33 @@ The [owned policy-definition API](PROFILES.md) now enforces reauthentication, au
 
 Metadata is limited to **16 KiB**. A key is **1–256 printable ASCII bytes** with no spaces/control characters. One terminal LF or CRLF is accepted; other whitespace is not silently stripped. No key is supplied by default.
 
+## Separate managed credential storage
+
+`MANAGED_PROVIDER_SECRET_DIR` is an explicit optional local path; unset/empty means
+managed storage is not configured, **not a fallback to operator/data storage**.
+The `managed_artifacts(settings)` factory creates no directory, file, database or
+provider grant. It reuses immutable preparation and rejects resolved equal,
+ancestor or descendant overlap with operator secrets, data and backups. Original
+no-follow owner/mode/file checks still apply; the private setting is hidden in repr.
+
+Compose provisions a separate initially empty `managed_provider_secrets` volume
+at `/run/spm-managed-provider-secrets`, owner **10001:10001**, mode **0700**. Only
+the API mounts it writable; the worker mounts the same volume **read-only**.
+Both processes retain read-only root filesystems and the original
+`provider_secrets` mount remains read-only in both. This is an explicit storage
+role boundary for the future authenticated importer, not permission to rewrite
+operator credentials. A read-only worker can reopen an exact edition but cannot
+prepare another one; `providers-check` still inspects operator files only, without
+DB/bootstrap/upstream access or managed-file adoption.
+
+For local Python, pre-provision a separate process-owned0700 directory outside
+all three trees and Git/build contexts. The conventional `managed-secrets/` name
+is excluded from Git and Docker contexts, including its private ready metadata.
+No key-import command/API/UI or active managed runtime is installed merely by
+configuring/mounting storage. Do not place synthetic test keys in deployment
+volumes. Keys are outside the SQLite/backup volumes; preserve their private volume
+separately and do not assume a database backup restores credentials.
+
 ## Metadata format
 
 Each of the eight provider IDs has its own optional file: `eodhd`, `alphavantage`, `massive`, `yahoo`, `yfinance`, `hkex_evidence`, `sec_evidence`, `manual`. The body's `provider_id` must match its filename. Unknown fields, inline keys, arbitrary credential paths, duplicate JSON keys, nonfinite numbers and coerced numeric/boolean strings are rejected.
