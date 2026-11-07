@@ -15,6 +15,7 @@ from spm_api import __version__
 from spm_api.action_routes import router as action_router
 from spm_api.auth_routes import router as auth_router
 from spm_api.cash_routes import router as cash_router
+from spm_api.cited_routes import router as cited_router
 from spm_api.config import Settings
 from spm_api.db import check_database, make_engine
 from spm_api.errors import ApiError, Error, Status, error_response
@@ -182,6 +183,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(profile_router)
     app.include_router(provider_router)
     app.include_router(observation_router)
+    app.include_router(cited_router)
     app.include_router(schedule_router)
     return app
 

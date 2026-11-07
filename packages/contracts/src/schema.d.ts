@@ -687,6 +687,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/providers/cited-observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Cited Observation
+         * @description Append one cited assertion, never fetch a document or adopt canonical financial terms.
+         */
+        post: operations["create_cited_source_observation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/providers/coverage": {
         parameters: {
             query?: never;
@@ -1500,6 +1520,152 @@ export interface components {
              * Format: password
              */
             old_password: string;
+        };
+        /** CitationInput */
+        CitationInput: {
+            /** Citation */
+            citation: string;
+            /** Reason */
+            reason: string;
+            /** Url */
+            url?: string | null;
+        };
+        /** CitedDividendCreate */
+        CitedDividendCreate: {
+            /**
+             * Adjustment Basis
+             * @default UNKNOWN
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /** Announce Date */
+            announce_date?: string | null;
+            citation: components["schemas"]["CitationInput"];
+            /** Currency */
+            currency?: ("HKD" | "USD") | null;
+            /** Dps */
+            dps?: string | null;
+            /**
+             * Event Type
+             * @default UNKNOWN
+             * @enum {string}
+             */
+            event_type: "REGULAR" | "SPECIAL" | "INTERIM" | "FINAL" | "SUPPLEMENTAL" | "ETF_DISTRIBUTION" | "REIT_DISTRIBUTION" | "UNKNOWN";
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            operation: "DIVIDENDS";
+            /** Pay Date */
+            pay_date?: string | null;
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "hkex_evidence" | "sec_evidence" | "manual";
+            /** Provider Symbol */
+            provider_symbol: string;
+            /** Record Date */
+            record_date?: string | null;
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Source Currency */
+            source_currency?: string | null;
+            /** Source Frequency */
+            source_frequency?: number | null;
+            /** Source Period */
+            source_period?: ("ANNUAL" | "QUARTERLY" | "MONTHLY" | "WEEKLY" | "INTERIM" | "FINAL" | "SPECIAL" | "SUPPLEMENTAL" | "OTHER") | null;
+        };
+        /** CitedSourceCreated */
+        CitedSourceCreated: {
+            /**
+             * Canonical Adoption
+             * @default NOT_ADOPTED
+             * @constant
+             */
+            canonical_adoption: "NOT_ADOPTED";
+            /**
+             * Citation Id
+             * Format: uuid
+             */
+            citation_id: string;
+            /**
+             * Document Verification
+             * @default NOT_VERIFIED
+             * @constant
+             */
+            document_verification: "NOT_VERIFIED";
+            /**
+             * Observation Id
+             * Format: uuid
+             */
+            observation_id: string;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "DIVIDENDS" | "SPLITS";
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "hkex_evidence" | "sec_evidence" | "manual";
+            /**
+             * Provider Run Id
+             * Format: uuid
+             */
+            provider_run_id: string;
+            /**
+             * Scope
+             * @default SOURCE_ONLY
+             * @constant
+             */
+            scope: "SOURCE_ONLY";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+        };
+        /** CitedSplitCreate */
+        CitedSplitCreate: {
+            citation: components["schemas"]["CitationInput"];
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            operation: "SPLITS";
+            /**
+             * Provider Id
+             * @enum {string}
+             */
+            provider_id: "hkex_evidence" | "sec_evidence" | "manual";
+            /** Provider Symbol */
+            provider_symbol: string;
+            /** Ratio Denominator */
+            ratio_denominator: number | string;
+            /** Ratio Numerator */
+            ratio_numerator: number | string;
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Source Adjustment Type */
+            source_adjustment_type?: ("FORWARD_SPLIT" | "REVERSE_SPLIT" | "STOCK_DIVIDEND") | null;
         };
         /** CorporateAction */
         CorporateAction: {
@@ -8903,6 +9069,78 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    create_cited_source_observation: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CitedDividendCreate"] | components["schemas"]["CitedSplitCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CitedSourceCreated"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

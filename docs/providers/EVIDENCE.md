@@ -5,7 +5,8 @@ capture does not verify a dividend, adopt a corporate action, recognize income,
 create a receipt, change shares/cash, or establish complete upstream coverage.
 The [worker](WORKER.md) executes source jobs queued through the
 [authenticated enqueue/read/cancel API](JOBS.md) and explicit
-[schedules](SCHEDULES.md); cited evidence creation/review APIs remain unfinished. Installed
+[schedules](SCHEDULES.md). Protected [cited source creation](CITED_ASSERTIONS.md)
+is installed separately; citation-write forms and canonical review remain unfinished. Installed
 [provider diagnostics](DIAGNOSTICS.md) expose limited recorded-page history and
 [observation lists](OBSERVATIONS.md) expose exact retained assertions, never
 authoritative coverage or canonical financial adoption.
@@ -87,9 +88,9 @@ Network successes require a matching fixed-provider source pointer, a successful
 HTTP status and a decoded-payload checksum. Manual/HKEX/SEC assertions instead
 retain typed citations and cannot claim an HTTP attempt. Official HTTPS host
 attribution validates the supplied reference, not the document's contents; the
-capture path does not fetch cited documents. The [internal cited assertion core](CITED_ASSERTIONS.md)
-now binds an explicit actor and server-minted citation to one quoted event day;
-its protected HTTP creation workflow is not installed yet. See
+capture path does not fetch cited documents. The [protected cited assertion API](CITED_ASSERTIONS.md)
+binds the current session actor and server-minted citation to one quoted event day,
+with atomic audit/idempotency and original-response replay. See
 [configuration and rotation](CONFIGURATION.md) for private files, rights
 acknowledgment and local-only diagnostics.
 

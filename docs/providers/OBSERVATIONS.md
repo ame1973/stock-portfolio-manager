@@ -91,8 +91,8 @@ that no other dividends existed. Source-only split history starts with v1 storag
 This is installation-wide security/source history for the single-owner product,
 not a multi-tenant financial authorization model. Owner-scoped brokerage/job
 boundaries are unchanged. The [source workspace](WORKSPACE.md) reads these exact
-assertions without adoption. The [internal cited assertion core](CITED_ASSERTIONS.md)
-can append actor-attributed quotations, but a protected creation API/UI and
-canonical reconciliation/review remain unfinished. Explicit schedules and
+assertions without adoption. The [protected cited assertion API](CITED_ASSERTIONS.md)
+can append current-owner quotations with atomic audit/idempotency and original
+replay; citation-write forms and canonical reconciliation/review remain unfinished. Explicit schedules and
 managed policy/key settings are installed separately; none adopts financial
 terms. Paid/live provider and target-NAS validation remains NOT_TESTED.
