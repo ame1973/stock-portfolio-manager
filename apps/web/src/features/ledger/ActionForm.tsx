@@ -7,19 +7,13 @@ import { checked, mutationHeaders } from "../../lib/api";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { useFormAction } from "../settings/data";
 import { actionLabels, unallocatedAction, useSecurity, type CorporateAction } from "./data";
-import { date, note, optional, ratio, reason } from "./inputs";
+import { date, evidenceUrl, note, optional, ratio, reason } from "./inputs";
 
 const kinds = z.enum(["SPLIT", "REVERSE_SPLIT", "SYMBOL_CHANGE", "CASH_IN_LIEU", "MERGER", "SPIN_OFF"]);
-const evidence = z.string().max(2048).refine(value => {
-  try {
-    const url = new URL(value);
-    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !Array.from(value).some(character => /\s/.test(character) || character.charCodeAt(0) < 32);
-  } catch { return false; }
-}, "請使用不含帳密或空白的 HTTP(S) 證據網址；此表單不會抓取網址內容。");
 const schema = z.object({
   security_id: z.uuid("請選擇證券。"), action_type: kinds, effective_date: date,
   ratio_numerator: optional(ratio), ratio_denominator: optional(ratio),
-  new_symbol: z.string().trim().max(32), evidence_url: optional(evidence), status: z.enum(["NEEDS_REVIEW", "CONFIRMED"]),
+  new_symbol: z.string().trim().max(32), evidence_url: optional(evidenceUrl), status: z.enum(["NEEDS_REVIEW", "CONFIRMED"]),
   reason, note, confirmed_terms: z.boolean(),
 }).superRefine((value, context) => {
   const numerator = value.ratio_numerator, denominator = value.ratio_denominator;

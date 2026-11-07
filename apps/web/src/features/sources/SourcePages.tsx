@@ -1,14 +1,17 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, Outlet } from "react-router";
 import { Field, SelectField } from "../../components/forms/fields";
 import { FilterChips } from "../../components/forms/filter-chips";
 import { Button } from "../../components/ui/button";
+import { EditorSheet } from "../../components/ui/editor-sheet";
 import { useViewState } from "../../lib/view-state";
 import { SecurityName } from "../ledger/ReferenceName";
 import { RecordList } from "../settings/RecordList";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { usePageState } from "../settings/data";
-import { fetchLabels, isDividend, observationTerms, operationLabels, providerNames, useCoverage, useObservations, useProviderHealth, useProviders, type Coverage, type ObservationKind, type Operation, type ProviderId, type SourceFilters } from "./data";
+import { CitedForm, type CitedResult } from "./CitedForm";
+import { citationTitle, fetchLabels, isDividend, observationTerms, operationLabels, providerNames, refreshSources, useCoverage, useObservations, useProviderHealth, useProviders, type Coverage, type ObservationKind, type Operation, type ProviderId, type SourceFilters } from "./data";
 import { ObservationDetails, RecordedPage, SourceLink, SourceReadState, SourceValues } from "./details";
 
 export function DataCenterLayout() {
@@ -88,6 +91,9 @@ export function CoveragePage() {
   </div>;
 }
 export function ObservationsPage({ mode }: { mode: ObservationKind }) {
+  const cache = useQueryClient();
+  const [editor, setEditor] = useState(false);
+  const [created, setCreated] = useState<CitedResult | null>(null);
   const page = usePageState(`sources:observations:${mode}`);
   const initial: SourceFilters = { security_id: "", provider_id: "", from_date: "", to_date: "" };
   const [filters, setFilters] = useViewState(`filters:sources:observations:${mode}`, initial);
@@ -95,7 +101,9 @@ export function ObservationsPage({ mode }: { mode: ObservationKind }) {
   const title = mode === "dividends" ? "股息來源觀測" : "provider-only 拆股因子";
   const dateLabel = mode === "dividends" ? "除淨" : "生效";
   function filter(change: Partial<SourceFilters>) { setFilters(previous => ({ ...previous, ...change })); page.search(page.q); }
-  return <div className="grid min-w-0 gap-5"><div className="max-w-3xl"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-7 text-secondary">只列 immutable v1 來源證據（SOURCE_ONLY / NOT_ADOPTED）。{mode === "dividends" ? "每股金額、幣別及日期原樣保留；未知不是零，報價幣別不會補成股息幣別。" : "精確比例字串只供核對，不會採納股數、成本或現金。"}重複觀測不會變成多筆收入。</p></div>
+  return <div className="grid min-w-0 gap-5"><div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-7 text-secondary">只列 immutable v1 來源證據（SOURCE_ONLY / NOT_ADOPTED）。{mode === "dividends" ? "每股金額、幣別及日期原樣保留；未知不是零，報價幣別不會補成股息幣別。" : "精確比例字串只供核對，不會採納股數、成本或現金。"}重複觀測不會變成多筆收入。</p></div><Button data-editor-create disabled={editor} onClick={() => setEditor(true)}>{citationTitle(mode)}</Button></div>
+    {created && <section role="status" className="panel grid min-w-0 gap-3 text-sm leading-7"><p>伺服器已確認來源引用，可能是原鍵回覆；不是文件驗證、財務採納或實收。請以符合的篩選重新載入核對，不把回覆當成最新版本。</p><SourceValues values={[["確認引用識別碼", created.citation_id], ["確認觀測識別碼", created.observation_id]]} /></section>}
+    {editor && <EditorSheet title={citationTitle(mode)} onClose={() => setEditor(false)}><CitedForm key={mode} mode={mode} onCancel={() => setEditor(false)} onSaved={record => { setEditor(false); setCreated(record); void refreshSources(cache); }} /></EditorSheet>}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選{title}</summary><div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       <ReferenceSelect kind="securities" activeOnly={false} label="觀測證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
       <ProviderField label="觀測來源" value={filters.provider_id} onChange={value => filter({ provider_id: value })} />

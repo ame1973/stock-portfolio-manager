@@ -33,6 +33,12 @@ export const quantity = decimal(8, 1n);
 export const price = decimal(8, 0n);
 export const fx = decimal(12, 1n);
 export const optional = <T extends z.ZodType<string>>(schema: T) => z.union([schema, z.literal("")]);
+export const evidenceUrl = z.string().max(2048).refine(value => {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !Array.from(value).some(character => /\s/.test(character) || character.charCodeAt(0) < 32);
+  } catch { return false; }
+}, "請使用不含帳密或空白的 HTTP(S) 證據網址；此表單不會抓取網址內容。");
 export const date = z.iso.date("請填寫有效日期（YYYY-MM-DD）。").refine(value => !value.startsWith("0000"), "日期年份必須大於零。");
 export const reason = z.string().trim().min(10, "請提供至少 10 個字元的具體依據。").max(1000, "依據最多 1000 個字元。");
 export const note = z.string().max(1000, "備註最多 1000 個字元。");

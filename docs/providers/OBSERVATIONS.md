@@ -92,7 +92,8 @@ This is installation-wide security/source history for the single-owner product,
 not a multi-tenant financial authorization model. Owner-scoped brokerage/job
 boundaries are unchanged. The [source workspace](WORKSPACE.md) reads these exact
 assertions without adoption. The [protected cited assertion API](CITED_ASSERTIONS.md)
-can append current-owner quotations with atomic audit/idempotency and original
-replay; citation-write forms and canonical reconciliation/review remain unfinished. Explicit schedules and
-managed policy/key settings are installed separately; none adopts financial
-terms. Paid/live provider and target-NAS validation remains NOT_TESTED.
+and [responsive quotation forms](WORKSPACE.md#quote-one-source-assertion) can append
+current-owner quotations with atomic audit/idempotency and original replay.
+Canonical reconciliation/review remains unfinished. Explicit schedules and managed
+policy/key settings are installed separately; none adopts financial terms.
+Paid/live provider and target-NAS validation remains NOT_TESTED.

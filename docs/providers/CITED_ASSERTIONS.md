@@ -2,8 +2,8 @@
 
 `POST /api/v1/providers/cited-observations` records one owner-attributed quotation
 through the existing manual adapters and immutable evidence store. It is an
-installed source-only creation API, **not canonical dividend event creation or a
-citation-write browser form**. Existing observation pages can display its results.
+installed source-only creation API with responsive quotation forms on the existing
+observation pages, **not canonical dividend event creation**.
 
 The reference manual dividend event operation belongs to canonical matching,
 verification, entitlements and receipts, which remain separate work. Neither an
@@ -111,6 +111,24 @@ equal quotation; it is not extra financial income or vendor corroboration. The
 underlying internal primitive also supports identical committed prepared-run
 replay, but does not itself authorize an HTTP session.
 
+## Responsive quotation forms
+
+The existing dividend/split observation pages host source-only EditorSheet forms.
+They require one explicitly added security, source, known event day and exact
+source symbol. Optional saved-alias pages use the existing bounded raw catalogue
+records; they never guess a symbol or become a prerequisite for committed replay.
+No quote currency, date, provider, amount or 1:1 factor is inferred. Shared exact
+string codecs validate DPS/ratios without financial Number conversions. The
+independent bounded source-frequency label is integer metadata, not financial math.
+
+Input remains local to the open component, not a draft/mutation/persistent cache.
+An uncertain unchanged intent survives candidate searches, acknowledgment, the
+same alias choice and failed metadata reloads. Actual quoted-field changes create
+another intent. Close/Escape is blocked while pending; a confirmed original replay
+is not advertised as a newly created/current financial fact. Only source queries
+invalidate. See the [workspace walkthrough](WORKSPACE.md#quote-one-source-assertion)
+for explicit selection, access setup, retained input and retry instructions.
+
 ## Errors and non-effects
 
 Errors are fixed, no-store responses with the server request ID, never echoed
@@ -131,6 +149,5 @@ dividends/receipts/actions, portfolio revisions, cash, shares or FX are changed.
 Query/fragment citation links remain withheld in public observation views without
 changing the original stored assertion/hash. The schema stays
 `0013_managed_source_contexts` / 51 business tables; operator `providers-check`
-remains file-only with no DB/bootstrap/upstream probe. Citation-write forms,
-canonical reconciliation and paid/live provider/target NAS acceptance remain
-unfinished or NOT_TESTED.
+remains file-only with no DB/bootstrap/upstream probe. Canonical reconciliation
+and paid/live provider/target NAS acceptance remain unfinished or NOT_TESTED.

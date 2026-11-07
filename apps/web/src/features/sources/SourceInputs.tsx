@@ -5,12 +5,12 @@ import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { networkProviders, providerNames, type useProviders } from "./data";
 import { SourceReadState } from "./details";
 
-export function SourceSecurities({ label, ids, onChange, error }: { label: string; ids: string[]; onChange: (ids: string[]) => void; error?: string }) {
+export function SourceSecurities({ label, ids, onChange, error, limit = 100 }: { label: string; ids: string[]; onChange: (ids: string[]) => void; error?: string; limit?: number }) {
   const [candidate, setCandidate] = useState("");
   return <div className="grid min-w-0 content-start gap-3 sm:col-span-2">
     <ReferenceSelect kind="securities" label={label} activeOnly={false} value={candidate} registration={{ onChange: event => setCandidate(event.target.value) }} clearSelection={() => setCandidate("")} />
-    <div><Button type="button" variant="outline" disabled={!candidate || ids.includes(candidate) || ids.length >= 100} onClick={() => { onChange([...ids, candidate]); setCandidate(""); }}>加入證券</Button></div>
-    <p className="text-sm leading-7 text-secondary">已加入 {ids.length} / 100 個；可擷取下市證券的明確歷史身分。更改候選搜尋不會移除已加入證券。</p>
+    <div><Button type="button" variant="outline" disabled={!candidate || ids.includes(candidate) || ids.length >= limit} onClick={() => { onChange([...ids, candidate]); setCandidate(""); }}>加入證券</Button></div>
+    <p className="text-sm leading-7 text-secondary">已加入 {ids.length} / {limit} 個；可使用下市證券的明確歷史身分。更改候選搜尋不會移除已加入證券。</p>
     {ids.length > 0 && <ul aria-label={`已加入${label}`} className="grid gap-3">{ids.map(id => <li key={id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"><span className="min-w-0 break-all text-sm"><SecurityName id={id} /></span><Button type="button" variant="outline" aria-label={`移除此${label} ${id}`} onClick={() => onChange(ids.filter(value => value !== id))}>移除此證券</Button></li>)}</ul>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
   </div>;

@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { date, fx, money, price, quantity, ratio, sameMoney, signedMoney } from "./inputs";
 
 describe("exact string-only financial input", () => {
+  it.each(["1\n", "1\r\n"])("rejects line endings without throwing or trimming: %j", value => {
+    for (const codec of [money, price, quantity, fx, signedMoney]) expect(codec.safeParse(value).success).toBe(false);
+  });
+
+  it("rejects ratio line endings instead of treating them as integer whitespace", () => {
+    expect(ratio.safeParse("3\n").success).toBe(false);
+  });
   it.each([3, 3.5, true, null, "", "0", "-1", "3.0", "3e0", "+3", " 3", "9223372036854775808", "12345678901234567890"])("rejects an inexact/out-of-range ratio %s", value => {
     expect(ratio.safeParse(value).success).toBe(false);
   });

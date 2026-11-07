@@ -20,6 +20,7 @@ export type Operation = JobItem["operation"];
 export type Observation = Schemas["DividendObservationRecord"] | Schemas["SplitObservationRecord"];
 export type Coverage = Schemas["ProviderCoverage"] & { id: string };
 export type ObservationKind = "dividends" | "splits";
+export const citationTitle = (mode: ObservationKind) => mode === "dividends" ? "引用股息來源條款" : "引用拆股來源因子";
 export const isDividend = (row: Observation): row is Schemas["DividendObservationRecord"] => "dps" in row;
 // Preserve wire strings: source amounts and rational factors never pass through Number or math.
 export function observationTerms(record: Observation) {

@@ -6,7 +6,8 @@ create a receipt, change shares/cash, or establish complete upstream coverage.
 The [worker](WORKER.md) executes source jobs queued through the
 [authenticated enqueue/read/cancel API](JOBS.md) and explicit
 [schedules](SCHEDULES.md). Protected [cited source creation](CITED_ASSERTIONS.md)
-is installed separately; citation-write forms and canonical review remain unfinished. Installed
+and responsive quotation forms are installed separately; canonical review remains
+unfinished. Installed
 [provider diagnostics](DIAGNOSTICS.md) expose limited recorded-page history and
 [observation lists](OBSERVATIONS.md) expose exact retained assertions, never
 authoritative coverage or canonical financial adoption.

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { test } from "./private-test";
 import type { components } from "../../packages/contracts/src/schema";
-import { citedSourceApi } from "./cited-sources";
+import { citedSourceApi, citedSourceBrowserForms } from "./cited-sources";
 import { providerProfileApi } from "./provider-profiles";
 import { providerSettingsBrowserForms } from "./provider-settings";
 import { sourceJobApi } from "./source-jobs";
@@ -870,6 +870,7 @@ test("financial browser forms preserve exact facts, conflicts, reversals and ope
   await test.step("managed policy API: current reauthentication, CAS, original replay and immutable 2+1 history", async () => providerProfileApi(page, (await signedRequests(page)).headers, portfolio.id, account.id));
   await test.step("managed settings UI: frozen policy edits, actual 412, pending protection and immutable 25+2 history", async () => providerSettingsBrowserForms(page, (await signedRequests(page)).headers, REPLACEMENT_PASSWORD, portfolio.id, account.id));
   await test.step("cited source API: current actor, exact quotations, disabled replay and unchanged financial facts", async () => citedSourceApi(page, (await signedRequests(page)).headers, portfolio.id, account.id));
+  await test.step("cited source forms: exact terms, pending protection and original replay after disable/alias/read failures", async () => citedSourceBrowserForms(page, (await signedRequests(page)).headers, portfolio.id, account.id));
   expect(errors).toEqual([]);
   await page.getByRole("button", { name: "登出", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登入持倉簿", exact: true })).toBeVisible();

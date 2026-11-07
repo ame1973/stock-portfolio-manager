@@ -58,6 +58,50 @@ Integrity failures show a safe error rather than repairing, rounding or silently
 dropping unsafe evidence.
 See [observation reads](OBSERVATIONS.md) for the precise contract.
 
+## Quote one source assertion
+
+On `/data-center/dividends`, choose **Quote dividend source terms**
+(`引用股息來源條款`). On `/data-center/splits`, choose **Quote split source factor**
+(`引用拆股來源因子`). The existing responsive Sheet appends a quotation through the
+[protected cited source API](CITED_ASSERTIONS.md), not a canonical dividend/action.
+
+1. Search, select and explicitly add one stable security. Candidate searches do
+   not replace an already-added identity. Select HKEX evidence, SEC evidence or
+   manual input; no source is assumed and network vendors cannot be impersonated.
+2. Supply the known event-local ex-date/effective date and exact dated source
+   symbol. An optional bounded saved-alias reference offers explicit selection,
+   not automatic ticker inference. Changing confirmed security, source or event
+   date clears the old symbol. Reference search/refresh is not an input change.
+3. Quote exact terms. Blank DPS means unknown; `0` is known zero. Event currency
+   stays unknown unless explicitly chosen, even for a USD quote or an independent
+   EUR source label. Optional dates remain blank, UNKNOWN basis/type remains
+   unresolved, and frequency/period never implies REGULAR. Split numerator and
+   denominator are positive INT64 strings without a guessed 1:1. AS_DECLARED is
+   only the owner's quotation, not verification.
+4. Provide the reference, explanation and optional document link. Official
+   profiles require their exact HTTPS host/default port; manual references can be
+   local without a URL. Attribution is not a document download/content check.
+   Query/fragment links are withheld on reads without changing the original hash.
+5. Acknowledge source-only/non-adoption and choose **Save quotation, do not adopt
+   finances** (`儲存引用，不採納財務`). Existing source access/rights is required for a
+   new quotation, but no API key, request quota or upstream call is involved. The
+   separate policy/alias links open another tab; they do not grant access.
+
+Close/Escape cannot discard a pending write. Failed input and an unchanged intent
+key remain in the open form. If a response is lost after commit, retry unchanged:
+current diagnostic/alias read failure, later policy disablement or alias correction
+must not prevent the server's original response. Candidate searches, acknowledgment
+and selecting the same source symbol do not create another intent. Changing actual
+quoted fields does; first resolve an uncertain result rather than intentionally
+creating a second quotation. Current session and CSRF remain required. A cancelled
+sheet has no persistent draft or recoverable intent key.
+
+A confirmed response may be the original replay, not a new/current version. Its
+notice retains citation/observation IDs and asks for matching-filter review; the
+form does not clear private list filters or insert a fabricated current row. Only
+source reads invalidate, never financial projections. No quotation verifies a
+document, corroborates another vendor, creates a receipt or adopts income/shares.
+
 ## Queue one explicit source intent
 
 At `/data-center/jobs`, choose **Create source fetch job**:
