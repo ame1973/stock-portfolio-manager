@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { test } from "./private-test";
 import type { components } from "../../packages/contracts/src/schema";
 import { providerProfileApi } from "./provider-profiles";
 import { sourceJobApi } from "./source-jobs";
@@ -9,7 +10,8 @@ import { sourceScheduleApi, sourceScheduleBrowserForms } from "./source-schedule
 import { sourceBrowserForms } from "./source-workspace";
 import { workspaceBrowserForms } from "./workspace";
 
-const PASSWORD = "synthetic-browser-passphrase-2026";
+const PASSWORD = `synthetic-browser-${randomUUID()}`;
+const REPLACEMENT_PASSWORD = `synthetic-updated-browser-${randomUUID()}`;
 test.describe.configure({ mode: "serial" });
 
 test("owner onboarding, responsive views, logout revocation, and login", async ({ page, context }) => {
@@ -243,7 +245,7 @@ test("master-data management, dated mappings, conflicts, and session security", 
     await page.getByLabel("目前密碼", { exact: true }).fill(PASSWORD);
     await page.getByRole("button", { name: "確認目前密碼", exact: true }).click();
     await expect(page.getByText(/已重新驗證/)).toBeVisible();
-    const replacement = "synthetic-updated-browser-passphrase-2026";
+    const replacement = REPLACEMENT_PASSWORD;
     await page.getByLabel("舊密碼", { exact: true }).fill(PASSWORD);
     await page.getByLabel("新密碼", { exact: true }).fill(replacement);
     await page.getByLabel("再次輸入新密碼", { exact: true }).fill(replacement);
@@ -282,7 +284,7 @@ async function signedRequests(page: Page) {
 test("trade HTTP postings, oversell rejection, immutable correction, void, and scheduled draft", async ({ page }) => {
   type Trade = components["schemas"]["TradeRecord"];
   await page.goto("/settings/accounts");
-  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  await signIn(page, REPLACEMENT_PASSWORD);
   const { headers, post } = await signedRequests(page);
   const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E trade portfolio" });
   const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E trade broker" });
@@ -372,7 +374,7 @@ test("native cash and expense HTTP corrections preserve FX, wallets, opening, an
   type Expense = components["schemas"]["Expense"];
   type Balances = components["schemas"]["AccountCashBalances"];
   await page.goto("/settings/accounts");
-  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  await signIn(page, REPLACEMENT_PASSWORD);
   const { headers, post } = await signedRequests(page);
   const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E cash portfolio" });
   const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E cash broker" });
@@ -468,7 +470,7 @@ test("paired cash and cost-preserving securities transfer HTTP revisions commit 
   type Trade = components["schemas"]["TradeRecord"];
   type Balances = components["schemas"]["AccountCashBalances"];
   await page.goto("/settings/accounts");
-  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  await signIn(page, REPLACEMENT_PASSWORD);
   const { headers, post } = await signedRequests(page);
   const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E transfer portfolio" });
   const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E transfer broker" });
@@ -577,7 +579,7 @@ test("action terms and opening assertion HTTP corrections preserve evidence and 
   type Trade = components["schemas"]["TradeRecord"];
   type Balances = components["schemas"]["AccountCashBalances"];
   await page.goto("/settings/accounts");
-  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  await signIn(page, REPLACEMENT_PASSWORD);
   const { headers, post } = await signedRequests(page);
   const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E action opening portfolio" });
   const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E action opening broker" });
@@ -732,7 +734,7 @@ test("financial browser forms preserve exact facts, conflicts, reversals and ope
     if (message.type() === "error" && /Content Security Policy|violates.*directive|Refused to apply/i.test(message.text())) errors.push(message.text());
   });
   await page.goto("/settings/accounts");
-  await signIn(page, "synthetic-updated-browser-passphrase-2026");
+  await signIn(page, REPLACEMENT_PASSWORD);
   const { headers, post } = await signedRequests(page);
   const portfolio = await post<components["schemas"]["Portfolio"]>("portfolios", { name: "E2E trade form portfolio" });
   const broker = await post<components["schemas"]["Broker"]>("brokers", { name: "E2E trade form broker" });

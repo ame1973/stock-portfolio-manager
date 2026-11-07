@@ -9,6 +9,16 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    files: ["tests/e2e/**/*.mjs"],
+    languageOptions: { globals: globals.node },
+  },
+  {
+    files: ["tests/e2e/**/*.spec.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { paths: [{ name: "@playwright/test", importNames: ["test", "default"], message: "Use the private-test fixture for credential-safe diagnostics." }] }],
+    },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
     plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh },

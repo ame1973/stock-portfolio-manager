@@ -29,6 +29,8 @@ jobs:
         run: docker compose config --quiet
       - name: Install browser test runtime
         run: npx playwright install --with-deps chromium
+      - name: Verify credential-safe browser failure diagnostics
+        run: npm run test:e2e:privacy
       - name: Build containers
         run: docker compose -p spm-e2e-ci build
       - name: Smoke test containers
