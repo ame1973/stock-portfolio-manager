@@ -43,6 +43,54 @@ authority and commit actor/audit/decisions atomically. Merely listing recorded
 splits does not establish a complete historical chain. No such public controller
 or automatic completeness discovery is installed by this library.
 
+## Inert durable declaration schema
+
+Migration `0014_dividend_basis_assertions` adds one initially empty
+`dividend_basis_assertions` table: 52 business tables in total. It does not adopt
+old quotations, create a default assertion, change a source's basis or install a
+public basis-import controller. The existing pure calculation remains separate.
+
+Each append-only row retains an active owner, server request UUID, canonical UTC
+creation time, original observation/security/ex-date/hash pins and explicit source
+share-basis date. Its bounded JSON stores the complete cited declaration and exact
+physical/root/version/action-date/ratio snapshots together; there is no second
+mutable normalized-DPS or independently editable action-reference projection.
+The JSON limit is 128 KiB in **bytes**, with at most 100 references, exact key/type
+checks, no duplicate physical/root references and explicit true completeness flags.
+Private reference URLs are not a document-verification result or a public DTO.
+
+At INSERT, SQLite checks:
+
+- an existing provenance-v1 SPLIT_ADJUSTED source with the exact stored hash,
+  security and known ex-date, its original completed dividend run and first sighting;
+- each referenced real action's exact physical ID, stable root, version, security,
+  effective date, directional positive INT64 ratio and current CONFIRMED state;
+- the same `[X,B]` or `(B,X)` interval used below, including the same-day boundary;
+- every recorded current non-void quantity action in that interval. Omitted or
+  unconfirmed splits and unallocated cash-in-lieu/merger/spin-off actions reject
+  the claim. Foreign securities, outside dates, void rows and display-only symbol
+  changes do not invent quantity terms or block an otherwise exact declaration.
+
+These guards check **recorded** facts, not the completeness of external market
+history. SQL compares the stored source fingerprint and constrains the declaration
+hash's format; it does not cryptographically recompute either JSON fingerprint or
+replace the typed citation/URL validator. The future writer must validate original
+v1 content/hash and canonical declaration/hash, authorize the current HTTP actor,
+retain the cited completeness authority, and commit declaration/audit/idempotency
+in one short transaction. Owner/request UUIDs alone are not authentication.
+
+UPDATE, DELETE and INSERT OR REPLACE reject. A later legitimate action revision or
+void preserves the historical declaration, rather than blocking the financial
+correction or rewriting history; the old reference cannot authorize a new INSERT.
+A future canonical writer must recheck source/action scope at each new adoption,
+not treat the existence of a previously stored row as current proof or a replay
+grant. No production caller currently writes or selects this table.
+
+Upgrade preserves all previous source and financial rows and appends one schema
+audit per existing owner; a repeat upgrade writes nothing. Late DDL/audit failure
+rolls back the whole upgrade. Downgrade refuses to delete history: restore a
+validated pre-upgrade backup instead.
+
 ## Date moments follow the ordinary eligibility contract
 
 The ordinary dividend entitlement basis includes effective events **strictly
@@ -107,7 +155,10 @@ checks exact 3:2/inverse/same-day units, pre-ex-date eligibility consistency, co
 empty versus missing chains, rational cancellation, INT64/precision failure,
 source/hash/current-snapshot scopes, frozen-copy validation and conditional
 comparison/origin traces. Original financial replay rules and source fingerprints
-remain unchanged. Durable basis declarations, real-row writer fences, canonical
+remain unchanged. `uv run pytest tests/test_dividend_basis_migration.py` checks
+source/current-row/complete-chain SQL fences, exact date endpoints, legacy rejection,
+immutable history, byte bounds and upgrade rollback. The durable schema is inert;
+an authorized audited basis writer/read path, matching decisions, canonical
 revisions/manual locks, entitlement/receipt workflows and their protected APIs/UI
 remain separate work. Paid/live provider and target NAS acceptance remain
 NOT_TESTED.

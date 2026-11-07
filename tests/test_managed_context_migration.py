@@ -13,7 +13,7 @@ import spm_api.providers.profiles as profiles
 from spm_api.audit import canonical, digest
 from spm_api.cli import migrate
 from spm_api.config import Settings
-from spm_api.db import make_engine, schema_head, unit_of_work
+from spm_api.db import make_engine, unit_of_work
 from tests.helpers import database_snapshot
 from tests.provider_evidence_helpers import insert, seed_evidence
 from tests.test_action_opening_migration import schema
@@ -76,7 +76,7 @@ def test_upgrade_keeps_every_fact_profile_legacy_context_and_key_boundary(
 ) -> None:
     before, definitions = database_snapshot(old_engine), schema(old_engine)
     present = settings.provider_secret_dir.exists()
-    migrate(settings)
+    upgrade_to(old_engine, HEAD)
     after = database_snapshot(old_engine)
     assert set(before) == set(after)
     assert {
@@ -90,7 +90,6 @@ def test_upgrade_keeps_every_fact_profile_legacy_context_and_key_boundary(
     }
     assert after["audit_events"][: len(before["audit_events"])] == before["audit_events"]
     with unit_of_work(old_engine) as con:
-        assert schema_head() == HEAD
         assert con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == HEAD
         assert (
             con.exec_driver_sql(
@@ -113,7 +112,7 @@ def test_upgrade_keeps_every_fact_profile_legacy_context_and_key_boundary(
     assert settings.provider_secret_dir.exists() is present
     assert settings.managed_provider_secret_dir is None and not settings.backup_dir.exists()
     accepted = database_snapshot(old_engine)
-    migrate(settings)
+    upgrade_to(old_engine, HEAD)
     assert database_snapshot(old_engine) == accepted
 
 
