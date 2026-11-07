@@ -31,6 +31,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify credential-safe browser failure diagnostics
         run: npm run test:e2e:privacy
+      - name: Verify isolated real credential browser workflows
+        run: npm run test:e2e:credentials
       - name: Build containers
         run: docker compose -p spm-e2e-ci build
       - name: Smoke test containers

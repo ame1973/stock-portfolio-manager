@@ -12,8 +12,9 @@ or live coverage. Import/rotation still saves a disabled policy: the latest owne
 decision overrides operator fallback and blocks future pages under superseded
 pins. Explicit later enablement with rights/budgets is required for new source
 work. Already sent requests are not remotely cancelled and uncertain spending
-is not refunded. There is no credential-import UI, key-export endpoint or
-key-writing CLI. The read-only diagnostic CLI remains operator-file-only.
+is not refunded. The [browser workspace](PROFILES.md#browser-workspace) provides
+write-only import and rotation. There is no key-export endpoint or key-writing
+CLI. The read-only diagnostic CLI remains operator-file-only.
 
 ## Prerequisites and request
 
@@ -125,5 +126,7 @@ operator workflows; do not manually repoint a definition at discovered files.
 
 Credentials are outside SQLite and backup volumes. Preserve private storage
 separately; a database backup alone does not restore referenced credentials.
-Paid/live provider coverage, target NAS storage durability, orphan recovery and
-managed settings UI remain separate, unfinished acceptance boundaries.
+Paid/live provider coverage, target NAS storage durability and orphan recovery
+remain separate, unfinished acceptance boundaries. The responsive settings UI is
+available, with a separate temporary real-HTTP/browser fixture rather than seeded
+deployment keys; see the [browser/testing boundaries](PROFILES.md#browser-workspace).

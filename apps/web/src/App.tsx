@@ -12,6 +12,8 @@ const AccountsPage = lazy(() => import("./features/settings/MasterPages").then(m
 const SecuritiesPage = lazy(() => import("./features/settings/MasterPages").then(module => ({ default: module.SecuritiesPage })));
 const SecurityDetailPage = lazy(() => import("./features/settings/SecurityDetailPage").then(module => ({ default: module.SecurityDetailPage })));
 const SecuritySettingsPage = lazy(() => import("./features/settings/SecuritySettingsPage").then(module => ({ default: module.SecuritySettingsPage })));
+const ProviderSettingsPage = lazy(() => import("./features/settings/ProviderPages").then(module => ({ default: module.ProviderSettingsPage })));
+const ProviderSettingsDetailPage = lazy(() => import("./features/settings/ProviderPages").then(module => ({ default: module.ProviderSettingsDetailPage })));
 const TradesPage = lazy(() => import("./features/ledger/TradesPage").then(module => ({ default: module.TradesPage })));
 const BookingPage = lazy(() => import("./features/ledger/BookingPage").then(module => ({ default: module.BookingPage })));
 const AccountCashPage = lazy(() => import("./features/ledger/AccountCashPage").then(module => ({ default: module.AccountCashPage })));
@@ -107,6 +109,8 @@ function SignedInApp({ session }: { session: AuthSession }) {
               <Route path="securities" element={<SecuritiesPage />} />
               <Route path="securities/:id" element={<SecurityDetailPage />} />
               <Route path="security" element={<SecuritySettingsPage />} />
+              <Route path="providers" element={<ProviderSettingsPage />} />
+              <Route path="providers/:id" element={<ProviderSettingsDetailPage key={location.pathname} />} />
             </Route>
             <Route path="*" element={<div className="grid gap-5"><h1 className="text-2xl font-semibold">找不到頁面</h1><Link to="/settings" className="text-primary underline">前往管理設定</Link></div>} />
           </Routes></Suspense>
@@ -121,7 +125,7 @@ function SignedInApp({ session }: { session: AuthSession }) {
 }
 
 function SettingsLayout() {
-  const links = [["portfolios", "投資組合"], ["brokers", "券商"], ["accounts", "帳戶"], ["securities", "證券"], ["security", "帳戶安全"]];
+  const links = [["portfolios", "投資組合"], ["brokers", "券商"], ["accounts", "帳戶"], ["securities", "證券"], ["providers", "來源授權與金鑰"], ["security", "帳戶安全"]];
   return <div className="grid gap-8">
     <nav aria-label="設定分類" className="flex flex-wrap gap-2 border-b border-border pb-4">
       {links.map(([path, label]) => <NavLink key={path} to={`/settings/${path}`} className="inline-flex min-h-11 items-center rounded-md border border-transparent px-4 text-sm font-medium aria-[current=page]:border-border aria-[current=page]:bg-surface aria-[current=page]:text-primary">{label}</NavLink>)}

@@ -6,8 +6,9 @@ These APIs expose owned policies and a separate
 HTTP queueing, automatic schedules, worker dispatch and authenticated diagnostics
 now use the current owner's greatest policy revision. This capability describes
 installed code, not worker health, a valid key, a license or verified coverage.
-Import binds an immutable private edition to a new **disabled** policy. There is
-no settings editor UI yet.
+Import binds an immutable private edition to a new **disabled** policy. The
+responsive browser workspace is available at `/settings/providers`, with a
+per-source current-policy/history page at `/settings/providers/{provider_id}`.
 
 An owned policy always overrides installation operator files, including disabled,
 cleared or unavailable selections; it never revives an older enabled policy or
@@ -20,6 +21,47 @@ when cancellation itself is required. Historical committed evidence/replay stays
 unchanged. The diagnostic **CLI** deliberately remains operator-file-only/no DB
 or upstream probe, so its local report can differ from the authenticated owner
 report.
+
+## Browser workspace
+
+Open **Source authorization and keys** from Settings, or follow its link from the
+data-center provider catalogue. That catalogue remains a separate read-only
+local/recorded diagnostic view; neither page sends an upstream probe.
+
+- Create an explicit **disabled** policy; no provider, rights or software budget
+  is inferred. Creating an owned decision overrides installation-file fallback,
+  even when the new decision is disabled. Manual/official evidence profiles have
+  no API-key or network-budget controls. Yahoo/yfinance share one upstream.
+- Open a source's detail page to inspect the current decision and immutable
+  version/reason/physical-ID history. Desktop tables and phone/tablet cards render
+  only the server page/order; counts are not a total. History search/cursors stay
+  in the authenticated in-memory workspace, not the URL or persistent storage.
+- Every write Sheet includes the existing password-confirmation form. Confirming
+  the password does not submit the policy/key form. The server remains the
+  authority on the five-minute window; reauthentication preserves an unchanged
+  failed command and its idempotency key. Passwords and keys never enter query or
+  mutation caches.
+- Only EODHD, Alpha Vantage and Massive offer write-only key import/rotation.
+  Native password controls never display the key as text. Exact ASCII validation
+  rejects whitespace/Unicode/overlength input. Unsafe paste is blocked **before**
+  native newline removal/truncation and clears any previous key so it cannot be
+  submitted accidentally. A confirmed import returns a disabled revision;
+  separate explicit enablement still requires rights, limits and acknowledgment.
+- Policy and key editors freeze the observed version when opened. A background
+  refresh never silently upgrades an old edit. A 412 or other failed write keeps
+  its input; cancel/reload/reconcile before submitting a new intent. Close/Escape
+  cannot discard a pending policy, key import or password confirmation.
+- Clear a key reference only through a reasoned policy revision; the checkbox
+  also selects disabled access. It never deletes files, cancels work or restores
+  operator fallback. A stored reference flag is not proof of file/key validity.
+- Confirmed writes invalidate source reads only. Notices describe the returned
+  revision, which can be an original replay; current state comes from a refreshed
+  GET. No ledger/receipt/FX mutation or automatic source queue is created.
+
+See the [private browser testing policy](../testing/PRIVATE_BROWSER_DIAGNOSTICS.md)
+for controlled failure diagnostics and the separate real-credential workflow
+fixture. Only isolated synthetic data is used; test keys are not seeded into
+Compose deployment credential volumes.
 
 ## Operations
 

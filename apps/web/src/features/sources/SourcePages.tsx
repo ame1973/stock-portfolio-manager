@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router";
+import { Link, NavLink, Outlet } from "react-router";
 import { Field, SelectField } from "../../components/forms/fields";
 import { FilterChips } from "../../components/forms/filter-chips";
 import { Button } from "../../components/ui/button";
@@ -38,7 +38,7 @@ export function ProvidersPage() {
   const result = useProviders();
   const [selected, setSelected] = useState<ProviderId | null>(null);
   return <div className="grid min-w-0 gap-5">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="text-xl font-semibold">來源設定與候選能力</h2><p className="mt-2 text-sm leading-7 text-secondary">這是候選目錄與唯讀本機診斷，不是即時來源健康、授權核准或市場覆蓋保證。密鑰匯入尚未提供；來源排程可從分類頁明確建立及修訂，現有私有檔案由伺服器依部署文件管理。</p></div><Button variant="outline" disabled={result.isFetching} onClick={() => void result.refetch()}>重新載入來源設定</Button></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="text-xl font-semibold">來源設定與候選能力</h2><p className="mt-2 text-sm leading-7 text-secondary">這是候選目錄與唯讀本機診斷，不是即時來源健康、授權核准或市場覆蓋保證。個人政策與私密金鑰由管理設定另行操作；新增及匯入保持停用，權利、啟用及明確排程彼此分開。</p><Link className="mt-2 inline-flex min-h-11 items-center text-sm text-primary underline" to="/settings/providers">管理來源授權與金鑰</Link></div><Button variant="outline" disabled={result.isFetching} onClick={() => void result.refetch()}>重新載入來源設定</Button></div>
     <SourceReadState result={result} label="來源設定" />
     {result.data && <><p className="text-sm text-secondary">已載入 {result.data.items.length} 個候選來源；Yahoo／yfinance 共用 YAHOO 上游與配額，不是兩個獨立來源。</p>
       <ul className="grid min-w-0 gap-4 xl:grid-cols-2">{result.data.items.map(row => <li key={row.provider_id} className="panel grid min-w-0 content-start gap-4" aria-label={providerNames[row.provider_id]}>

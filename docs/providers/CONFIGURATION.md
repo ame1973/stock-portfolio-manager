@@ -104,7 +104,8 @@ not owner authorization, an active profile, terms acknowledgment or provider
 readiness.** The [protected importer](CREDENTIALS.md) now uses this library and
 commits its separate owned association. Startup, diagnostics and current operator
 selection do not discover or adopt artifacts; read-only operator mounts remain
-unchanged and no key-writing CLI/UI is installed.
+unchanged. The [browser workspace](PROFILES.md#browser-workspace) uses the protected
+importer; no key-writing CLI is installed.
 
 Preparation requires an explicitly supplied, pre-provisioned owner-only directory
 outside both data and backup trees, including resolved aliases. It creates no
@@ -135,8 +136,9 @@ a failed or concurrent request may leave unselected files. See the
 The preparation primitive itself writes no database, active binding or operator
 file and makes no provider request, quota reset or financial change. Installed
 runtime selection additionally requires current explicit enablement/rights and
-checked private access. Orphan reconciliation and settings UI remain subsequent
-work. Never
+checked private access. The [owned browser workspace](PROFILES.md#browser-workspace)
+provides policy and write-only key operations; orphan reconciliation remains
+unfinished. Never
 provision test artifacts or synthetic keys in deployment credential volumes.
 
 ## Append-only managed policy schema
@@ -206,8 +208,9 @@ now supplies HTTP session/CSRF/reauthentication and non-secret idempotency aroun
 this controller. The separate private importer adds sensitive actual-value
 idempotency and checked filesystem preparation outside the writer. Installed
 queue/schedule/dispatch/HTTP diagnostic consumers use the explicit owner's latest
-policy, not another owner's selection or the last enabled revision. Settings UI
-remains unfinished. Import/definition writes alone create no source job, provider
+policy, not another owner's selection or the last enabled revision. The
+[responsive owned settings workspace](PROFILES.md#browser-workspace) supplies
+these explicit browser operations. Import/definition writes alone create no source job, provider
 request, quota reset or financial change.
 
 ## Installed owned runtime selection
@@ -249,8 +252,8 @@ Disabled, cleared, rotated or unavailable owned policies block operator recovery
 already sent requests cannot be remotely recalled and unknown spending is not
 refunded. The default operator store and `providers-check` remain file-only/no
 DB/bootstrap/probe, so the CLI can intentionally differ from owner diagnostics.
-Source success still does not establish key validity, licensed live coverage,
-canonical income or a settings UI.
+Source success still does not establish key validity, licensed live coverage or
+canonical income; settings are a separate explicit owner workflow.
 
 ### Managed provenance and current-selection fences
 

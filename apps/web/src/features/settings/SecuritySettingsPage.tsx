@@ -9,7 +9,7 @@ import { clearSession } from "../../lib/session";
 import { usePageState } from "./data";
 import { RecordList } from "./RecordList";
 
-function PasswordForm({ changing = false }: { changing?: boolean }) {
+export function PasswordForm({ changing = false }: { changing?: boolean }) {
   const cache = useQueryClient();
   const key = useRef(crypto.randomUUID());
   const [pending, setPending] = useState(false);
@@ -44,7 +44,7 @@ function PasswordForm({ changing = false }: { changing?: boolean }) {
       if (cause instanceof ApiRequestError && cause.code === "UNAUTHORIZED") void cache.invalidateQueries({ queryKey: ["owner"] });
     } finally { setPending(false); }
   }
-  return <form aria-label={changing ? "變更密碼" : "重新驗證"} onSubmit={event => void submit(event)}
+  return <form aria-label={changing ? "變更密碼" : "重新驗證"} aria-busy={pending} onSubmit={event => void submit(event)}
     onChange={() => { key.current = crypto.randomUUID(); setError(null); setNotice(null); }} className="panel grid gap-5">
     <h2 className="text-lg font-semibold">{changing ? "變更密碼" : "重新驗證"}</h2>
     <p className="text-sm leading-7 text-secondary">{changing ? "成功後會立即撤銷所有裝置的登入，包括目前裝置。你需要使用新密碼重新登入。" : "執行敏感操作前再次確認密碼。驗證不會替你執行其他操作。"}</p>

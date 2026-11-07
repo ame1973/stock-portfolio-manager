@@ -11,9 +11,11 @@ Owner-authenticated source enqueue/read/cancel APIs are available; see the
 [HTTP contract](JOBS.md#authenticated-http-intents-and-safe-diagnostics).
 The [source workspace](WORKSPACE.md) provides explicit queueing, progress and
 cancellation. [Explicit schedules](SCHEDULES.md) also create source-only jobs through
-the same control/dispatch path, with responsive owner policy/receipt pages. Cited
-evidence creation/review APIs and key-import settings are still unfinished. Provider configuration/recorded-source
-reads and [exact observation lists](OBSERVATIONS.md) are available separately,
+the same control/dispatch path, with responsive owner policy/receipt pages. The
+[managed settings workspace](PROFILES.md#browser-workspace) provides separate
+reauthenticated policy and write-only key operations; cited evidence creation/review
+APIs remain unfinished. Provider configuration/recorded-source reads and
+[exact observation lists](OBSERVATIONS.md) are available separately,
 never as a live probe. No default schedule or provider enablement is created at
 startup; only explicitly enabled, due definitions can create scheduled work.
 The dispatcher selects the fenced lease owner's current policy and exact private

@@ -9,17 +9,21 @@ reconciliation, provider billing or authoritative market coverage.
 ## Read configuration before fetching
 
 `/data-center/providers` lists the eight candidate profiles and their current
-local file/dependency diagnosis. It does not probe an upstream or enable traffic.
-A configured profile remains unprobed/STALE; an unavailable profile remains
-UNCONFIGURED, including when older successful source pages exist. Expand a
-provider's diagnosis to read its recorded page separately. Yahoo/yfinance share
-one YAHOO origin and budget, not two vendor votes. Rights remain unverified;
-manual/official references do not add independent corroboration.
+owner-scoped policy/private-file/dependency diagnosis. It does not probe an
+upstream or enable traffic. A configured profile remains unprobed/STALE; an
+unavailable profile remains UNCONFIGURED, including when older successful source
+pages exist. Expand a provider's diagnosis to read its recorded page separately.
+Yahoo/yfinance share one YAHOO origin and budget, not two vendor votes. Rights
+remain unverified; manual/official references do not add independent corroboration.
 
-Key import/settings are not available yet. Manage existing operator files according
-to [configuration](CONFIGURATION.md). Merely viewing this page or possessing a key
-never enables a provider. Explicit source schedule editing is available separately
-under **Source schedules**, not a credential/rights grant.
+Follow **Source authorization and keys** to the separate
+[owned settings workspace](PROFILES.md#browser-workspace) for disabled creation,
+password confirmation, full policy edits, write-only key import/rotation and
+immutable history. The latest owned decision, even disabled/cleared/unavailable,
+overrides operator fallback. The independent read-only CLI still inspects
+[operator configuration](CONFIGURATION.md), not owner DB policy. Merely viewing
+either page or possessing a key never enables a provider. Explicit source schedule
+editing is available under **Source schedules**, not a credential/rights grant.
 
 `/data-center/coverage` requires an explicit stable security selection before
 loading bounded diagnostics. Select dividends or provider-only splits separately.

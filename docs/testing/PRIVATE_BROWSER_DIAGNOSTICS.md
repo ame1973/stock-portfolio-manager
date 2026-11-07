@@ -80,3 +80,37 @@ warns that traces, reports and console output can contain credentials.
 CI defines this privacy gate after Chromium installation and before application
 browser tests. A local pass is not proof that hosted CI ran or that live/NAS
 acceptance is complete.
+
+## Separate real credential-workflow fixture
+
+```sh
+npm run build
+npm run test:e2e:credentials
+```
+
+This second command is **not** the intentional-failure privacy gate. It starts
+the real FastAPI application through Uvicorn, serves the production-built SPA,
+and drives actual Chromium onboarding, password confirmation, disabled policy
+creation, exact write-only import, explicit enablement, rotation back to disabled,
+reference clear and original replay after clear. API results are not mocked. A
+real committed response is temporarily held to verify pending-close protection.
+The test checks exact original/current versions, two real mode0600 editions in a
+mode0700 private directory, no key/token/password in database rows, zero provider
+work and unchanged financial/source facts. No key enters process arguments or
+environment; bootstrap output is privately captured in the protected test worker.
+
+A stdlib wrapper allocates a new private temporary root and unused loopback port;
+the server rejects reused directories, non-test configuration and nonmatching
+private paths/origin. Data, backups, operator and managed directories are separate.
+No Docker deployment volume, existing owner, real key, provider request or worker
+is used. The temporary synthetic tree is inspected and removed after the server
+stops. This source-workspace fixture is not a container/NAS/TLS/OS-network-isolation
+or successful provider-execution claim. The separate seven-test Compose suite
+continues to verify the real Nginx/API/worker and strict CSP with empty deployment
+credential vaults; its settings step covers frozen policy editors, genuine CAS
+conflict, current password confirmation, pending writes and actual25+2 history.
+
+The same pinned private fixture/reporter and no-recording/debug rules apply.
+Subprocess diagnostics are captured, not published; the wrapper emits only a
+fixed result. CI defines this gate after the privacy control and built-SPA checks;
+that definition is not evidence that hosted CI ran.
