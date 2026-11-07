@@ -87,8 +87,11 @@ Network successes require a matching fixed-provider source pointer, a successful
 HTTP status and a decoded-payload checksum. Manual/HKEX/SEC assertions instead
 retain typed citations and cannot claim an HTTP attempt. Official HTTPS host
 attribution validates the supplied reference, not the document's contents; the
-capture path does not fetch cited documents. See [configuration and rotation](CONFIGURATION.md)
-for private files, rights acknowledgment and local-only diagnostics.
+capture path does not fetch cited documents. The [internal cited assertion core](CITED_ASSERTIONS.md)
+now binds an explicit actor and server-minted citation to one quoted event day;
+its protected HTTP creation workflow is not installed yet. See
+[configuration and rotation](CONFIGURATION.md) for private files, rights
+acknowledgment and local-only diagnostics.
 
 Requested dates are not observed coverage. Parsing completeness is not complete
 pagination/history or financial verification. `NO_DATA`, HTTP/auth/rate errors,

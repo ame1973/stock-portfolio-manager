@@ -379,6 +379,8 @@ The **server-only operator-file configuration reader** and real adapter bindings
 
 The **append-only source-capture library** persists completed page attempts, non-secret configuration/dated-alias/parser snapshots, exact dividend/split observations, repeat-retrieval links and audit in one short transaction. The same attempt replays without writes; a later retrieval of unchanged terms adds a run/sighting without rewriting the original observation. Changed terms remain distinct evidence. New captures recheck alias identity/version; callers must also recheck private configuration before and after HTTP. Legacy rows retain unresolved provenance rather than invented metadata. See [evidence storage and integrity](docs/providers/EVIDENCE.md) for the contract and upgrade behavior.
 
+The **internal cited assertion core** reuses those manual adapters and immutable capture for one explicitly dated owner quotation, with server-minted citation identity and actor/request-correlated audit. It never fetches a document, spends provider quota or adopts financial facts. Its protected creation API/UI is not installed yet; the reference canonical manual dividend event operation remains separate. See [cited source assertion boundaries](docs/providers/CITED_ASSERTIONS.md).
+
 The **durable source-job control library** seals owner/intent/request/configuration identity, independently tracks each security/provider/operation, and stores fenced leases plus immutable page checkpoints. It supports expiry recovery, bounded work retries, persistent wait deadlines and cancellation without deleting committed evidence. Source capture, checkpoint and audit share one short transaction; stale or cancelled workers cannot commit a new page. A completed source-only job is not verified dividend income. See [source-job control and recovery](docs/providers/JOBS.md) for progress, retry and legacy-state semantics.
 
 An internal [immutable credential preparation layer](docs/providers/CONFIGURATION.md#inactive-immutable-credential-preparation) creates exclusive, fsynced mode0600 editions in an explicitly provisioned private directory outside data/backups. Preparation itself never enables a profile, changes operator files or writes a database fact; ready metadata contains no credential or plaintext-key hash. The [reauthenticated import API](docs/providers/CREDENTIALS.md) now verifies preparation outside writers and binds a new disabled owned revision with atomic CAS/audit/sensitive idempotency. Sequential committed replay skips all private I/O; a concurrent or interrupted request may leave unselected files, which are retained rather than overwritten, deleted or adopted. Preparation/import alone is not filesystem/database atomicity, provider verification or access enablement. The [browser workspace](docs/providers/PROFILES.md#browser-workspace) provides write-only import; no key-writing CLI is installed. Read-only operator secret mounts and the file-only diagnostic CLI are unchanged.
@@ -444,8 +446,9 @@ npm run test:e2e:privacy
 npm run build
 npm run test:e2e:credentials
 # Choose a new project name each run; existing named volumes are not silently erased.
-WEB_PORT=18083 PUBLIC_ORIGIN=http://localhost:18083 \
-  docker compose -p spm-e2e-local-001 up -d --build --wait
+# Export overrides so the suite's Compose restart subprocesses inherit them too.
+export WEB_PORT=18083 PUBLIC_ORIGIN=http://localhost:18083
+docker compose -p spm-e2e-local-001 up -d --build --wait
 SPM_E2E_COMPOSE_PROJECT=spm-e2e-local-001 \
 SPM_E2E_BASE_URL=http://localhost:18083 npm run test:e2e
 docker compose -p spm-e2e-local-001 down

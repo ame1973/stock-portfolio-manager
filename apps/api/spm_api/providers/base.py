@@ -120,6 +120,18 @@ def independent_vendor_origins(providers: Iterable[ProviderId]) -> frozenset[Ori
     )
 
 
+CitationReference = Annotated[
+    str,
+    StringConstraints(
+        strict=True,
+        strip_whitespace=True,
+        min_length=1,
+        max_length=300,
+        pattern=r"^[^\x00-\x1f\x7f]+$",
+    ),
+]
+
+
 class EvidenceCitation(Model):
     """A local citation identity and user assertion, never a fetched/verified document."""
 
@@ -127,16 +139,7 @@ class EvidenceCitation(Model):
 
     id: UUID
     url: EvidenceUrl | None = None
-    citation: Annotated[
-        str,
-        StringConstraints(
-            strict=True,
-            strip_whitespace=True,
-            min_length=1,
-            max_length=300,
-            pattern=r"^[^\x00-\x1f\x7f]+$",
-        ),
-    ]
+    citation: CitationReference
     reason: ChangeReason
 
 
