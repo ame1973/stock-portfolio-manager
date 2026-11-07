@@ -265,7 +265,11 @@ never permits another HTTP call. A reservation rejected after external I/O remai
 spent; recovery records the unknown outcome rather than refunding/reissuing it.
 Private file/value checks before and after I/O, alias CAS and shared-origin peer
 checks remain required outside the writer. These database fences do not replace
-filesystem checks or establish current provider rights/coverage.
+filesystem checks or establish current provider rights/coverage. The owned
+[shared-budget envelope](BUDGETS.md#owned-peer-transaction-fence-not-installed-runtime-selection)
+also fences every current peer decision in new grant/result transactions, including
+unconfigured peers becoming enabled or gaining a managed override. This internal
+prerequisite still does not switch production consumers or runtime flags.
 
 ## Read-only diagnostics
 

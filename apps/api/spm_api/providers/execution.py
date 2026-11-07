@@ -14,12 +14,14 @@ from spm_api.providers.adapters import FetchPage
 from spm_api.providers.base import DividendObservation, FetchState, SplitObservation, registry
 from spm_api.providers.budgets import (
     TOKEN_UNITS,
+    BudgetSnapshot,
     OriginLimits,
     aware,
     later,
     microseconds,
     retry_deadline,
 )
+from spm_api.providers.configuration import ManagedPolicySnapshot
 from spm_api.providers.persistence import (
     CaptureReceipt,
     PreparedFetch,
@@ -184,6 +186,23 @@ def _refilled(state: dict[str, Any], limits: OriginLimits, at: datetime) -> int:
     return min(previous, limits.requests_per_minute * TOKEN_UNITS)
 
 
+def _budget_selection(
+    con: Connection,
+    lease: JobLease,
+    prepared: PreparedFetch,
+    observed: BudgetSnapshot | None,
+    limits: OriginLimits | None = None,
+) -> None:
+    configuration = prepared.configuration
+    if configuration.selection_owner_id is None and not isinstance(
+        configuration.profile, ManagedPolicySnapshot
+    ):
+        return
+    if observed is None or (limits is not None and limits != observed.limits):
+        raise ValueError("PROVIDER_CONFIG_CHANGED")
+    observed.validate_selection(con, lease.owner_id, configuration)
+
+
 def reserve_attempt(
     con: Connection,
     lease: JobLease,
@@ -194,6 +213,7 @@ def reserve_attempt(
     attempt_id: UUID,
     at: datetime,
     cursor_in: str | None = None,
+    budget_snapshot: BudgetSnapshot | None = None,
 ) -> BudgetDecision:
     """A created grant permits one bounded HTTP call; a replay never permits reissuing it."""
     jobs._writer(con)
@@ -232,6 +252,7 @@ def reserve_attempt(
     job, item, clock = jobs.validate_source_request(
         con, lease, item_id, prepared, at=current, cursor_in=cursor_in
     )
+    _budget_selection(con, lease, prepared, budget_snapshot, limits)
     provider = prepared.configuration.provider_id
     if prepared.operation not in registry()[provider].operations:
         raise jobs.JobError("UNSUPPORTED_UPSTREAM_OPERATION")
@@ -453,6 +474,7 @@ def complete_attempt(
     duration_ms: int,
     at: datetime,
     jitter_ms: int | None = None,
+    budget_snapshot: BudgetSnapshot | None = None,
 ) -> CompletedAttempt:
     """Commit source/checkpoint/outcome/circuit/work transitions together, never inside HTTP."""
     jobs._writer(con)
@@ -483,6 +505,12 @@ def complete_attempt(
             or item["attempt_count"] != reservation["work_attempt"]
         ):
             raise jobs.JobError("UPSTREAM_ATTEMPT_EXPIRED")
+        _budget_selection(con, lease, prepared, budget_snapshot)
+        if (
+            budget_snapshot is not None
+            and budget_snapshot.limits.sha256 != reservation["policy_sha256"]
+        ):
+            raise ValueError("PROVIDER_CONFIG_CHANGED")
     receipt = jobs.record_page(
         con,
         lease,

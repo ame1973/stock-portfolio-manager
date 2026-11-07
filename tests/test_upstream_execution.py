@@ -35,12 +35,14 @@ def new_work(book: dict[str, Any], engine: Engine, *, at: datetime = START) -> d
                 "SELECT id FROM job_items WHERE job_id=?", (row["id"],)
             ).scalar_one()
         )
+    budget = load_budget(book["store"], book["prepared"].configuration.provider_id)
     return {
         **book,
         "job": row,
         "item": item,
         "lease": active(engine, at=at),
-        "limits": load_budget(book["store"], book["prepared"].configuration.provider_id).limits,
+        "limits": budget.limits,
+        "budget": budget,
     }
 
 
@@ -63,6 +65,7 @@ def reserve(
             case["limits"],
             attempt_id=identifier or uuid4(),
             at=at,
+            budget_snapshot=case["budget"],
         )
 
 
@@ -87,6 +90,7 @@ def complete(
             duration_ms=12,
             at=at,
             jitter_ms=0,
+            budget_snapshot=case["budget"],
         )
 
 

@@ -4,7 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import Engine, text
+from sqlalchemy import Connection, Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.providers.credentials as credentials
@@ -17,9 +17,47 @@ from spm_api.providers.base import registry
 from spm_api.providers.configuration import (
     LoadedConfiguration,
     ManagedConfigurationRevision,
+    ManagedPolicySnapshot,
     ProviderConfigurationStore,
 )
 from spm_api.providers.http import ProviderAccess
+
+
+def validate_configuration(
+    con: Connection, configuration: LoadedConfiguration, owner: UUID
+) -> None:
+    """Check one observed owned decision using DB metadata only, including inactive peers."""
+    if not con.in_transaction() or not con.get_execution_options().get("writer"):
+        raise ValueError("WRITE_UNIT_OF_WORK_REQUIRED")
+    profile = configuration.profile
+    if configuration.selection_owner_id not in (None, owner) or (
+        isinstance(profile, ManagedPolicySnapshot) and profile.owner_id != owner
+    ):
+        raise ValueError("PROVIDER_OWNER_MISMATCH")
+    if (
+        con.execute(
+            text("SELECT 1 FROM owners WHERE id=:owner AND is_active=1"), {"owner": str(owner)}
+        ).first()
+        is None
+    ):
+        raise ValueError("PROVIDER_CONFIG_CHANGED")
+    try:
+        current = profiles.latest(con, owner, configuration.provider_id)
+    except profiles.ProfileError:
+        raise ValueError("PROVIDER_CONFIG_CHANGED") from None
+    if isinstance(profile, ManagedPolicySnapshot):
+        if (
+            current is None
+            or profiles.policy_snapshot(current) != profile
+            or (
+                configuration.revision is not None
+                and digest(canonical(profile.model_dump(mode="json")))
+                != configuration.revision.profile_sha256
+            )
+        ):
+            raise ValueError("PROVIDER_CONFIG_CHANGED")
+    elif current is not None:
+        raise ValueError("PROVIDER_CONFIG_CHANGED")
 
 
 class OwnerConfigurationStore(ProviderConfigurationStore):

@@ -9,7 +9,6 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, text
 
-import spm_api.providers.profiles as profiles
 from spm_api.audit import audit, canonical, stamp
 from spm_api.decimal_types import to_scaled
 from spm_api.providers.adapters import FetchPage
@@ -22,6 +21,7 @@ from spm_api.providers.base import (
 from spm_api.providers.configuration import LoadedConfiguration, ManagedPolicySnapshot
 from spm_api.providers.http import _CREDENTIAL_NAMES
 from spm_api.providers.manual import DividendEvidence, SplitEvidence
+from spm_api.providers.selection import validate_configuration
 from spm_api.providers.symbols import AliasSegment, ResolutionState, resolve_symbol
 from spm_api.providers.yfinance import SDK_VERSION
 
@@ -184,29 +184,10 @@ def validate_selection(con: Connection, prepared: PreparedFetch) -> None:
     if configuration.selection_owner_id is None and not isinstance(profile, ManagedPolicySnapshot):
         # Unswitched operator producers retain their existing definition-only API semantics.
         return
-    metadata = prepared.metadata()
-    if (
-        con.execute(
-            text("SELECT 1 FROM owners WHERE id=:owner AND is_active=1"),
-            {"owner": str(prepared.owner_id)},
-        ).first()
-        is None
-    ):
+    prepared.metadata()
+    if isinstance(profile, ManagedPolicySnapshot) and not profile.enabled:
         raise ValueError("PROVIDER_CONFIG_CHANGED")
-    try:
-        current = profiles.latest(con, prepared.owner_id, configuration.provider_id)
-    except profiles.ProfileError:
-        raise ValueError("PROVIDER_CONFIG_CHANGED") from None
-    if isinstance(profile, ManagedPolicySnapshot):
-        if (
-            current is None
-            or profiles.policy_snapshot(current) != profile
-            or not profile.enabled
-            or _digest(canonical(profile.model_dump(mode="json"))) != metadata["profile_sha256"]
-        ):
-            raise ValueError("PROVIDER_CONFIG_CHANGED")
-    elif current is not None:
-        raise ValueError("PROVIDER_CONFIG_CHANGED")
+    validate_configuration(con, configuration, prepared.owner_id)
 
 
 def persist_context(con: Connection, prepared: PreparedFetch) -> None:

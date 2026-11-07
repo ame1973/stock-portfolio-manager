@@ -2,8 +2,8 @@
 
 This is the installed server-side reservation/outcome contract, not a live
 provider dashboard. The [worker dispatcher](WORKER.md) uses it for source jobs
-queued through the [authenticated HTTP API](JOBS.md); automatic schedules remain
-unfinished. All paid/live plan and target-NAS validation remains NOT_TESTED. Software limits
+queued through the [authenticated HTTP API](JOBS.md) or explicitly enabled
+[schedules](SCHEDULES.md). All paid/live plan and target-NAS validation remains NOT_TESTED. Software limits
 are not a provider invoice, remaining-account quota probe, data-rights grant or
 proof of coverage.
 
@@ -28,6 +28,35 @@ check all observed peers and private configuration before and after HTTP; a
 primary-profile timestamp comparison alone is insufficient. Queued requests
 remain pinned to their non-secret profile identity. A key's presence is not
 permission to activate an unavailable queued selection.
+
+### Owned peer transaction fence, not installed runtime selection
+
+The owned-selection library additionally carries the complete private
+`BudgetSnapshot` into each new reservation and result transaction. This envelope
+must cover every registered profile for that actual origin, including disabled,
+absent and invalid peers, under the same owner. Its primary identity must match
+the prepared request; its exact limits/members/hashes are rederived from the
+observed policies rather than accepted as an independent grant. A missing peer,
+foreign scope, changed state or substituted limits fails before quota/work writes.
+No key or filesystem read occurs in this check. A new result must also match
+the original reservation's immutable policy fingerprint; reloading a fresh lower
+peer policy after HTTP cannot authorize a response under substituted limits.
+
+The writer rechecks each current owned decision against database metadata. A
+peer revision, lower budget, newly enabled peer or new managed override of an
+operator fallback invalidates the observed envelope, even when the primary is
+unchanged and a private pre/post-I/O check just succeeded. New empty/error/partial
+results obey the same rule. Discarded spending is never refunded. Completed
+reservation/result replay returns before this new fence, needs no private budget
+envelope and remains zero-write through later peer edits; a replay is not a new
+HTTP permission.
+
+This tightens the internal owned library only. Production queue/scheduler/worker
+and authenticated diagnostics are still operator-only, and public managed runtime
+capability stays false pending their separate integration. Existing unscoped
+operator calls retain their prior contract. The default `providers-check` remains
+operator-file-only/no DB/bootstrap/probe. These metadata fences supplement, not
+replace, actual constant-time credential/private-file checks around external I/O.
 
 ## Exact software allowances
 
@@ -149,6 +178,7 @@ exact integer/time storage, one unresolved item attempt and immutable outcomes.
 Late DDL failure restores schema/head/audit/all facts. Upgrade audit is append-only
 per existing owner and repeating the migration is a no-op. Restore a validated
 pre-upgrade backup instead of deleting quota/attempt history to downgrade or reset
-limits. The [worker dispatcher](WORKER.md) uses this contract; automatic schedules,
-owner-facing API/UI and licensed live validation remain separate acceptance work.
+limits. The [worker dispatcher](WORKER.md), explicit schedules and source API/UI
+use the operator contract. Managed runtime consumption and licensed live
+validation remain separate acceptance work.
 See [job control](JOBS.md) and [source evidence](EVIDENCE.md).

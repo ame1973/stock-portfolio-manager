@@ -4,8 +4,10 @@ import secrets
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal, Self
+from uuid import UUID
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
+from sqlalchemy import Connection
 
 from spm_api.audit import canonical, digest
 from spm_api.errors import Model
@@ -13,6 +15,7 @@ from spm_api.job_models import ProfileHash
 from spm_api.master_models import ProviderId
 from spm_api.providers.base import registry
 from spm_api.providers.configuration import LoadedConfiguration, ProviderConfigurationStore
+from spm_api.providers.selection import validate_configuration
 
 NetworkOrigin = Literal["EODHD", "ALPHAVANTAGE", "MASSIVE", "YAHOO"]
 TOKEN_UNITS = 60_000_000
@@ -74,6 +77,36 @@ class BudgetSnapshot:
     def primary(self) -> LoadedConfiguration:
         return next(value for value in self.configurations if value.provider_id == self.provider_id)
 
+    def validate_selection(
+        self, con: Connection, owner: UUID, primary: LoadedConfiguration
+    ) -> None:
+        """Fence every observed peer, even unconfigured ones, without filesystem I/O."""
+        if not con.in_transaction() or not con.get_execution_options().get("writer"):
+            raise ValueError("WRITE_UNIT_OF_WORK_REQUIRED")
+        expected = {
+            key
+            for key, value in registry().items()
+            if value.origin_group == registry()[primary.provider_id].origin_group
+        }
+        if (
+            self.provider_id != primary.provider_id
+            or len(self.configurations) != len(expected)
+            or {value.provider_id for value in self.configurations} != expected
+            or any(value.selection_owner_id != owner for value in self.configurations)
+            or primary.selection_owner_id != owner
+        ):
+            raise ValueError("PROVIDER_CONFIG_CHANGED")
+        if (
+            self.primary.profile != primary.profile
+            or self.primary.revision != primary.revision
+            or self.primary.error_code != primary.error_code
+        ):
+            raise ValueError("PROVIDER_CONFIG_CHANGED")
+        for value in self.configurations:
+            validate_configuration(con, value, owner)
+        if self.limits != _limits(self.provider_id, self.configurations):
+            raise ValueError("PROVIDER_CONFIG_CHANGED")
+
     def unchanged(self, store: ProviderConfigurationStore) -> bool:
         for observed in self.configurations:
             if observed.error_code is None:
@@ -95,6 +128,14 @@ def load_budget(store: ProviderConfigurationStore, provider_id: ProviderId) -> B
         for key, value in registry().items()
         if value.origin_group == definition.origin_group
     )
+    return BudgetSnapshot(provider_id, _limits(provider_id, configurations), configurations)
+
+
+def _limits(
+    provider_id: ProviderId, configurations: tuple[LoadedConfiguration, ...]
+) -> OriginLimits:
+    """Derive limits from already loaded policy snapshots, with no DB or file access."""
+    definition = registry()[provider_id]
     primary = next(value for value in configurations if value.provider_id == provider_id)
     if primary.error_code is not None:
         raise ValueError("PROVIDER_UNCONFIGURED")
@@ -124,7 +165,7 @@ def load_budget(store: ProviderConfigurationStore, provider_id: ProviderId) -> B
         )
         minutes.append(profile.requests_per_minute)
         days.append(profile.requests_per_day)
-    limits = OriginLimits.model_validate(
+    return OriginLimits.model_validate(
         {
             "origin_group": definition.origin_group,
             "requests_per_minute": min(minutes),
@@ -132,7 +173,6 @@ def load_budget(store: ProviderConfigurationStore, provider_id: ProviderId) -> B
             "members": members,
         }
     )
-    return BudgetSnapshot(provider_id, limits, configurations)
 
 
 def aware(value: datetime) -> datetime:
