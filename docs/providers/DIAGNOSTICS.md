@@ -6,6 +6,13 @@ probe upstream services, reserve requests, import keys, enable providers, repair
 legacy rows or adopt financial facts. Every route requires an owner session and
 returns `Cache-Control: no-store`.
 
+Local HTTP readiness now uses the authenticated owner's greatest managed policy,
+including disabled/cleared/unavailable selections. Only no owned policy permits
+operator fallback; historical results do not override that decision. Private
+policy/file/dependency preparation runs outside DB writers and the event loop.
+The command-line `providers-check` intentionally remains operator-file-only/no
+DB/bootstrap/upstream access, so its report can differ from the owner's HTTP view.
+
 All paths below have the `/api/v1` prefix. Authentication follows the
 [owner guide](../../readme.md#owner-authentication). No credential or file path
 belongs in an application URL or request body.

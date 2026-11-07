@@ -1,4 +1,4 @@
-"""Read owned policies and private editions without writes, discovery or runtime adoption."""
+"""Select explicit owned policy/edition scope; operator CLI remains a separate file-only path."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -61,7 +61,7 @@ def validate_configuration(
 
 
 class OwnerConfigurationStore(ProviderConfigurationStore):
-    """Private selection core; importing it does not switch dispatch or diagnostic consumers."""
+    """Owned actor scope for queue/schedule/worker/diagnostics; never infer an owner from files."""
 
     def __init__(
         self,

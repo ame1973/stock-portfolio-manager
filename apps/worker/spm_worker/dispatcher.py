@@ -18,7 +18,6 @@ from spm_api.master_models import ProviderId
 from spm_api.providers.adapters import FetchPage
 from spm_api.providers.base import DividendObservation, SplitObservation, registry
 from spm_api.providers.budgets import BudgetSnapshot, load_budget
-from spm_api.providers.configuration import ProviderConfigurationStore
 from spm_api.providers.execution import (
     abandon_attempt,
     complete_attempt,
@@ -27,11 +26,21 @@ from spm_api.providers.execution import (
 )
 from spm_api.providers.persistence import PreparedFetch, prepare_fetch
 from spm_api.providers.runtime import configured_adapter
+from spm_api.providers.selection import OwnerConfigurationStore
 from spm_api.providers.symbols import AliasSegment, ResolutionState, resolve_symbol
 
 
 def now() -> datetime:
     return datetime.now(UTC)
+
+
+def _work_error(error: Exception) -> WorkError:
+    if isinstance(error, ValueError):
+        if str(error) == "PROVIDER_ALIAS_CHANGED":
+            return WorkError.ALIAS_CHANGED
+        if str(error) in {"PROVIDER_CONFIG_CHANGED", "PROVIDER_OWNER_MISMATCH"}:
+            return WorkError.CONFIG_CHANGED
+    return WorkError.WORKER_ERROR
 
 
 class _Unavailable(Exception):
@@ -121,9 +130,9 @@ async def _fetch_item(
         raise _Unavailable(WorkError.UNCONFIGURED, skipped=True)
     if operation not in definition.operations or definition.access_mode == "MANUAL_EVIDENCE":
         raise _Unavailable(WorkError.UNSUPPORTED, skipped=True)
-    store = ProviderConfigurationStore(settings)
+    store = OwnerConfigurationStore(settings, engine, lease.owner_id)
     try:
-        snapshot = load_budget(store, provider)
+        snapshot = await asyncio.to_thread(load_budget, store, provider)
     except ValueError:
         raise _Unavailable(WorkError.UNCONFIGURED, skipped=True) from None
     if (
@@ -137,7 +146,7 @@ async def _fetch_item(
         async with configured_adapter(snapshot.primary, transport=transport) as adapter:
             if not (await adapter.healthcheck()).configured:
                 raise _Unavailable(WorkError.UNCONFIGURED, skipped=True)
-            if not snapshot.unchanged(store):
+            if not await asyncio.to_thread(snapshot.unchanged, store):
                 raise _Unavailable(WorkError.CONFIG_CHANGED)
             if stopping is not None and stopping():
                 return lease
@@ -154,13 +163,14 @@ async def _fetch_item(
                     attempt_id=uuid4(),
                     at=at,
                     cursor_in=cursor,
+                    budget_snapshot=snapshot,
                 )
             if decision.attempt is None:
                 return lease
             if not decision.attempt.created:
                 raise jobs.JobError("UPSTREAM_GRANT_ALREADY_USED")
             identifier = decision.attempt.id
-            if not snapshot.unchanged(store):
+            if not await asyncio.to_thread(snapshot.unchanged, store):
                 raise _Unavailable(WorkError.CONFIG_CHANGED)
             if stopping is not None and stopping():
                 return lease
@@ -172,7 +182,7 @@ async def _fetch_item(
                 else (await adapter.fetch_splits(prepared.segment, cursor))
             )
             finished, duration = clock(), (monotonic_ns() - tick) // 1_000_000
-        if not snapshot.unchanged(store):
+        if not await asyncio.to_thread(snapshot.unchanged, store):
             raise _Unavailable(WorkError.CONFIG_CHANGED)
         with unit_of_work(engine, write=True) as con:
             complete_attempt(
@@ -185,6 +195,7 @@ async def _fetch_item(
                 finished_at=finished,
                 duration_ms=duration,
                 at=clock(),
+                budget_snapshot=snapshot,
             )
     except _Unavailable:
         if identifier is None:
@@ -197,13 +208,16 @@ async def _fetch_item(
         if identifier is None:
             raise
         # Never retain exception text, provider bodies, credential paths or private URLs.
-        code = (
-            WorkError.ALIAS_CHANGED
-            if isinstance(error, ValueError) and str(error) == "PROVIDER_ALIAS_CHANGED"
-            else WorkError.WORKER_ERROR
-        )
+        code = _work_error(error)
         with unit_of_work(engine, write=True) as con:
-            abandon_attempt(con, lease, identifier, at=clock(), error=code)
+            abandon_attempt(
+                con,
+                lease,
+                identifier,
+                at=clock(),
+                reason="CONFIG_CHANGED" if code == WorkError.CONFIG_CHANGED else "WORKER_ERROR",
+                error=WorkError.WORKER_ERROR if code == WorkError.CONFIG_CHANGED else code,
+            )
     return lease
 
 
@@ -291,15 +305,11 @@ async def dispatch_once(
                     "JOB_PAGE_LIMIT": WorkError.PAGE_LIMIT,
                     "JOB_CURSOR_CYCLE": WorkError.CURSOR_CYCLE,
                     "JOB_CHECKPOINT_GAP": WorkError.CONFIG_CHANGED,
+                    "JOB_CONFIGURATION_CHANGED": WorkError.CONFIG_CHANGED,
                 }.get(str(error), WorkError.WORKER_ERROR)
                 _finish_item(engine, lease, UUID(item["id"]), clock(), code)
             except Exception as error:
-                code = (
-                    WorkError.ALIAS_CHANGED
-                    if isinstance(error, ValueError) and str(error) == "PROVIDER_ALIAS_CHANGED"
-                    else WorkError.WORKER_ERROR
-                )
-                _finish_item(engine, lease, UUID(item["id"]), clock(), code)
+                _finish_item(engine, lease, UUID(item["id"]), clock(), _work_error(error))
         return True
     except jobs.JobError as error:
         if str(error) not in {

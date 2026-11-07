@@ -18,8 +18,9 @@ All paid/live coverage validation is NOT_TESTED.
   context, parser label, normalization version, and non-secret configuration snapshot.
   Operator profiles retain fixed credential versions; managed library captures retain
   actual owned revision/edition identity instead. Profiles include rights references
-  and configured budgets, not credential values. Managed production consumption is
-  [not installed yet](CONFIGURATION.md#managed-provenance-and-current-selection-fences).
+  and configured budgets, not credential values. The
+  [installed owner selection](CONFIGURATION.md#installed-owned-runtime-selection)
+  supplies actual initiating scope without exposing private references.
   A quota reservation may retain this planned context before external I/O; context
   presence alone is not evidence of a request, response or completed capture.
 - `provider_runs` retains a **completed page attempt**, including sanitized state,
@@ -125,4 +126,5 @@ and an unchanged rerun writes nothing. The Python writer also checks current
 selection before new reservations/outcomes, including retained context IDs; it
 never loads files inside that transaction. Historical committed replay remains
 zero-write after rotation, while new pages require current authority. This is a
-library/storage boundary, not installed managed worker selection.
+storage boundary now used by the installed owned worker; HTTP queue/schedule
+selections remain pinned and cannot silently upgrade to a new policy or edition.

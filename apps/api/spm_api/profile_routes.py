@@ -1,4 +1,4 @@
-"""Reauthenticated policy definitions and immutable credential imports, not runtime adoption."""
+"""Reauthenticated owned policies and disabled private imports for explicit runtime selection."""
 
 from uuid import UUID
 
@@ -37,7 +37,7 @@ def _public(record: service.ManagedProfile) -> ProviderProfileRecord:
         reason=record.change_reason,
         created_at=record.created_at,
         credential_reference_present=record.credential_artifact_id is not None,
-        runtime_selection_installed=False,
+        runtime_selection_installed=True,
     )
 
 

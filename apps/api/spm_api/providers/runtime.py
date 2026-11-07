@@ -1,5 +1,6 @@
 """Bind validated local profiles to real adapters; no probe, quota reservation or hidden fetch."""
 
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import cast
@@ -50,15 +51,26 @@ async def configured_adapter(
             yield _HTTP[provider_id](client)
 
 
-async def check_configuration(settings: Settings, provider_id: ProviderId) -> AdapterHealth:
-    """Read one local profile/dependency state without probing or reserving upstream traffic."""
-    loaded = ProviderConfigurationStore(settings).load(provider_id)
+async def check_configuration(
+    settings: Settings, provider_id: ProviderId, *, store: ProviderConfigurationStore | None = None
+) -> AdapterHealth:
+    """Check explicit private scope; the default CLI path stays operator-only/no DB or probe."""
+    loaded = await asyncio.to_thread(
+        (store or ProviderConfigurationStore(settings)).load, provider_id
+    )
     if loaded.error_code is not None:
         return loaded.health
     async with configured_adapter(loaded) as adapter:
         return await adapter.healthcheck()
 
 
-async def check_configurations(settings: Settings) -> tuple[AdapterHealth, ...]:
-    """Inspect files/local dependencies only; provider errors never become application unready."""
-    return tuple([await check_configuration(settings, provider_id) for provider_id in registry()])
+async def check_configurations(
+    settings: Settings, *, store: ProviderConfigurationStore | None = None
+) -> tuple[AdapterHealth, ...]:
+    """Inspect only the explicit scope; no owner/DB is inferred for the diagnostic CLI."""
+    return tuple(
+        [
+            await check_configuration(settings, provider_id, store=store)
+            for provider_id in registry()
+        ]
+    )

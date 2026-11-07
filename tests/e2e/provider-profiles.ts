@@ -23,7 +23,7 @@ export async function providerProfileApi(
   const input: Schemas["ProviderProfileCreate"] = {
     policy: { provider_id: "yahoo", enabled: false, terms_acknowledged: false, terms_reference: "",
       terms_reason: null, requests_per_minute: null, requests_per_day: null, raw_payload_storage: false },
-    reason: "Explicit synthetic policy definition, not runtime activation or verified licensing.",
+    reason: "Explicit synthetic provider policy, not verified licensing or a live probe.",
   };
   const intent = headers();
   const created = await page.request.post("/api/v1/provider-profiles", { headers: intent, data: input });
@@ -32,7 +32,7 @@ export async function providerProfileApi(
   expect(created.headers()["location"]).toBe("/api/v1/provider-profiles/yahoo");
   expect(created.headers()["etag"]).toBe('"1"');
   const original = await created.json() as Schemas["ProviderProfileRecord"];
-  expect(original).toMatchObject({ version: 1, scope: "POLICY_DEFINITION_ONLY", runtime_selection_installed: false,
+  expect(original).toMatchObject({ version: 1, scope: "OWNED_PROVIDER_POLICY", runtime_selection_installed: true,
     credential_reference_present: false, policy: { provider_id: "yahoo", enabled: false } });
   const update: Schemas["ProviderProfileUpdate"] = { clear_credential: false, policy: { ...original.policy, enabled: true,
     terms_acknowledged: true, terms_reference: "Synthetic user policy reference, not a licensed plan",
@@ -42,7 +42,7 @@ export async function providerProfileApi(
   expect(enabled.status()).toBe(200);
   expect(enabled.headers()["etag"]).toBe('"2"');
   const declared = await enabled.json() as Schemas["ProviderProfileRecord"];
-  expect(declared).toMatchObject({ version: 2, runtime_selection_installed: false, policy: { enabled: true } });
+  expect(declared).toMatchObject({ version: 2, runtime_selection_installed: true, policy: { enabled: true } });
   const stale = await page.request.patch("/api/v1/provider-profiles/yahoo", {
     headers: headers(1), data: { ...update, policy: { ...update.policy, enabled: false } },
   });
@@ -52,7 +52,7 @@ export async function providerProfileApi(
   });
   expect(paused.status()).toBe(200);
   const final = await paused.json() as Schemas["ProviderProfileRecord"];
-  expect(final).toMatchObject({ version: 3, runtime_selection_installed: false, policy: { enabled: false } });
+  expect(final).toMatchObject({ version: 3, runtime_selection_installed: true, policy: { enabled: false } });
   const replay = await page.request.post("/api/v1/provider-profiles", { headers: intent, data: input });
   expect(replay.status()).toBe(201);
   expect(replay.headers()["etag"]).toBe('"1"');

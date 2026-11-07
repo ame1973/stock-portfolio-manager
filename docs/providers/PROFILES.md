@@ -1,20 +1,25 @@
 # Owned provider policies and private credential import
 
-These APIs expose owned policy definitions and a separate
-[reauthenticated private credential import](CREDENTIALS.md). Every record reports
-`scope: POLICY_DEFINITION_ONLY` and `runtime_selection_installed: false`.
-Import binds an immutable private edition to a new disabled definition; it does
-not activate managed source access, replace operator files, probe a provider,
-grant a license or change financial facts. There is no settings editor UI yet.
+These APIs expose owned policies and a separate
+[reauthenticated private credential import](CREDENTIALS.md). New records report
+`scope: OWNED_PROVIDER_POLICY` and `runtime_selection_installed: true`: explicit
+HTTP queueing, automatic schedules, worker dispatch and authenticated diagnostics
+now use the current owner's greatest policy revision. This capability describes
+installed code, not worker health, a valid key, a license or verified coverage.
+Import binds an immutable private edition to a new **disabled** policy. There is
+no settings editor UI yet.
 
-The [operator-file loader](CONFIGURATION.md), existing provider diagnostics, CLI
-and worker selection still use the current operator-file interface. In
-particular, **disabling or clearing a definition is not a kill switch for
-operator-configured jobs**. Manage operator access through its trusted file
-provisioning boundary and use the [job stop-intent API](JOBS.md) when required;
-these metadata writes do not cancel jobs or refund uncertain upstream spending.
-Managed runtime integration and settings UI remain unfinished; import alone is
-not active access.
+An owned policy always overrides installation operator files, including disabled,
+cleared or unavailable selections; it never revives an older enabled policy or
+another owner's key. Only an absent owned definition permits the existing
+operator-file fallback. Disabling, clearing or importing a rotated edition blocks
+new pages under the old selection, without deleting files or cancelling jobs.
+An already sent request is not remotely cancelled; a changed selection causes
+its late result to be discarded without refund. Use the [job stop-intent API](JOBS.md)
+when cancellation itself is required. Historical committed evidence/replay stays
+unchanged. The diagnostic **CLI** deliberately remains operator-file-only/no DB
+or upstream probe, so its local report can differ from the authenticated owner
+report.
 
 ## Operations
 
@@ -34,7 +39,7 @@ existing five-minute reauthentication window.
 
 The provider ID must be one of the eight registered profiles. A revision cannot
 move provider identity. The first version must be disabled; subsequent enabled
-**declarations** need explicit rights acknowledgment and the access mode's
+**policies** need explicit rights acknowledgment and the access mode's
 budgets/reference. Yahoo/yfinance still share one upstream. Manual/official
 profiles accept no network budgets or API credentials. No raw-payload retention
 is granted.
@@ -91,7 +96,11 @@ Policy/reason/version inputs contain no key or password, so their fingerprint is
 the normalized public body, including the observed PATCH version. A mismatched
 reuse returns 409. A valid replay preserves the original DTO/ETag, even after a
 later revision; it does not manufacture a current state or refresh authorization.
-GET returns the current version. Stale editors return 412 without overwriting
+GET returns the current version and installed capability. A receipt committed
+before runtime installation retains its original `POLICY_DEFINITION_ONLY` scope
+and false capability during replay; it is not silently rewritten as a current
+report. Both scope values remain readable for this historical compatibility.
+Stale editors return 412 without overwriting
 newer intent. Revision, audit and serialized idempotency result commit together;
 late audit or serialization failure rolls back the entire write.
 

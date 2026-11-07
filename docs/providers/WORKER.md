@@ -16,6 +16,12 @@ evidence creation/review APIs and key-import settings are still unfinished. Prov
 reads and [exact observation lists](OBSERVATIONS.md) are available separately,
 never as a live probe. No default schedule or provider enablement is created at
 startup; only explicitly enabled, due definitions can create scheduled work.
+The dispatcher selects the fenced lease owner's current policy and exact private
+edition, not a discovered key or another owner's selection. Only an absent owned
+policy permits operator fallback. Disabled/cleared/unavailable owned decisions
+block that fallback and old sealed pins never upgrade to a new edition. Queueing
+and the automatic scheduler use the same explicit actor scope. The diagnostic CLI
+remains separately operator-file-only/no DB/bootstrap/probe.
 Empty/unconfigured installations perform no upstream requests. Retained
 unmanaged jobs are not automatically adopted.
 
@@ -28,7 +34,8 @@ future durable deadlines do not become loops that sleep while holding a writer.
 
 A separate asynchronous task checks database readiness and updates the heartbeat
 while provider I/O is awaited. Automatic schedule evaluation is another independent
-task; its private-file preparation runs outside the event loop and all DB writers.
+task; schedule preparation and dispatcher private/peer loading/rechecks run
+outside the event loop and all DB writers.
 A readiness-task failure stops the worker instead
 of leaving a falsely healthy dispatcher. Unexpected dispatch failures log a fixed
 `SOURCE_DISPATCH_FAILED` code without exception text, credentials, paths, provider
@@ -56,12 +63,16 @@ For each ready page the dispatcher:
 4. Rechecks private primary/peer snapshots and reserves exactly one request in a
    short writer UoW. A lease with 30 seconds or less remaining is renewed before
    the bounded call. No HTTP or private configuration-file reads are performed
-   inside that transaction. An existing grant never authorizes reissue.
+   inside that transaction. Every observed shared-origin peer, including inactive
+   ones, is rechecked against current DB policy metadata. An existing grant never
+   authorizes reissue.
 5. Releases the database transaction, rechecks configuration and performs one
    actual bounded adapter call. The client closes before response persistence.
    Private profiles, credentials and all relevant budget peers are checked again.
 6. Commits source assertions/checkpoint/outcome/circuit/work progress/audit
-   together under the original lease/context. Changed configuration/aliases,
+   together under the original lease/context/private budget envelope. The policy
+   fingerprint must match the original reservation; loading a fresh peer policy
+   after HTTP cannot authorize a substituted result. Changed configuration/aliases,
    cancellation, expired ownership or late failures cannot adopt a new response
    under different intent. Reserved spending is never refunded.
 

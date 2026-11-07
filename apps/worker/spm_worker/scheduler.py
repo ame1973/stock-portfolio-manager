@@ -65,7 +65,7 @@ async def schedule_once(
             if not blocked:
                 # Bounded private-file I/O holds neither a DB transaction nor the event loop.
                 selected = await asyncio.to_thread(
-                    source_api.selections, settings, tick.policy.provider_ids
+                    source_api.selections, settings, engine, owner, tick.policy.provider_ids
                 )
             if halted():
                 return None

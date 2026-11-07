@@ -2536,10 +2536,10 @@ export interface components {
             runtime_selection_installed: boolean;
             /**
              * Scope
-             * @default POLICY_DEFINITION_ONLY
-             * @constant
+             * @default OWNED_PROVIDER_POLICY
+             * @enum {string}
              */
-            scope: "POLICY_DEFINITION_ONLY";
+            scope: "OWNED_PROVIDER_POLICY" | "POLICY_DEFINITION_ONLY";
             /** Version */
             version: number;
         };

@@ -153,7 +153,7 @@ async def test_scoped_operator_fallback_cannot_commit_after_a_managed_definition
     assert database_snapshot(engine) == before
 
 
-async def test_unscoped_legacy_operator_producer_remains_unchanged_before_consumer_installation(
+async def test_explicit_unscoped_legacy_library_call_remains_compatible_without_owner_selection(
     source: dict[str, Any], local: Any, client: httpx.AsyncClient, engine: Engine
 ) -> None:
     loaded = ProviderConfigurationStore(local).load("eodhd")
@@ -164,7 +164,7 @@ async def test_unscoped_legacy_operator_producer_remains_unchanged_before_consum
     await create(client, "eodhd")
     receipt = save(engine, {**source, "prepared": prepared}, page)
     assert receipt.observations_new == 1
-    assert (await client.get(f"{PATH}/eodhd")).json()["runtime_selection_installed"] is False
+    assert (await client.get(f"{PATH}/eodhd")).json()["runtime_selection_installed"] is True
 
 
 async def test_managed_context_keeps_existing_exact_observation_reads_private_and_no_store(

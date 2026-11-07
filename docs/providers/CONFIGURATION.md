@@ -2,7 +2,7 @@
 
 This is the implemented **read-only operator-file interface**. It is not an authenticated key-import API, a synchronization command, a live provider test or a license grant. No directory/key is created by the loader. Missing or invalid provider files do not make the financial application unready.
 
-The [owned policy-definition API](PROFILES.md) enforces reauthentication, audit, idempotency and version checks for metadata. A separate [private credential-import operation](CREDENTIALS.md) now prepares and binds immutable editions to disabled definitions; it does not activate them. Trusted local directory provisioning and active managed runtime integration remain separate boundaries; current operator files stay authoritative.
+The [owned policy API](PROFILES.md) enforces reauthentication, audit, idempotency and version checks. The separate [private credential import](CREDENTIALS.md) binds immutable editions to disabled policies, never automatic enablement. Installed queue/schedule/worker/HTTP diagnostics use the explicit active owner's greatest policy; only absence permits operator-file fallback. The diagnostic CLI remains operator-file-only/no DB/bootstrap/probe. Trusted directory provisioning is separate from owner authorization.
 
 ## Paths and permissions
 
@@ -45,8 +45,8 @@ For local Python, pre-provision a separate process-owned mode0700 directory
 outside all three trees and Git/build contexts. The conventional `managed-secrets/`
 name is excluded from Git and Docker contexts, including private ready metadata.
 Storage presence never enables import or runtime access without its authorization
-checks. The import API is installed separately; no key-writing CLI/UI or active
-managed runtime is supplied by the mount. Do not place synthetic test keys in
+checks. The import API and owned runtime are installed separately; no key-writing
+CLI/UI or automatic source access is supplied by the mount. Do not place synthetic test keys in
 deployment volumes. Keys are outside SQLite/backup volumes; preserve their private
 volume separately and do not assume a database backup restores credentials.
 
@@ -94,7 +94,7 @@ The loader checks descriptor/path identity before/after bounded reads and rechec
 
 Callers must use `ProviderConfigurationStore.unchanged(snapshot)` before/after external I/O and retain the observed alias/config versions. File timestamps alone are insufficient: a same-length rewrite can retain identical filesystem timestamps. The recheck also compares current/observed credential values in constant time **in server memory**, without logging, serializing or hashing the credential. A changed/unsafe/unreadable snapshot is not current.
 
-This does not make privileged operator filesystem edits into audited HTTP mutations. The separate managed import now supplies its authenticated/audited binding boundary; active runtime/job/version integration remains subsequent work. Neither policy history nor import replaces this operator interface.
+This does not make privileged operator filesystem edits into audited HTTP mutations. The managed import supplies its separate authenticated/audited owned association; installed consumers recheck its current policy and exact private edition around I/O. Operator files are used only while that owner has no policy, and the CLI continues inspecting those files independently.
 
 ## Inactive immutable credential preparation
 
@@ -133,8 +133,10 @@ CAS, audit and sensitive idempotency. This is not filesystem/database atomicity:
 a failed or concurrent request may leave unselected files. See the
 [import failure and replay contract](CREDENTIALS.md#filesystemdatabase-boundary-and-failures).
 The preparation primitive itself writes no database, active binding or operator
-file and makes no provider request, quota reset or financial change. Managed runtime
-activation, orphan reconciliation and settings UI remain subsequent work. Never
+file and makes no provider request, quota reset or financial change. Installed
+runtime selection additionally requires current explicit enablement/rights and
+checked private access. Orphan reconciliation and settings UI remain subsequent
+work. Never
 provision test artifacts or synthetic keys in deployment credential volumes.
 
 ## Append-only managed policy schema
@@ -142,16 +144,17 @@ provision test artifacts or synthetic keys in deployment credential volumes.
 Migration `0012_provider_profiles` adds an initially empty
 `provider_profile_revisions` table. This storage is now exposed through the
 [owned policy-definition API](PROFILES.md), with a separately authorized private
-import operation, **not an active runtime selector**. The current
-operator-file loader, diagnostic CLI, worker selection and read-only secret
-mounts remain unchanged. No existing settings, jobs, profiles or credential files
-are adopted by the migration.
+import operation. The schema itself creates no runtime grant and adopts no
+existing settings, jobs, profiles or credential files. Installed owned consumers
+now select the greatest policy revision and use operator fallback only when no
+owned policy exists. The separate operator-file loader, diagnostic CLI and
+read-only operator-secret mounts remain available unchanged.
 
 Each owner/provider has a contiguous, increasing revision history. The first
 revision must be disabled; later changes, including disablement, credential
 rotation and credential clearing, append rather than rewrite or delete history.
 Competing inserts for the same next version cannot both commit. The controller selects the greatest version, **not the last enabled version**;
-a future managed runtime consumer must preserve that selection. A disabled or
+the installed managed runtime preserves that selection. A disabled or
 unavailable managed selection must never silently fall back to an
 older policy or discovered file.
 
@@ -170,10 +173,10 @@ history. It cannot prove password reauthentication, private-file preparation or
 an HTTP idempotency result. The definition API now checks current session/CSRF,
 reauthentication before cached replay, version, audit and serialized result in
 one short transaction. The credential importer separately verifies its prepared
-edition outside writers and uses actual-value session-HMAC idempotency. Future
-runtime integration must recheck the committed selection and private credential
-around provider I/O. Runtime use is not installed by this schema or import API;
-no provider request or quota reset is introduced.
+edition outside writers and uses actual-value session-HMAC idempotency. Installed
+runtime consumers recheck the committed selection and private credential around
+provider I/O. Neither schema upgrade nor import alone enables access; no provider
+request or quota reset is introduced by either operation.
 
 ## Internal versioned controller
 
@@ -201,12 +204,13 @@ and reject corrupt retained rows with a fixed code without echo, repair or
 fallback. Reads write no definition/audit facts. The [definition API](PROFILES.md)
 now supplies HTTP session/CSRF/reauthentication and non-secret idempotency around
 this controller. The separate private importer adds sensitive actual-value
-idempotency and checked filesystem preparation outside the writer. Runtime/diagnostic
-consumption and settings UI remain unfinished. Existing operator profiles remain
-the current runtime path; managed declarations/imports alone cause no provider
+idempotency and checked filesystem preparation outside the writer. Installed
+queue/schedule/dispatch/HTTP diagnostic consumers use the explicit owner's latest
+policy, not another owner's selection or the last enabled revision. Settings UI
+remains unfinished. Import/definition writes alone create no source job, provider
 request, quota reset or financial change.
 
-## Owned selection core, not installed runtime consumption
+## Installed owned runtime selection
 
 The internal `OwnerConfigurationStore(settings, engine, owner_id)` now reads an
 explicitly supplied active owner's greatest managed decision. An owned decision
@@ -230,14 +234,23 @@ are private types, not invented `LOCAL_FILE`/`DOCKER_SECRET` versions or filesys
 profile signatures. Existing operator snapshots/hashes remain unchanged. Prepared
 managed contexts reject a different owner before capture or network use.
 
-**This library is not yet wired into production jobs, schedules or diagnostics.**
-Migration `0013_managed_source_contexts` now permits exact managed provenance and
-adds writer-side current-selection fences, but does not switch those consumers.
-Current public records still report `runtime_selection_installed: false`;
-importing/disabling a definition remains no kill switch for operator-configured
-traffic. The default store and `providers-check` stay operator-only/no DB/bootstrap/probe.
-Library capture/quota checks prove transactional compatibility, not installed
-managed worker execution, key validity, live coverage or a settings UI.
+**Production queueing, automatic schedules, worker dispatch and authenticated
+HTTP diagnostics now use this selector.** Queue preparation takes the dependency's
+authenticated owner and rechecks the actor at commit; the scheduler supplies its
+frozen tick owner, and dispatch supplies the fenced lease owner. Non-secret plan
+hashes remain sealed: an old operator hash cannot become a managed grant, and a
+null queued selection cannot activate after enablement. A changed pin is stopped,
+not silently rebound to a new edition.
+
+Current policy records report `scope: OWNED_PROVIDER_POLICY` and
+`runtime_selection_installed: true`, describing installed code, never health or
+coverage. Historical idempotent receipts retain their original scope/capability.
+Disabled, cleared, rotated or unavailable owned policies block operator recovery;
+already sent requests cannot be remotely recalled and unknown spending is not
+refunded. The default operator store and `providers-check` remain file-only/no
+DB/bootstrap/probe, so the CLI can intentionally differ from owner diagnostics.
+Source success still does not establish key validity, licensed live coverage,
+canonical income or a settings UI.
 
 ### Managed provenance and current-selection fences
 
@@ -254,9 +267,9 @@ For new reservations and page outcomes, the short writer rechecks the selected
 owner and greatest managed revision using database metadata only, including when
 the context already exists and the returned page is empty, partial or failed.
 An owned operator fallback carries a private scope claim and can commit only
-while that owner still has no definition. Existing **unscoped operator producers**
-retain their old behavior until explicit consumer integration; a definition-only
-write must not silently become an operator traffic switch. Scope claims stay out
+while that owner still has no definition. Explicit **unscoped legacy library
+calls** retain their old primitive contract; installed consumers always use owner
+scope. Scope claims stay out
 of public responses, operator profile hashes and credential values.
 
 Completed page/checkpoint/reservation replay still returns its original receipt
@@ -266,10 +279,11 @@ spent; recovery records the unknown outcome rather than refunding/reissuing it.
 Private file/value checks before and after I/O, alias CAS and shared-origin peer
 checks remain required outside the writer. These database fences do not replace
 filesystem checks or establish current provider rights/coverage. The owned
-[shared-budget envelope](BUDGETS.md#owned-peer-transaction-fence-not-installed-runtime-selection)
+[shared-budget envelope](BUDGETS.md#owned-peer-transaction-fence)
 also fences every current peer decision in new grant/result transactions, including
-unconfigured peers becoming enabled or gaining a managed override. This internal
-prerequisite still does not switch production consumers or runtime flags.
+unconfigured peers becoming enabled or gaining a managed override. The installed
+worker retains that original private envelope through reservation and result;
+changed primary/peer state becomes CONFIG_CHANGED, not a generic worker success.
 
 ## Read-only diagnostics
 

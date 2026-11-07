@@ -86,7 +86,7 @@ async def manage(
         json=changed(record, policy=policy),
         headers=version_headers(client, record["version"]),
     )
-    assert result.status_code == 200 and result.json()["runtime_selection_installed"] is False
+    assert result.status_code == 200 and result.json()["runtime_selection_installed"] is True
     return dict(result.json())
 
 
@@ -322,7 +322,7 @@ async def test_readable_operator_and_owned_keys_do_not_change_the_default_runtim
         owned.access.credential.get_secret_value(), operator.access.credential.get_secret_value()
     )
     assert ProviderConfigurationStore(local).load("eodhd") == operator
-    assert (await client.get(f"{PATH}/eodhd")).json()["runtime_selection_installed"] is False
+    assert (await client.get(f"{PATH}/eodhd")).json()["runtime_selection_installed"] is True
     assert database_snapshot(engine) == before
 
 
@@ -589,7 +589,7 @@ async def test_cross_owner_prepared_context_rejects_before_capture_or_network(
     assert database_snapshot(engine) == before
 
 
-async def test_actual_adapter_uses_owned_key_and_retains_managed_provenance_before_consumer_install(
+async def test_actual_adapter_uses_owned_key_and_retains_exact_managed_provenance(
     local: Settings, source: dict[str, Any], client: httpx.AsyncClient, engine: Engine
 ) -> None:
     await manage(client)

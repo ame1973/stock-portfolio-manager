@@ -6,11 +6,14 @@ revision**. It is available for `eodhd`, `alphavantage` and `massive` only.
 Import does not enable access, acknowledge rights, probe an upstream, establish
 key validity or coverage, reset a budget, cancel work or change financial facts.
 
-**Managed runtime selection is not installed yet.** The response retains
-`scope: POLICY_DEFINITION_ONLY` and `runtime_selection_installed: false`.
-Existing operator files remain the runtime authority; importing, disabling or
-clearing a managed definition does not stop operator-configured traffic. There
-is no credential-import UI, key-export endpoint or key-writing CLI.
+**Managed runtime selection is installed.** New responses report
+`scope: OWNED_PROVIDER_POLICY` and `runtime_selection_installed: true`, not health
+or live coverage. Import/rotation still saves a disabled policy: the latest owned
+decision overrides operator fallback and blocks future pages under superseded
+pins. Explicit later enablement with rights/budgets is required for new source
+work. Already sent requests are not remotely cancelled and uncertain spending
+is not refunded. There is no credential-import UI, key-export endpoint or
+key-writing CLI. The read-only diagnostic CLI remains operator-file-only.
 
 ## Prerequisites and request
 
@@ -51,9 +54,12 @@ edition IDs, private paths, owner IDs and private fingerprints are withheld.
 
 The current policy's other declarations are retained, but **enabled is always
 false**, including when rotating an enabled declaration. Enabling a later
-policy remains a separate reasoned CAS operation with explicit rights/budgets;
-at present even that declaration does not install managed runtime use. Neither
-operation changes the separate operator-file configuration.
+policy remains a separate reasoned CAS operation with explicit rights/budgets.
+The installed owner selector then uses that current policy and exact private
+edition, with DB/private-file/alias/shared-budget checks around I/O. Neither
+operation rewrites the separate operator-file configuration. Old queued null or
+superseded profile pins never become permission for the new edition; review
+current state and create a fresh source intent when required.
 
 Rotation prepares a new server-named edition; it never overwrites an old key.
 Each import appends `PROVIDER_PROFILE_REVISED` and
@@ -80,7 +86,8 @@ or performing a new CAS change. The advisory read is not an authorization grant
 or a reservation.
 
 A valid replay returns the original DTO/ETag, not the latest state; use GET for
-current metadata. Expired authorization rejects even a previously committed
+current metadata/capability. Historical pre-install receipts retain their original
+scope and false capability rather than being rewritten. Expired authorization rejects even a previously committed
 import. Confirm the password and retry the unchanged intent within the same
 session when appropriate. A new session changes the sensitive fingerprint;
 inspect current state before starting a new explicit intent rather than blindly
@@ -118,5 +125,5 @@ operator workflows; do not manually repoint a definition at discovered files.
 
 Credentials are outside SQLite and backup volumes. Preserve private storage
 separately; a database backup alone does not restore referenced credentials.
-Paid/live provider coverage, target NAS storage durability and the future managed
-runtime/UI remain separate, untested acceptance boundaries.
+Paid/live provider coverage, target NAS storage durability, orphan recovery and
+managed settings UI remain separate, unfinished acceptance boundaries.

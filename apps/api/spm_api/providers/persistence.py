@@ -182,7 +182,7 @@ def validate_selection(con: Connection, prepared: PreparedFetch) -> None:
     configuration = prepared.configuration
     profile = configuration.profile
     if configuration.selection_owner_id is None and not isinstance(profile, ManagedPolicySnapshot):
-        # Unswitched operator producers retain their existing definition-only API semantics.
+        # Explicit legacy library calls retain compatibility; installed consumers use owner scope.
         return
     prepared.metadata()
     if isinstance(profile, ManagedPolicySnapshot) and not profile.enabled:

@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Connection, RowMapping, text
+from sqlalchemy import Connection, Engine, RowMapping, text
 
 import spm_api.job_service as jobs
 from spm_api.audit import now
@@ -13,7 +13,7 @@ from spm_api.errors import ApiError
 from spm_api.job_models import ProviderSelection, SourceJobPlan
 from spm_api.master_models import ProviderId
 from spm_api.pagination import PageQuery
-from spm_api.providers.configuration import ProviderConfigurationStore
+from spm_api.providers.selection import OwnerConfigurationStore
 from spm_api.providers.symbols import FetchWindow
 from spm_api.security import Auth
 from spm_api.sync_models import (
@@ -26,10 +26,10 @@ from spm_api.sync_models import (
 
 
 def selections(
-    settings: Settings, provider_ids: tuple[ProviderId, ...]
+    settings: Settings, engine: Engine, owner_id: UUID, provider_ids: tuple[ProviderId, ...]
 ) -> tuple[ProviderSelection, ...]:
-    """Read private files before mutate; only non-secret pinned identities cross the UoW."""
-    store = ProviderConfigurationStore(settings)
+    """Read the explicit owner's selection before mutate; never infer an owner from files."""
+    store = OwnerConfigurationStore(settings, engine, owner_id)
     result = []
     for provider in provider_ids:
         loaded = store.load(provider)
@@ -50,7 +50,11 @@ def enqueue(
     body: SyncDividendRequest,
     selected: tuple[ProviderSelection, ...],
     request_id: str,
+    *,
+    selection_owner_id: UUID,
 ) -> JobCreated:
+    if auth.owner.id != selection_owner_id:
+        raise ApiError(409, "SOURCE_SELECTION_CHANGED", "Prepare the source selection again")
     plan = SourceJobPlan(
         security_ids=body.security_ids,
         providers=selected,

@@ -10,14 +10,15 @@ proof of coverage.
 ## Explicit policy, shared upstream
 
 Network profiles require explicit positive minute/day budgets and rights
-acknowledgment in [private operator files](CONFIGURATION.md). There is no implicit
-allowance. Manual/HKEX/SEC evidence does not have a network budget. Budget loading
-reads local files only and does not load an SDK or probe upstream availability.
+acknowledgment in an explicit [owned policy or operator fallback](CONFIGURATION.md).
+There is no implicit allowance. Manual/HKEX/SEC evidence has no network budget.
+Budget loading reads the selected policy/edition outside writers and does not
+load an SDK or probe upstream availability. The CLI stays file-only.
 
 Budgets are keyed by the actual installation-wide upstream origin, not owner,
 job, adapter wrapper, key version or configuration hash. Yahoo/yfinance therefore
 share one YAHOO allowance. Their effective minute/day limits are the minima of
-currently enabled, ready file profiles. An invalid/disabled profile cannot grant
+currently enabled, ready profiles selected for that explicit owner. An invalid/disabled profile cannot grant
 traffic; an optional SDK's file policy can conservatively restrict its shared
 upstream even before the SDK is installed. Stored policy contains exact limits,
 non-secret member profile hashes and member limits only, never credentials/paths.
@@ -29,7 +30,7 @@ primary-profile timestamp comparison alone is insufficient. Queued requests
 remain pinned to their non-secret profile identity. A key's presence is not
 permission to activate an unavailable queued selection.
 
-### Owned peer transaction fence, not installed runtime selection
+### Owned peer transaction fence
 
 The owned-selection library additionally carries the complete private
 `BudgetSnapshot` into each new reservation and result transaction. This envelope
@@ -51,10 +52,11 @@ reservation/result replay returns before this new fence, needs no private budget
 envelope and remains zero-write through later peer edits; a replay is not a new
 HTTP permission.
 
-This tightens the internal owned library only. Production queue/scheduler/worker
-and authenticated diagnostics are still operator-only, and public managed runtime
-capability stays false pending their separate integration. Existing unscoped
-operator calls retain their prior contract. The default `providers-check` remains
+The installed worker uses this owned envelope for both reservation and result,
+with the lease owner as explicit scope. Queue/scheduler pins and authenticated
+diagnostics use the same owner selector; policy capability reports installed code,
+not health. Explicit unscoped legacy library calls retain their primitive contract.
+The default `providers-check` remains
 operator-file-only/no DB/bootstrap/probe. These metadata fences supplement, not
 replace, actual constant-time credential/private-file checks around external I/O.
 
@@ -179,6 +181,6 @@ Late DDL failure restores schema/head/audit/all facts. Upgrade audit is append-o
 per existing owner and repeating the migration is a no-op. Restore a validated
 pre-upgrade backup instead of deleting quota/attempt history to downgrade or reset
 limits. The [worker dispatcher](WORKER.md), explicit schedules and source API/UI
-use the operator contract. Managed runtime consumption and licensed live
-validation remain separate acceptance work.
+use the owned-selection contract with fallback only when no owned policy exists.
+Licensed live validation remains separate acceptance work.
 See [job control](JOBS.md) and [source evidence](EVIDENCE.md).

@@ -37,13 +37,25 @@ def sync_dividends(
     headers: WriteDep,
 ) -> JobCreated:
     """Queue source work only; reconciliation and financial adoption do not run."""
-    selected = service.selections(request.app.state.settings, body.provider_ids)
+    selected = service.selections(
+        request.app.state.settings,
+        request.app.state.engine,
+        headers.auth.owner.id,
+        body.provider_ids,
+    )
     result = mutate(
         request,
         headers,
         body.model_dump(mode="json"),
         JobCreated,
-        lambda con, auth: service.enqueue(con, auth, body, selected, request.state.request_id),
+        lambda con, auth: service.enqueue(
+            con,
+            auth,
+            body,
+            selected,
+            request.state.request_id,
+            selection_owner_id=headers.auth.owner.id,
+        ),
         status=202,
     )
     response.headers["Location"] = f"/api/v1/jobs/{result.job_id}"

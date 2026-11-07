@@ -35,4 +35,4 @@ class ProviderProfileRecord(Model):
     created_at: AwareDatetime
     credential_reference_present: bool
     runtime_selection_installed: bool
-    scope: Literal["POLICY_DEFINITION_ONLY"] = "POLICY_DEFINITION_ONLY"
+    scope: Literal["OWNED_PROVIDER_POLICY", "POLICY_DEFINITION_ONLY"] = "OWNED_PROVIDER_POLICY"

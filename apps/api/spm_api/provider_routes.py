@@ -16,6 +16,7 @@ from spm_api.pagination import Page, PageDep, paginate
 from spm_api.provider_models import ProviderCoverage, ProviderHealth, ProviderInfo
 from spm_api.providers.base import registry
 from spm_api.providers.runtime import check_configuration, check_configurations
+from spm_api.providers.selection import OwnerConfigurationStore
 from spm_api.security import AuthDep
 
 router = APIRouter(
@@ -27,7 +28,12 @@ router = APIRouter(
 
 @router.get("", operation_id="list_providers")
 async def providers(request: Request, auth: AuthDep) -> Page[ProviderInfo]:
-    reports = await check_configurations(request.app.state.settings)
+    reports = await check_configurations(
+        request.app.state.settings,
+        store=OwnerConfigurationStore(
+            request.app.state.settings, request.app.state.engine, auth.owner.id
+        ),
+    )
     return Page(
         items=[
             service.as_provider(report) for report in sorted(reports, key=lambda r: r.provider_id)
@@ -48,8 +54,11 @@ async def coverage(
     if page.cursor_value is not None and page.cursor_value not in registry():
         raise ApiError(422, "INVALID_CURSOR", "Invalid provider coverage cursor")
     selected = (provider_id,) if provider_id is not None else tuple(sorted(registry()))
+    store = OwnerConfigurationStore(
+        request.app.state.settings, request.app.state.engine, auth.owner.id
+    )
     reports = {
-        provider: await check_configuration(request.app.state.settings, provider)
+        provider: await check_configuration(request.app.state.settings, provider, store=store)
         for provider in selected
     }
     with unit_of_work(request.app.state.engine) as con:
@@ -87,6 +96,12 @@ async def coverage(
 
 @router.get("/{provider_id}/health", operation_id="get_provider_health")
 async def health(provider_id: ProviderId, request: Request, auth: AuthDep) -> ProviderHealth:
-    configuration = await check_configuration(request.app.state.settings, provider_id)
+    configuration = await check_configuration(
+        request.app.state.settings,
+        provider_id,
+        store=OwnerConfigurationStore(
+            request.app.state.settings, request.app.state.engine, auth.owner.id
+        ),
+    )
     with unit_of_work(request.app.state.engine) as con:
         return service.as_health(con, configuration)

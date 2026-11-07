@@ -1,4 +1,4 @@
-"""Protected managed policy definitions do not claim an installed runtime or key import."""
+"""Protected owned definitions expose installed selection without fetching or adopting income."""
 
 import base64
 import json
@@ -66,7 +66,7 @@ def cursor(value: str) -> str:
     return base64.urlsafe_b64encode(json.dumps([value, str(uuid4())]).encode()).decode()
 
 
-async def test_create_read_and_bounded_list_are_owned_audited_and_inert(
+async def test_disabled_create_read_and_bounded_list_are_owned_audited_and_file_free(
     source: dict[str, Any],
     client: httpx.AsyncClient,
     engine: Engine,
@@ -88,8 +88,7 @@ async def test_create_read_and_bounded_list_are_owned_audited_and_inert(
     assert response.headers["location"] == f"{PATH}/yahoo" and response.headers["etag"] == '"1"'
     assert record["policy"]["enabled"] is False and record["version"] == 1
     assert (
-        record["scope"] == "POLICY_DEFINITION_ONLY"
-        and record["runtime_selection_installed"] is False
+        record["scope"] == "OWNED_PROVIDER_POLICY" and record["runtime_selection_installed"] is True
     )
     assert record["credential_reference_present"] is False and record["reason"] == REASON
     after = database_snapshot(engine)
@@ -137,7 +136,7 @@ async def test_full_cas_enabled_declaration_and_disable_do_not_dispatch_or_rewri
     )
     assert result.status_code == 200 and result.headers["etag"] == '"2"'
     record = result.json()
-    assert record["policy"]["enabled"] and not record["runtime_selection_installed"]
+    assert record["policy"]["enabled"] and record["runtime_selection_installed"]
     stale_before = database_snapshot(engine)
     stale = await client.patch(
         f"{PATH}/yahoo", json=changed(original), headers=version_headers(client, 1)
@@ -404,7 +403,7 @@ async def test_only_reference_presence_is_exposed_and_clearing_keeps_operator_fi
         )
     current = await client.get(f"{PATH}/eodhd")
     assert current.json()["credential_reference_present"] is True
-    assert current.json()["runtime_selection_installed"] is False
+    assert current.json()["runtime_selection_installed"] is True
     assert str(reference.artifact_id) not in current.text
     safe(current)
     cleared = await client.patch(

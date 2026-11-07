@@ -72,9 +72,9 @@ async def test_import_prepares_exact_private_edition_and_commits_only_owned_disa
     assert response.status_code == 200
     result = response.json()
     assert response.headers["etag"] == '"2"' and result["version"] == 2
-    assert result["credential_reference_present"] and not result["runtime_selection_installed"]
+    assert result["credential_reference_present"] and result["runtime_selection_installed"]
     assert result["policy"] == original["policy"] and not result["policy"]["enabled"]
-    assert result["scope"] == "POLICY_DEFINITION_ONLY"
+    assert result["scope"] == "OWNED_PROVIDER_POLICY"
     safe(response)
     current = bound(engine, source, provider)
     assert current.credential_artifact_id is not None
@@ -199,7 +199,7 @@ async def test_rotation_forces_disabled_policy_and_preserves_previous_file_and_h
     history = (await client.get(f"{PATH}/eodhd/revisions")).json()["items"]
     assert [item["version"] for item in history] == [4, 3, 2, 1]
     assert [item["credential_reference_present"] for item in history] == [True, True, True, False]
-    assert not rotated.json()["runtime_selection_installed"]
+    assert rotated.json()["runtime_selection_installed"]
 
 
 @pytest.mark.parametrize("value", ["!", "X" * 256])

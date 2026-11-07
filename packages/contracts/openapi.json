@@ -4171,8 +4171,11 @@
             "type": "boolean"
           },
           "scope": {
-            "const": "POLICY_DEFINITION_ONLY",
-            "default": "POLICY_DEFINITION_ONLY",
+            "default": "OWNED_PROVIDER_POLICY",
+            "enum": [
+              "OWNED_PROVIDER_POLICY",
+              "POLICY_DEFINITION_ONLY"
+            ],
             "title": "Scope",
             "type": "string"
           },
