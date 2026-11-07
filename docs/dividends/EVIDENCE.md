@@ -13,7 +13,9 @@ contract.
 `assess(candidate_id, terms, matches)` takes a UUID, frozen `DividendTerms` and at
 most 100 frozen `EvidenceMatch` inputs. Every match needs the same explicit
 candidate UUID, a unique observation UUID, the original typed assertion and a
-bounded reason. The security identity must equal the proposed security. Duplicate
+bounded reason. An optional [split-basis assertion](BASIS.md) must pin that exact
+original identity/hash/security/day; its ID cannot be reused for another source.
+The security identity must equal the proposed security. Duplicate
 observation IDs, cross-security/candidate scope and invalid internal copies fail
 with `INVALID_DIVIDEND_COMPARISON`, without dumping source contents.
 
@@ -39,11 +41,14 @@ calendar codec. Missing optional announcement/record/payment dates and UNKNOWN
 event type are not automatically filled or treated as contradictory facts.
 Independent source period/currency/frequency labels do not infer event terms.
 
-DPS is compared only within the same explicit currency and AS_DECLARED basis.
-UNKNOWN/SPLIT_ADJUSTED amounts remain unresolved here: a provider-only split factor
-is not a trusted complete adjustment chain. Exact basis normalization still needs
-its separate evidence-backed implementation; this comparison never rewrites an
-original source hash or labels an adjusted amount as declared.
+DPS is compared only within the same explicit currency and common declared/ex-date
+comparison basis. UNKNOWN raw basis remains unresolved. A SPLIT_ADJUSTED source
+needs an explicit, complete cited [split-only basis assertion](BASIS.md), not a
+provider-only factor or a guessed horizon. Its exact result is a separate
+comparison view with an assertion ID: original source DPS/basis/hash stay intact.
+The library does not authenticate that declaration, prove its market completeness
+or silently fill a missing currency/date. Without the assertion, behavior remains
+unresolved; nonrepresentable precision/overflow remains an explicit issue.
 
 The required comparison tolerance is an absolute `0.000001` or relative `0.0001`,
 whichever is larger. To avoid an input-order-dependent result, apply the formula
@@ -71,7 +76,9 @@ The immutable result retains:
 - `conflicting_fields`: known contradictions across the proposal and source group;
 - `incomplete_reasons`: unresolved proposed/source facts and missing support;
 - `checks`: stable observation-ID-ordered supporting/conflicting fields and
-  incomplete reasons for each assertion.
+  incomplete reasons for each assertion, plus `comparison_dps`, `comparison_basis`
+  and nullable `basis_assertion_id`. Derived AS_DECLARED comparison units are
+  conditional on that cited declaration, not a relabeled original source.
 
 A known contradiction takes precedence over incomplete/provisional/corroborated
 classification. Incomplete proposed essential terms or no supporting complete
@@ -90,12 +97,13 @@ order are invariant under input reordering; no first-provider-wins policy exists
 
 ## Verification boundary
 
-Run `uv run pytest tests/test_dividend_evidence.py` for exact successful,
-contradictory, incomplete, scope, immutable-copy, INT64/tolerance and order cases.
+Run `uv run pytest tests/test_dividend_evidence.py tests/test_dividend_basis.py` for
+exact successful, contradictory, incomplete, scope, immutable-copy, rational-chain,
+INT64/tolerance and order cases.
 The authoritative sparse source fixtures are reused only for their intended
 properties; any omitted currency/basis needed for a complete synthetic comparison
 is explicitly supplied by the test, never inferred in production. Canonical
-matching, trusted split-chain normalization, durable revisions/manual locks,
-entitlements, receipts/reconciliation and their public workflows still require
-separate implementation and acceptance. Paid/live provider and NAS validation
-remain NOT_TESTED.
+matching, authorized durable basis declarations/action-version fences,
+revisions/manual locks, entitlements, receipts/reconciliation and their public
+workflows still require separate implementation and acceptance. Paid/live provider
+and NAS validation remain NOT_TESTED.

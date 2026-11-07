@@ -9,6 +9,7 @@ from pydantic import ConfigDict, Field
 from pydantic_core import PydanticSerializationError
 
 from spm_api.decimal_types import Dps, IsoDate, to_scaled
+from spm_api.dividend_basis import BasisResult, SplitBasisAssertion, normalize_basis
 from spm_api.errors import Model
 from spm_api.master_models import ChangeReason, Currency
 from spm_api.providers.base import (
@@ -65,6 +66,7 @@ class EvidenceMatch(Model):
     observation_id: UUID
     observation: DividendObservation = Field(repr=False)
     reason: Annotated[ChangeReason, Field(pattern=r"^[^\x00]+$")] = Field(repr=False)
+    basis_assertion: SplitBasisAssertion | None = Field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +75,9 @@ class EvidenceCheck:
     supporting_fields: frozenset[TermField]
     conflicting_fields: frozenset[TermField]
     incomplete_reasons: frozenset[str]
+    comparison_dps: str | None
+    comparison_basis: AdjustmentBasis
+    basis_assertion_id: UUID | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,8 +112,16 @@ def _amounts_agree(values: Sequence[str]) -> bool:
     return (high - low) * 10_000 <= max(1_000_000, low)
 
 
-def _check(terms: DividendTerms, match: EvidenceMatch) -> EvidenceCheck:
-    source = match.observation
+def _source_terms(match: EvidenceMatch, basis: BasisResult) -> DividendTerms:
+    fields = {field: getattr(match.observation, field) for field in DividendTerms.model_fields}
+    return DividendTerms.model_validate(
+        {**fields, "dps": basis.dps, "adjustment_basis": basis.adjustment_basis}
+    )
+
+
+def _check(
+    terms: DividendTerms, match: EvidenceMatch, source: DividendTerms, basis: BasisResult
+) -> EvidenceCheck:
     supporting: set[TermField] = set()
     conflicting: set[TermField] = set()
     for field in FIELDS:
@@ -128,7 +141,10 @@ def _check(terms: DividendTerms, match: EvidenceMatch) -> EvidenceCheck:
         match.observation_id,
         frozenset(supporting),
         frozenset(conflicting),
-        source.incomplete_reasons,
+        _missing(source) | basis.issues,
+        source.dps,
+        source.adjustment_basis,
+        basis.assertion_id,
     )
 
 
@@ -151,14 +167,23 @@ def assess(
             for match in checked
         ):
             raise ValueError
+        assertions = [
+            match.basis_assertion.id for match in checked if match.basis_assertion is not None
+        ]
+        if len(set(assertions)) != len(assertions):
+            raise ValueError
+        checked = tuple(sorted(checked, key=lambda match: str(match.observation_id)))
+        bases = tuple(
+            normalize_basis(match.observation_id, match.observation, match.basis_assertion)
+            for match in checked
+        )
+        views = tuple(
+            _source_terms(match, basis) for match, basis in zip(checked, bases, strict=True)
+        )
     except (ValueError, TypeError, PydanticSerializationError):
         raise ValueError("INVALID_DIVIDEND_COMPARISON") from None
 
-    checked = tuple(sorted(checked, key=lambda match: str(match.observation_id)))
-    sources: list[DividendTerms | DividendObservation] = [
-        terms,
-        *(match.observation for match in checked),
-    ]
+    sources = [terms, *views]
     conflicts: set[TermField] = {
         field
         for field in FIELDS
@@ -176,7 +201,10 @@ def assess(
         conflicts.add("dps")
 
     missing = _missing(terms)
-    checks = tuple(_check(terms, match) for match in checked)
+    checks = tuple(
+        _check(terms, match, view, basis)
+        for match, view, basis in zip(checked, views, bases, strict=True)
+    )
     eligible = tuple(
         match
         for match, check in zip(checked, checks, strict=True)
