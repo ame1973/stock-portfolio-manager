@@ -2,7 +2,7 @@
 
 This is the implemented **read-only operator-file interface**. It is not an authenticated key-import API, a synchronization command, a live provider test or a license grant. No directory/key is created by the loader. Missing or invalid provider files do not make the financial application unready.
 
-The [owned policy-definition API](PROFILES.md) now enforces reauthentication, audit, idempotency and version checks for metadata. It does not import keys or activate these definitions. Privileged NAS/filesystem provisioning and active managed runtime integration remain separate, unfinished boundaries; current operator files stay authoritative.
+The [owned policy-definition API](PROFILES.md) enforces reauthentication, audit, idempotency and version checks for metadata. A separate [private credential-import operation](CREDENTIALS.md) now prepares and binds immutable editions to disabled definitions; it does not activate them. Trusted local directory provisioning and active managed runtime integration remain separate boundaries; current operator files stay authoritative.
 
 ## Paths and permissions
 
@@ -36,18 +36,19 @@ at `/run/spm-managed-provider-secrets`, owner **10001:10001**, mode **0700**. On
 the API mounts it writable; the worker mounts the same volume **read-only**.
 Both processes retain read-only root filesystems and the original
 `provider_secrets` mount remains read-only in both. This is an explicit storage
-role boundary for the future authenticated importer, not permission to rewrite
-operator credentials. A read-only worker can reopen an exact edition but cannot
+role boundary for the [authenticated importer](CREDENTIALS.md), not permission to
+rewrite operator credentials. A read-only worker can reopen an exact edition but cannot
 prepare another one; `providers-check` still inspects operator files only, without
 DB/bootstrap/upstream access or managed-file adoption.
 
-For local Python, pre-provision a separate process-owned0700 directory outside
-all three trees and Git/build contexts. The conventional `managed-secrets/` name
-is excluded from Git and Docker contexts, including its private ready metadata.
-No key-import command/API/UI or active managed runtime is installed merely by
-configuring/mounting storage. Do not place synthetic test keys in deployment
-volumes. Keys are outside the SQLite/backup volumes; preserve their private volume
-separately and do not assume a database backup restores credentials.
+For local Python, pre-provision a separate process-owned mode0700 directory
+outside all three trees and Git/build contexts. The conventional `managed-secrets/`
+name is excluded from Git and Docker contexts, including private ready metadata.
+Storage presence never enables import or runtime access without its authorization
+checks. The import API is installed separately; no key-writing CLI/UI or active
+managed runtime is supplied by the mount. Do not place synthetic test keys in
+deployment volumes. Keys are outside SQLite/backup volumes; preserve their private
+volume separately and do not assume a database backup restores credentials.
 
 ## Metadata format
 
@@ -93,16 +94,17 @@ The loader checks descriptor/path identity before/after bounded reads and rechec
 
 Callers must use `ProviderConfigurationStore.unchanged(snapshot)` before/after external I/O and retain the observed alias/config versions. File timestamps alone are insufficient: a same-length rewrite can retain identical filesystem timestamps. The recheck also compares current/observed credential values in constant time **in server memory**, without logging, serializing or hashing the credential. A changed/unsafe/unreadable snapshot is not current.
 
-This does not make privileged operator filesystem edits into audited HTTP mutations. Managed key import and active runtime/job/version integration remain subsequent work; the policy-definition history/API does not replace this operator interface.
+This does not make privileged operator filesystem edits into audited HTTP mutations. The separate managed import now supplies its authenticated/audited binding boundary; active runtime/job/version integration remains subsequent work. Neither policy history nor import replaces this operator interface.
 
 ## Inactive immutable credential preparation
 
-An internal `CredentialArtifactStore` library now prepares a private immutable
-credential edition for EODHD, Alpha Vantage or Massive. **This is not an import API,
-owner authorization, active profile, terms acknowledgment or provider readiness.**
-It is not called by application/worker startup, diagnostics or current operator
-profile selection. Existing read-only Compose secret mounts are unchanged; there
-is no new key-writing CLI/HTTP/UI or automatic artifact-directory discovery.
+An internal `CredentialArtifactStore` library prepares a private immutable
+credential edition for EODHD, Alpha Vantage or Massive. **Preparation itself is
+not owner authorization, an active profile, terms acknowledgment or provider
+readiness.** The [protected importer](CREDENTIALS.md) now uses this library and
+commits its separate owned association. Startup, diagnostics and current operator
+selection do not discover or adopt artifacts; read-only operator mounts remain
+unchanged and no key-writing CLI/UI is installed.
 
 Preparation requires an explicitly supplied, pre-provisioned owner-only directory
 outside both data and backup trees, including resolved aliases. It creates no
@@ -124,21 +126,23 @@ and the actual credential in constant time only in server memory; timestamps alo
 are insufficient even after a same-length rewrite.
 
 Failed/crash-uncertain files are retained and unselected, not deleted or adopted.
-A complete file/ready manifest alone is not proof of a committed import: the future
-managed owner workflow must atomically bind a successful prepared edition to its
-reauthenticated/audited/versioned/idempotent policy transaction before runtime use.
-There is no database write, active-binding update, operator-file replacement,
-provider request, quota reset or financial effect in this preparation layer.
-Historical activation, orphan reconciliation, key-import APIs and managed settings UI
-remain subsequent work, not fake success responses. Do not provision test artifacts
-or synthetic keys in a deployment's operator credential volume.
+A complete file/ready manifest alone is not proof of a committed import. The
+protected importer verifies preparation outside the writer, then atomically binds
+the server reference to a new disabled owned revision with current reauthentication,
+CAS, audit and sensitive idempotency. This is not filesystem/database atomicity:
+a failed or concurrent request may leave unselected files. See the
+[import failure and replay contract](CREDENTIALS.md#filesystemdatabase-boundary-and-failures).
+The preparation primitive itself writes no database, active binding or operator
+file and makes no provider request, quota reset or financial change. Managed runtime
+activation, orphan reconciliation and settings UI remain subsequent work. Never
+provision test artifacts or synthetic keys in deployment credential volumes.
 
 ## Append-only managed policy schema
 
 Migration `0012_provider_profiles` adds an initially empty
 `provider_profile_revisions` table. This storage is now exposed through the
-[owned policy-definition API](PROFILES.md), **not an active runtime selector or
-key-import API**. The current
+[owned policy-definition API](PROFILES.md), with a separately authorized private
+import operation, **not an active runtime selector**. The current
 operator-file loader, diagnostic CLI, worker selection and read-only secret
 mounts remain unchanged. No existing settings, jobs, profiles or credential files
 are adopted by the migration.
@@ -165,11 +169,11 @@ SQLite enforces metadata shape, ownership, monotonic versions/times and immutabl
 history. It cannot prove password reauthentication, private-file preparation or
 an HTTP idempotency result. The definition API now checks current session/CSRF,
 reauthentication before cached replay, version, audit and serialized result in
-one short transaction. A future credential-import caller must separately verify
-the actual prepared edition outside the writer and use sensitive session-HMAC
-idempotency. Runtime integration must recheck the committed selection and private
-credential around provider I/O. Key import/runtime use are not installed by this
-schema or definition API; no provider request or quota reset is introduced.
+one short transaction. The credential importer separately verifies its prepared
+edition outside writers and uses actual-value session-HMAC idempotency. Future
+runtime integration must recheck the committed selection and private credential
+around provider I/O. Runtime use is not installed by this schema or import API;
+no provider request or quota reset is introduced.
 
 ## Internal versioned controller
 
@@ -196,11 +200,11 @@ validate canonical mirrored fields, contiguous progress and edition ownership,
 and reject corrupt retained rows with a fixed code without echo, repair or
 fallback. Reads write no definition/audit facts. The [definition API](PROFILES.md)
 now supplies HTTP session/CSRF/reauthentication and non-secret idempotency around
-this controller. Credential-bearing sensitive idempotency, managed filesystem
-provisioning, diagnostics/runtime consumption and UI remain unfinished. Existing
-operator profiles remain the current runtime path;
-managed declarations alone cause no provider request, quota reset or financial
-change.
+this controller. The separate private importer adds sensitive actual-value
+idempotency and checked filesystem preparation outside the writer. Runtime/diagnostic
+consumption and settings UI remain unfinished. Existing operator profiles remain
+the current runtime path; managed declarations/imports alone cause no provider
+request, quota reset or financial change.
 
 ## Read-only diagnostics
 

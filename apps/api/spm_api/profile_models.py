@@ -1,13 +1,14 @@
-"""Owned managed policy definitions, never credential values or runtime-health assertions."""
+"""Owned policy definitions and write-only private imports, never credential response values."""
 
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field
+from pydantic import AwareDatetime, Field, SecretStr, field_validator
 
 from spm_api.errors import Model
 from spm_api.master_models import ChangeReason
 from spm_api.providers.configuration import ProviderPolicy
+from spm_api.providers.credentials import exact_credential
 
 
 class ProviderProfileCreate(Model):
@@ -17,6 +18,13 @@ class ProviderProfileCreate(Model):
 
 class ProviderProfileUpdate(ProviderProfileCreate):
     clear_credential: bool = Field(default=False, strict=True)
+
+
+class ProviderCredentialImport(Model):
+    credential: SecretStr = Field(strict=True, min_length=1, max_length=256, repr=False)
+    reason: Annotated[ChangeReason, Field(pattern=r"^[^\x00]*$")]
+
+    _exact = field_validator("credential")(exact_credential)
 
 
 class ProviderProfileRecord(Model):

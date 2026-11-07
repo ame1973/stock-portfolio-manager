@@ -48,6 +48,10 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
         ("/api/v1/provider-profiles/{provider_id}", "get"): "get_provider_profile",
         ("/api/v1/provider-profiles/{provider_id}", "patch"): "update_provider_profile",
         (
+            "/api/v1/provider-profiles/{provider_id}/credential",
+            "post",
+        ): "import_provider_credential",
+        (
             "/api/v1/provider-profiles/{provider_id}/revisions",
             "get",
         ): "list_provider_profile_revisions",

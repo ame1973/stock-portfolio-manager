@@ -1,10 +1,11 @@
-# Owned provider policy definitions
+# Owned provider policies and private credential import
 
-These APIs save **policy definitions only**. Every record reports
+These APIs expose owned policy definitions and a separate
+[reauthenticated private credential import](CREDENTIALS.md). Every record reports
 `scope: POLICY_DEFINITION_ONLY` and `runtime_selection_installed: false`.
-They do not import keys, activate managed source access, replace operator files,
-probe a provider, grant a license or change financial facts. There is no settings
-editor UI yet.
+Import binds an immutable private edition to a new disabled definition; it does
+not activate managed source access, replace operator files, probe a provider,
+grant a license or change financial facts. There is no settings editor UI yet.
 
 The [operator-file loader](CONFIGURATION.md), existing provider diagnostics, CLI
 and worker selection still use the current operator-file interface. In
@@ -12,7 +13,8 @@ particular, **disabling or clearing a definition is not a kill switch for
 operator-configured jobs**. Manage operator access through its trusted file
 provisioning boundary and use the [job stop-intent API](JOBS.md) when required;
 these metadata writes do not cancel jobs or refund uncertain upstream spending.
-Managed runtime integration and reauthenticated key import remain unfinished.
+Managed runtime integration and settings UI remain unfinished; import alone is
+not active access.
 
 ## Operations
 
@@ -27,6 +29,7 @@ existing five-minute reauthentication window.
 | `POST /api/v1/provider-profiles` | 201 disabled initial definition, Location and quoted version ETag |
 | `GET /api/v1/provider-profiles/{provider_id}` | Current definition and ETag, or 404; never adopts another owner's definition or an operator file |
 | `PATCH /api/v1/provider-profiles/{provider_id}` | Full policy/reason revision with quoted `If-Match`; 200 new physical revision and ETag |
+| `POST /api/v1/provider-profiles/{provider_id}/credential` | Separate write-only credential import with quoted `If-Match`; 200 new disabled definition/ETag, never activation |
 | `GET /api/v1/provider-profiles/{provider_id}/revisions` | Immutable newest-version-first history, bounded `limit`, opaque cursor and literal `q` search over version/reason/ID |
 
 The provider ID must be one of the eight registered profiles. A revision cannot
@@ -62,13 +65,14 @@ reference**; true clears it in the new definition only. Clearing does not delete
 an edition, replace an operator file, rewrite history or stop a job. An enabled
 API-key declaration without a bound reference is rejected, not reported ready.
 
-The API accepts no credential value, artifact UUID, owner ID, credential path or
-operator-file source/version. Those unknown fields return a safe 422 without
-echoing their values. `credential_reference_present` is only a stored-reference
-flag, **not file availability or key validity**; this API does not read keys.
-Never put a secret in a policy reference/reason, URL, query parameter, shell
-argument or log. The future key-import operation needs its own server-only
-SecretStr preparation and sensitive session-HMAC idempotency boundary.
+The metadata create/update operations accept no credential value, artifact UUID,
+owner ID, credential path or operator-file source/version. Unknown body fields
+return a safe 422 without echoing their values. `credential_reference_present`
+is only a stored-reference flag, **not file availability or key validity**;
+metadata operations and reads do not load keys. The separate
+[credential operation](CREDENTIALS.md) uses exact write-only SecretStr input,
+preparation outside writers and actual-value session-HMAC idempotency. Never put
+a secret in a policy reference/reason, URL, query parameter, shell argument or log.
 
 ## Reauthentication, CAS and replay
 

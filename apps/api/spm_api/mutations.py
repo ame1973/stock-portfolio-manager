@@ -8,7 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import Request
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection, RowMapping, text
 
 from spm_api.audit import canonical, digest, now, stamp
 from spm_api.db import unit_of_work
@@ -17,10 +17,48 @@ from spm_api.security import COOKIE, Auth, WriteHeaders, read_auth, require_reau
 
 
 def sensitive_fingerprint(request: Request, payload: Any) -> str:
-    # An unkeyed password fingerprint would bypass Argon2 as a fast offline password oracle.
+    # Password/key fingerprints must not become fast unkeyed offline guessing oracles.
     return hmac.new(
         request.cookies[COOKIE].encode(), canonical(payload).encode(), "sha256"
     ).hexdigest()
+
+
+def _checked_request(
+    con: Connection, request: Request, headers: WriteHeaders, fingerprint: str, *, reauth: bool
+) -> tuple[Auth, RowMapping | None]:
+    auth = read_auth(con, request.cookies.get(COOKIE))
+    validate_csrf(auth, headers.csrf)
+    if reauth:
+        require_reauth(auth)
+    existing = (
+        con.execute(
+            text("""
+        SELECT request_sha256,response_json FROM idempotency_keys
+        WHERE owner_id=:owner AND route=:route AND idem_key=:key
+    """),
+            {
+                "owner": str(auth.owner.id),
+                "route": f"{request.method} {request.url.path}",
+                "key": headers.key,
+            },
+        )
+        .mappings()
+        .first()
+    )
+    if existing is not None and existing["request_sha256"] != fingerprint:
+        raise ApiError(409, "IDEMPOTENCY_CONFLICT", "This key was used with different input")
+    return auth, existing
+
+
+def has_replay(
+    request: Request, headers: WriteHeaders, payload: Any, *, reauth: bool = False
+) -> bool:
+    """Advisory read before private preparation; mutate must recheck before returning or writing."""
+    with unit_of_work(request.app.state.engine) as con:
+        return (
+            _checked_request(con, request, headers, digest(canonical(payload)), reauth=reauth)[1]
+            is not None
+        )
 
 
 def mutate[M: Model](
@@ -37,27 +75,9 @@ def mutate[M: Model](
     route = f"{request.method} {request.url.path}"
     fingerprint = digest(canonical(payload))
     with unit_of_work(request.app.state.engine, write=True) as con:
-        auth = read_auth(con, request.cookies.get(COOKIE))
-        validate_csrf(auth, headers.csrf)
-        if reauth:
-            require_reauth(auth)
+        auth, existing = _checked_request(con, request, headers, fingerprint, reauth=reauth)
         owner = str(auth.owner.id)
-        existing = (
-            con.execute(
-                text("""
-            SELECT request_sha256,response_json FROM idempotency_keys
-            WHERE owner_id=:owner AND route=:route AND idem_key=:key
-        """),
-                {"owner": owner, "route": route, "key": headers.key},
-            )
-            .mappings()
-            .first()
-        )
         if existing is not None:
-            if existing["request_sha256"] != fingerprint:
-                raise ApiError(
-                    409, "IDEMPOTENCY_CONFLICT", "This key was used with different input"
-                )
             return model.model_validate(json.loads(existing["response_json"]))
         result = action(con, auth)
         encoded = result.model_dump_json()

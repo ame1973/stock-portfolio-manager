@@ -23,6 +23,7 @@ from spm_api.master_routes import router as master_router
 from spm_api.observation_routes import router as observation_router
 from spm_api.profile_routes import router as profile_router
 from spm_api.provider_routes import router as provider_router
+from spm_api.providers.credentials import CredentialError
 from spm_api.providers.profiles import ProfileError
 from spm_api.schedule_routes import router as schedule_router
 from spm_api.schedule_service import ScheduleError
@@ -73,6 +74,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             409 if exc.code in {"INSUFFICIENT_SHARES", "NEEDS_REVIEW", "DUPLICATE_FACT"} else 422
         )
         return error_response(request, status, exc.code, str(exc))
+
+    @app.exception_handler(CredentialError)
+    async def credential_error(request: Request, exc: CredentialError) -> JSONResponse:
+        return error_response(
+            request,
+            503,
+            "PROVIDER_CREDENTIAL_STORAGE_UNAVAILABLE",
+            "Private provider credential storage is unavailable",
+        )
 
     @app.exception_handler(ProfileError)
     async def profile_error(request: Request, exc: ProfileError) -> JSONResponse:

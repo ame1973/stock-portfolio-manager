@@ -1,24 +1,26 @@
-"""Reauthenticated policy definitions; no key import, private I/O or runtime adoption."""
+"""Reauthenticated policy definitions and immutable credential imports, not runtime adoption."""
 
 from uuid import UUID
 
 from fastapi import APIRouter, Request, Response
 from sqlalchemy import Connection, text
 
+import spm_api.providers.credentials as credentials
 import spm_api.providers.profiles as service
-from spm_api.audit import now
+from spm_api.audit import audit, now
 from spm_api.db import unit_of_work
 from spm_api.errors import ApiError, Error
 from spm_api.master_models import ProviderId
-from spm_api.mutations import mutate
+from spm_api.mutations import check_version, has_replay, mutate, sensitive_fingerprint
 from spm_api.pagination import Page, PageDep, paginate, validate_version_page
 from spm_api.profile_models import (
+    ProviderCredentialImport,
     ProviderProfileCreate,
     ProviderProfileRecord,
     ProviderProfileUpdate,
 )
 from spm_api.providers.base import registry
-from spm_api.security import AuthDep, VersionDep, WriteDep
+from spm_api.security import Auth, AuthDep, VersionDep, WriteDep
 
 router = APIRouter(
     prefix="/api/v1/provider-profiles",
@@ -129,6 +131,80 @@ def update_definition(
         ),
         reauth=True,
     )
+    response.headers["ETag"] = f'"{result.version}"'
+    return result
+
+
+@router.post("/{provider_id}/credential", operation_id="import_provider_credential")
+def import_credential(
+    provider_id: ProviderId,
+    body: ProviderCredentialImport,
+    request: Request,
+    response: Response,
+    headers: WriteDep,
+    version: VersionDep,
+) -> ProviderProfileRecord:
+    """Bind a prepared edition to a new disabled definition; never enable or probe a provider."""
+    if provider_id not in ("eodhd", "alphavantage", "massive"):
+        raise ApiError(422, "INVALID_PROVIDER_CREDENTIAL", "This provider does not accept a key")
+    if not 1 <= version <= 2147483647:
+        raise service.ProfileError("INVALID_PROFILE_VERSION")
+    fingerprint = sensitive_fingerprint(
+        request,
+        {
+            "version": version,
+            "credential": body.credential.get_secret_value(),
+            "reason": body.reason,
+        },
+    )
+    previous: service.ManagedProfile | None = None
+    prepared: credentials.CredentialSnapshot | None = None
+    if not has_replay(request, headers, fingerprint, reauth=True):
+        with unit_of_work(request.app.state.engine) as con:
+            previous = _owned(con, headers.auth.owner.id, provider_id)
+            check_version(previous.version, version)
+            if previous.version == 2147483647:
+                raise service.ProfileError("PROFILE_VERSION_EXHAUSTED")
+        store = credentials.managed_artifacts(request.app.state.settings)
+        prepared = store.prepare(provider_id, body.credential)
+        if not store.unchanged(prepared):
+            raise credentials.CredentialError("CREDENTIAL_ARTIFACT_CHANGED")
+
+    def bind(con: Connection, auth: Auth) -> ProviderProfileRecord:
+        if previous is None or prepared is None:
+            # A removed advisory replay is not permission to create files inside the writer.
+            raise ApiError(
+                409, "CREDENTIAL_RETRY_REQUIRED", "Repeat the import with a fresh intent"
+            )
+        if auth.owner.id != previous.owner_id:
+            raise ApiError(401, "UNAUTHORIZED", "Sign in to continue")
+        record = service.save(
+            con,
+            auth.owner.id,
+            previous.policy.model_copy(update={"enabled": False}),
+            expected_version=version,
+            at=now(),
+            reason=body.reason,
+            request_id=UUID(request.state.request_id),
+            credential=prepared.reference,
+        )
+        audit(
+            con,
+            str(auth.owner.id),
+            "provider_profile_revision",
+            str(record.id),
+            "PROVIDER_CREDENTIAL_IMPORTED",
+            after={
+                "provider_id": provider_id,
+                "version": record.version,
+                "credential_present": True,
+            },
+            reason=body.reason,
+            request_id=request.state.request_id,
+        )
+        return _public(record)
+
+    result = mutate(request, headers, fingerprint, ProviderProfileRecord, bind, reauth=True)
     response.headers["ETag"] = f'"{result.version}"'
     return result
 

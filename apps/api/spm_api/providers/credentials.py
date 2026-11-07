@@ -30,6 +30,16 @@ class CredentialError(ValueError):
     """Fixed codes only; never contain credentials, paths or private exception text."""
 
 
+def exact_credential(value: SecretStr) -> SecretStr:
+    """Validate the managed input without trimming, echoing or hashing its actual value."""
+    if not isinstance(value, SecretStr):
+        raise CredentialError("INVALID_CREDENTIAL_VALUE")
+    actual = value.get_secret_value()
+    if not 1 <= len(actual) <= 256 or any(not 33 <= ord(char) <= 126 for char in actual):
+        raise CredentialError("INVALID_CREDENTIAL_VALUE")
+    return value
+
+
 @dataclass(frozen=True)
 class CredentialRef:
     provider_id: KeyProvider
@@ -111,12 +121,7 @@ class CredentialArtifactStore:
         _platform()
         if provider_id not in _KEYS:
             raise CredentialError("INVALID_CREDENTIAL_REFERENCE")
-        if not isinstance(credential, SecretStr):
-            raise CredentialError("INVALID_CREDENTIAL_VALUE")
-        value = credential.get_secret_value()
-        if not 1 <= len(value) <= 256 or any(not 33 <= ord(char) <= 126 for char in value):
-            raise CredentialError("INVALID_CREDENTIAL_VALUE")
-        body = value.encode("ascii")
+        body = exact_credential(credential).get_secret_value().encode("ascii")
         reference = CredentialRef(provider_id, uuid4())
         key, marker = self._names(reference)
         manifest = _Ready(

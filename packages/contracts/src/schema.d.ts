@@ -633,6 +633,26 @@ export interface paths {
         patch: operations["update_provider_profile"];
         trace?: never;
     };
+    "/api/v1/provider-profiles/{provider_id}/credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Credential
+         * @description Bind a prepared edition to a new disabled definition; never enable or probe a provider.
+         */
+        post: operations["import_provider_credential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/provider-profiles/{provider_id}/revisions": {
         parameters: {
             query?: never;
@@ -2348,6 +2368,16 @@ export interface components {
             supported_market: boolean;
             /** Supported Operation */
             supported_operation: boolean;
+        };
+        /** ProviderCredentialImport */
+        ProviderCredentialImport: {
+            /**
+             * Credential
+             * Format: password
+             */
+            credential: string;
+            /** Reason */
+            reason: string;
         };
         /** ProviderHealth */
         ProviderHealth: {
@@ -8576,6 +8606,99 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ProviderProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProfileRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    import_provider_credential: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                provider_id: "eodhd" | "alphavantage" | "massive" | "yahoo" | "yfinance" | "hkex_evidence" | "sec_evidence" | "manual";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderCredentialImport"];
             };
         };
         responses: {
