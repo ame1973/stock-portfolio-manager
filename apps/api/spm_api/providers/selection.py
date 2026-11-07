@@ -1,5 +1,6 @@
 """Read owned policies and private editions without writes, discovery or runtime adoption."""
 
+from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
 
@@ -16,7 +17,6 @@ from spm_api.providers.base import registry
 from spm_api.providers.configuration import (
     LoadedConfiguration,
     ManagedConfigurationRevision,
-    ManagedPolicySnapshot,
     ProviderConfigurationStore,
 )
 from spm_api.providers.http import ProviderAccess
@@ -52,13 +52,7 @@ class OwnerConfigurationStore(ProviderConfigurationStore):
 
     def _managed(self, record: profiles.ManagedProfile) -> LoadedConfiguration:
         provider = record.policy.provider_id
-        snapshot = ManagedPolicySnapshot(
-            **record.policy.model_dump(),
-            version=record.version,
-            revision_id=record.id,
-            owner_id=record.owner_id,
-            credential_artifact_id=record.credential_artifact_id,
-        )
+        snapshot = profiles.policy_snapshot(record)
         if not snapshot.enabled:
             return LoadedConfiguration(provider, "PROVIDER_DISABLED", snapshot)
         if not snapshot.terms_acknowledged:
@@ -93,7 +87,7 @@ class OwnerConfigurationStore(ProviderConfigurationStore):
             result = super().load(provider_id) if previous is None else self._managed(previous)
             if self._current(provider_id) != previous:
                 return LoadedConfiguration(provider_id, "CONFIG_CHANGED_DURING_READ")
-            return result
+            return replace(result, selection_owner_id=self._owner)
         except profiles.ProfileError as error:
             code = (
                 "PROVIDER_OWNER_UNAVAILABLE"

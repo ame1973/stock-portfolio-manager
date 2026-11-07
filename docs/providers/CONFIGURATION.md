@@ -231,14 +231,41 @@ profile signatures. Existing operator snapshots/hashes remain unchanged. Prepare
 managed contexts reject a different owner before capture or network use.
 
 **This library is not yet wired into production jobs, schedules or diagnostics.**
-The current SQLite context whitelist rejects managed snapshot metadata atomically;
-a subsequent explicit migration and writer-side selection fences are required
-before durable managed source execution. Current public records still report
-`runtime_selection_installed: false`; importing/disabling a definition remains
-no kill switch for operator-configured traffic. The default store and
-`providers-check` stay operator-only/no DB/bootstrap/probe. Direct adapter mock
-checks prove library compatibility, not quota-fenced worker execution, key validity,
-live coverage or an installed settings UI.
+Migration `0013_managed_source_contexts` now permits exact managed provenance and
+adds writer-side current-selection fences, but does not switch those consumers.
+Current public records still report `runtime_selection_installed: false`;
+importing/disabling a definition remains no kill switch for operator-configured
+traffic. The default store and `providers-check` stay operator-only/no DB/bootstrap/probe.
+Library capture/quota checks prove transactional compatibility, not installed
+managed worker execution, key validity, live coverage or a settings UI.
+
+### Managed provenance and current-selection fences
+
+The new migration preserves existing context/profile/financial rows and tables.
+A managed context identifies its actual owner, provider, revision/version and
+nullable private credential edition through `configuration_source: MANAGED_PROFILE`.
+It cannot contain operator credential-source/version fields. SQLite requires the
+exact enabled latest owned revision and mirrored policy fields, rejects duplicate,
+missing and unknown JSON keys, and blocks `INSERT OR REPLACE` on an existing
+context. No operator snapshots or file signatures are fabricated; this migration
+creates no policy, key, job, request or access grant.
+
+For new reservations and page outcomes, the short writer rechecks the selected
+owner and greatest managed revision using database metadata only, including when
+the context already exists and the returned page is empty, partial or failed.
+An owned operator fallback carries a private scope claim and can commit only
+while that owner still has no definition. Existing **unscoped operator producers**
+retain their old behavior until explicit consumer integration; a definition-only
+write must not silently become an operator traffic switch. Scope claims stay out
+of public responses, operator profile hashes and credential values.
+
+Completed page/checkpoint/reservation replay still returns its original receipt
+without new writes after policy rotation or disablement. A replayed reservation
+never permits another HTTP call. A reservation rejected after external I/O remains
+spent; recovery records the unknown outcome rather than refunding/reissuing it.
+Private file/value checks before and after I/O, alias CAS and shared-origin peer
+checks remain required outside the writer. These database fences do not replace
+filesystem checks or establish current provider rights/coverage.
 
 ## Read-only diagnostics
 

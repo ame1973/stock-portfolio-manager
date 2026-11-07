@@ -3,6 +3,7 @@
 import hmac
 import json
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from threading import local as ThreadLocal
 from typing import Any
@@ -12,7 +13,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import Engine
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.providers.configuration as configuration
 import spm_api.providers.credentials as credentials
@@ -96,7 +97,8 @@ async def test_no_definition_reuses_actual_operator_snapshot_without_writes(
     before = database_snapshot(engine)
     expected = ProviderConfigurationStore(local).load("eodhd")
     selected = selected_store.load("eodhd")
-    assert selected == expected and selected.error_code is None
+    assert replace(selected, selection_owner_id=None) == expected and selected.error_code is None
+    assert selected.selection_owner_id == UUID(source["owner"]["id"])
     assert isinstance(selected.profile, ProviderFile)
     assert isinstance(selected.revision, ConfigurationRevision)
     assert selected_store.unchanged(selected) and database_snapshot(engine) == before
@@ -587,7 +589,7 @@ async def test_cross_owner_prepared_context_rejects_before_capture_or_network(
     assert database_snapshot(engine) == before
 
 
-async def test_actual_adapter_uses_owned_key_but_managed_persistence_is_not_installed_yet(
+async def test_actual_adapter_uses_owned_key_and_retains_managed_provenance_before_consumer_install(
     local: Settings, source: dict[str, Any], client: httpx.AsyncClient, engine: Engine
 ) -> None:
     await manage(client)
@@ -616,11 +618,8 @@ async def test_actual_adapter_uses_owned_key_but_managed_persistence_is_not_inst
         page = await adapter.fetch_dividends(prepared.segment)
     assert calls == ["/api/div/0005.HK"] and page.rows[0].dps == "0.90000000"
     assert store(local, engine, source).unchanged(loaded) and database_snapshot(engine) == before
-    with (
-        pytest.raises(IntegrityError, match="INVALID_PROVIDER_CONTEXT"),
-        unit_of_work(engine, write=True) as con,
-    ):
-        capture_page(
+    with unit_of_work(engine, write=True) as con:
+        receipt = capture_page(
             con,
             prepared,
             page,
@@ -629,7 +628,19 @@ async def test_actual_adapter_uses_owned_key_but_managed_persistence_is_not_inst
             finished_at=FINISH,
             duration_ms=12,
         )
-    assert database_snapshot(engine) == before
+    assert receipt.observations_new == 1
+    after = database_snapshot(engine)
+    allowed = {
+        "provider_fetch_contexts",
+        "provider_runs",
+        "dividend_observations",
+        "split_observations",
+        "provider_observation_sightings",
+        "audit_events",
+    }
+    assert {name: rows for name, rows in before.items() if name not in allowed} == {
+        name: rows for name, rows in after.items() if name not in allowed
+    }
 
 
 async def test_invalid_internal_rights_snapshot_cannot_grant_access(

@@ -129,8 +129,11 @@ class LoadedConfiguration:
     revision: ConfigurationRevision | ManagedConfigurationRevision | None = field(
         default=None, repr=False
     )
+    selection_owner_id: UUID | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
+        if self.selection_owner_id is not None and not isinstance(self.selection_owner_id, UUID):
+            raise ValueError("INVALID_PROVIDER_OWNER")
         if self.error_code is None and (
             self.profile is None
             or self.profile.provider_id != self.provider_id
@@ -314,7 +317,11 @@ class ProviderConfigurationStore:
         if observed.error_code is not None or observed.revision is None:
             return False
         current = self.load(observed.provider_id)
-        if current.error_code is not None or current.revision != observed.revision:
+        if (
+            current.error_code is not None
+            or current.revision != observed.revision
+            or current.selection_owner_id != observed.selection_owner_id
+        ):
             return False
         previous, latest = observed.access.credential, current.access.credential
         if previous is None or latest is None:

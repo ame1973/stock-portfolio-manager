@@ -4,8 +4,8 @@ Provider observations are source assertions, not financial facts. A successful
 capture does not verify a dividend, adopt a corporate action, recognize income,
 create a receipt, change shares/cash, or establish complete upstream coverage.
 The [worker](WORKER.md) executes source jobs queued through the
-[authenticated enqueue/read/cancel API](JOBS.md); automatic schedules and
-cited evidence creation/review APIs remain unfinished. Installed
+[authenticated enqueue/read/cancel API](JOBS.md) and explicit
+[schedules](SCHEDULES.md); cited evidence creation/review APIs remain unfinished. Installed
 [provider diagnostics](DIAGNOSTICS.md) expose limited recorded-page history and
 [observation lists](OBSERVATIONS.md) expose exact retained assertions, never
 authoritative coverage or canonical financial adoption.
@@ -15,8 +15,11 @@ All paid/live coverage validation is NOT_TESTED.
 
 - `provider_fetch_contexts` retains the initiating owner, security, operation,
   inclusive requested window, explicit dated alias ID/version and exchange
-  context, parser label, normalization version, and non-secret operator profile.
-  The profile includes rights references and configured budgets, not credentials.
+  context, parser label, normalization version, and non-secret configuration snapshot.
+  Operator profiles retain fixed credential versions; managed library captures retain
+  actual owned revision/edition identity instead. Profiles include rights references
+  and configured budgets, not credential values. Managed production consumption is
+  [not installed yet](CONFIGURATION.md#managed-provenance-and-current-selection-fences).
   A quota reservation may retain this planned context before external I/O; context
   presence alone is not evidence of a request, response or completed capture.
 - `provider_runs` retains a **completed page attempt**, including sanitized state,
@@ -111,3 +114,15 @@ head and audit. A successful upgrade appends a schema audit for each existing
 owner; an unchanged rerun does not duplicate it. The normal local rollback
 snapshot is sensitive and is not an encrypted recovery backup. Downgrade is not a
 history-deletion operation: restore a validated pre-upgrade backup instead.
+
+Migration `0013_managed_source_contexts` extends the original context guard rather
+than rewriting source facts or editing migration0008. It permits a separate exact
+managed snapshot kind only for the active owner's current enabled policy, retains
+all alias/date/origin guards and blocks replacement of an existing context ID.
+No new table, policy, key or financial fact is created; each existing owner receives
+one schema audit. A failed DDL/audit step restores the original guards/head/facts,
+and an unchanged rerun writes nothing. The Python writer also checks current
+selection before new reservations/outcomes, including retained context IDs; it
+never loads files inside that transaction. Historical committed replay remains
+zero-write after rotation, while new pages require current authority. This is a
+library/storage boundary, not installed managed worker selection.

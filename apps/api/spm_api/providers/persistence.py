@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, text
 
+import spm_api.providers.profiles as profiles
 from spm_api.audit import audit, canonical, stamp
 from spm_api.decimal_types import to_scaled
 from spm_api.providers.adapters import FetchPage
@@ -52,7 +53,10 @@ class PreparedFetch:
         revision = self.configuration.revision
         if self.configuration.error_code is not None or profile is None or revision is None:
             raise ValueError("PROVIDER_UNCONFIGURED")
-        if isinstance(profile, ManagedPolicySnapshot) and profile.owner_id != self.owner_id:
+        if (
+            self.configuration.selection_owner_id is not None
+            and self.configuration.selection_owner_id != self.owner_id
+        ) or (isinstance(profile, ManagedPolicySnapshot) and profile.owner_id != self.owner_id):
             raise ValueError("PROVIDER_OWNER_MISMATCH")
         alias = self.segment.alias
         return {
@@ -171,12 +175,47 @@ def _insert(con: Connection, table: str, values: dict[str, Any]) -> None:
     con.execute(text(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"), values)
 
 
+def validate_selection(con: Connection, prepared: PreparedFetch) -> None:
+    """Fence owned decisions/scoped fallback using DB metadata only, never private files."""
+    if not con.in_transaction() or not con.get_execution_options().get("writer"):
+        raise ValueError("WRITE_UNIT_OF_WORK_REQUIRED")
+    configuration = prepared.configuration
+    profile = configuration.profile
+    if configuration.selection_owner_id is None and not isinstance(profile, ManagedPolicySnapshot):
+        # Unswitched operator producers retain their existing definition-only API semantics.
+        return
+    metadata = prepared.metadata()
+    if (
+        con.execute(
+            text("SELECT 1 FROM owners WHERE id=:owner AND is_active=1"),
+            {"owner": str(prepared.owner_id)},
+        ).first()
+        is None
+    ):
+        raise ValueError("PROVIDER_CONFIG_CHANGED")
+    try:
+        current = profiles.latest(con, prepared.owner_id, configuration.provider_id)
+    except profiles.ProfileError:
+        raise ValueError("PROVIDER_CONFIG_CHANGED") from None
+    if isinstance(profile, ManagedPolicySnapshot):
+        if (
+            current is None
+            or profiles.policy_snapshot(current) != profile
+            or not profile.enabled
+            or _digest(canonical(profile.model_dump(mode="json"))) != metadata["profile_sha256"]
+        ):
+            raise ValueError("PROVIDER_CONFIG_CHANGED")
+    elif current is not None:
+        raise ValueError("PROVIDER_CONFIG_CHANGED")
+
+
 def persist_context(con: Connection, prepared: PreparedFetch) -> None:
     """Retain a checked non-secret request plan before I/O, without claiming an HTTP result."""
     if not con.in_transaction() or not con.get_execution_options().get("writer"):
         raise ValueError("WRITE_UNIT_OF_WORK_REQUIRED")
     metadata = prepared.metadata()
     _guard_credential(prepared, *metadata.values())
+    validate_selection(con, prepared)
     context_hash = _digest(canonical(metadata))
     resolved = resolve_symbol(
         con,

@@ -12,7 +12,7 @@ from spm_api.errors import Model
 from spm_api.master_models import ChangeReason, ProviderId
 from spm_api.mutations import check_version
 from spm_api.providers.base import registry
-from spm_api.providers.configuration import ProviderPolicy
+from spm_api.providers.configuration import ManagedPolicySnapshot, ProviderPolicy
 from spm_api.providers.credentials import CredentialRef
 
 _FLAGS = ("enabled", "terms_acknowledged", "raw_payload_storage")
@@ -59,6 +59,17 @@ class ManagedProfile(Model):
         ):
             raise ValueError("Policy references and reasons cannot contain NUL")
         return self
+
+
+def policy_snapshot(record: ManagedProfile) -> ManagedPolicySnapshot:
+    """Represent one checked decision identically for private loading and writer-side fencing."""
+    return ManagedPolicySnapshot(
+        **record.policy.model_dump(),
+        version=record.version,
+        revision_id=record.id,
+        owner_id=record.owner_id,
+        credential_artifact_id=record.credential_artifact_id,
+    )
 
 
 def _flat(record: ManagedProfile) -> dict[str, Any]:

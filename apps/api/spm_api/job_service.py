@@ -14,7 +14,12 @@ from spm_api.job_models import (
 )
 from spm_api.providers.adapters import FetchPage
 from spm_api.providers.base import DividendObservation, FetchState, SplitObservation
-from spm_api.providers.persistence import CaptureReceipt, PreparedFetch, capture_page
+from spm_api.providers.persistence import (
+    CaptureReceipt,
+    PreparedFetch,
+    capture_page,
+    validate_selection,
+)
 
 KIND = "DIVIDEND_SOURCE_SYNC"
 _TERMINAL = {"SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"}
@@ -461,6 +466,7 @@ def validate_source_request(
     )
     if selection.profile_sha256 is None or selection.profile_sha256 != metadata["profile_sha256"]:
         raise JobError("JOB_CONFIGURATION_CHANGED")
+    validate_selection(con, prepared)
     _page_sequence(
         con,
         job,
