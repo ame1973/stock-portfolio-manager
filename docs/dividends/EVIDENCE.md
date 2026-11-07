@@ -102,8 +102,11 @@ exact successful, contradictory, incomplete, scope, immutable-copy, rational-cha
 INT64/tolerance and order cases.
 The authoritative sparse source fixtures are reused only for their intended
 properties; any omitted currency/basis needed for a complete synthetic comparison
-is explicitly supplied by the test, never inferred in production. Canonical
-matching, authorized durable basis declarations/action-version fences,
-revisions/manual locks, entitlements, receipts/reconciliation and their public
-workflows still require separate implementation and acceptance. Paid/live provider
-and NAS validation remain NOT_TESTED.
+is explicitly supplied by the test, never inferred in production. The
+[internal audited basis library](BASIS.md#internal-audited-writer-and-historical-reader)
+now checks original source content/hash and real current action scope, retaining
+historical declarations with their authorship audits. It does not install public
+basis authorization/idempotency or trust a stored row as a new adoption grant.
+Canonical matching, revisions/manual locks, entitlements, receipts/reconciliation
+and their public workflows still require separate implementation and acceptance.
+Paid/live provider and NAS validation remain NOT_TESTED.

@@ -43,7 +43,7 @@ authority and commit actor/audit/decisions atomically. Merely listing recorded
 splits does not establish a complete historical chain. No such public controller
 or automatic completeness discovery is installed by this library.
 
-## Inert durable declaration schema
+## Durable declaration schema
 
 Migration `0014_dividend_basis_assertions` adds one initially empty
 `dividend_basis_assertions` table: 52 business tables in total. It does not adopt
@@ -74,22 +74,75 @@ At INSERT, SQLite checks:
 These guards check **recorded** facts, not the completeness of external market
 history. SQL compares the stored source fingerprint and constrains the declaration
 hash's format; it does not cryptographically recompute either JSON fingerprint or
-replace the typed citation/URL validator. The future writer must validate original
-v1 content/hash and canonical declaration/hash, authorize the current HTTP actor,
-retain the cited completeness authority, and commit declaration/audit/idempotency
-in one short transaction. Owner/request UUIDs alone are not authentication.
+replace the typed citation/URL validator. The internal writer below validates
+original v1 content/hash and canonical declaration/hash and commits its creation
+audit atomically. A future HTTP route must still authorize the current session,
+bind server identities and commit its idempotent response in that same short
+transaction. Owner/request UUIDs alone are not authentication.
 
 UPDATE, DELETE and INSERT OR REPLACE reject. A later legitimate action revision or
 void preserves the historical declaration, rather than blocking the financial
 correction or rewriting history; the old reference cannot authorize a new INSERT.
 A future canonical writer must recheck source/action scope at each new adoption,
 not treat the existence of a previously stored row as current proof or a replay
-grant. No production caller currently writes or selects this table.
+grant. Only the internal library below currently writes/reads declarations; no
+public route, worker or canonical consumer is installed.
 
 Upgrade preserves all previous source and financial rows and appends one schema
 audit per existing owner; a repeat upgrade writes nothing. Late DDL/audit failure
 rolls back the whole upgrade. Downgrade refuses to delete history: restore a
 validated pre-upgrade backup instead.
+
+## Internal audited writer and historical reader
+
+`spm_api.dividend_basis_service` provides a private library over this schema:
+
+- `save(con, owner_id, assertion, at=..., request_id=...)` requires the caller's
+  active-owner writer UoW, an explicit aware clock, server-minted assertion/request
+  UUIDs and a revalidated typed declaration. It loads the original source, compares
+  the entire recorded current action scope and appends one declaration plus one
+  `DIVIDEND_BASIS_ASSERTED` owner/request audit. A late audit failure rolls back
+  both. No private credential/configuration file or provider HTTP is accessed.
+- An exact repeat of that **internal artifact** returns its original record with
+  zero writes, even after later action correction, profile disable or alias edits.
+  Reusing its assertion UUID with different owner/body/request/time conflicts;
+  it cannot rewrite or reattribute the earlier decision. This is not public HTTP
+  idempotency or permission to skip current session/CSRF checks on cached responses.
+- `get(con, owner_id, id)` returns that owner's original historical record or
+  None, never another owner's declaration or an invented empty proof. It verifies
+  canonical JSON, all column mirrors/body digest, original v1 source content/hash,
+  immutable physical action terms and exactly one matching creation audit. Raw SQL
+  rows without that audit are not adopted. Corruption fails with fixed
+  BASIS_ASSERTION_UNAVAILABLE and no echo, repair or financial mutation.
+- `require_current(con, owner_id, id)` additionally requires the actual writer and
+  active owner, then rechecks the source and complete recorded current action
+  scope. Retained references to a legitimately revised/voided action remain valid
+  **history**, not a new-use grant. Missing/unconfirmed/unallocated/newly known
+  quantity actions or changed physical/root/version/ratio/date terms produce
+  BASIS_ACTIONS_CHANGED without writes. Call this inside each future canonical
+  adoption transaction, never check in a read UoW and reuse it after a race.
+
+`StoredBasis` is a frozen private record, not a public response contract. Citation,
+owner and request fields are hidden from repr. Creation audits bind the source and
+canonical declaration fingerprints plus bounded public metadata; they do not dump
+document URLs/reference contents. The required reason is retained as an explicit
+owner explanation. The audit establishes recorded authorship, **not authentication
+of an arbitrary internal UUID or verification of the cited document/history**.
+
+The shared `observation_service.original_dividend` reuses exact source/provenance,
+first-run/sighting, timestamp and financial-mirror validation. It also checks
+canonical original JSON and returns the original typed assertion, including a
+query/fragment-bearing citation URL. Its fingerprint is never reconstructed from
+a redacted public observation DTO. Public source lists keep withholding those
+links and remain SOURCE_ONLY/NOT_ADOPTED; disabling access or correcting a later
+alias does not rewrite historical source identity/content.
+
+A basis statement does not fill null source DPS/currency or make nonrepresentable
+rational results valid. Even current recorded agreement is only conditional on the
+owner's cited completeness declaration, never complete external market evidence,
+VERIFIED income or a receipt. This library adds no endpoint, default statement,
+worker dispatch, canonical matching/revision/lock, financial replay, entitlement or
+cash posting. A protected basis API and canonical consumers remain separate work.
 
 ## Date moments follow the ordinary eligibility contract
 
@@ -157,8 +210,11 @@ source/hash/current-snapshot scopes, frozen-copy validation and conditional
 comparison/origin traces. Original financial replay rules and source fingerprints
 remain unchanged. `uv run pytest tests/test_dividend_basis_migration.py` checks
 source/current-row/complete-chain SQL fences, exact date endpoints, legacy rejection,
-immutable history, byte bounds and upgrade rollback. The durable schema is inert;
-an authorized audited basis writer/read path, matching decisions, canonical
-revisions/manual locks, entitlement/receipt workflows and their protected APIs/UI
-remain separate work. Paid/live provider and target NAS acceptance remain
-NOT_TESTED.
+immutable history, byte bounds and upgrade rollback.
+`uv run pytest tests/test_dividend_basis_service.py tests/test_observation_api.py`
+checks internal audited storage, owned historical reads, original-content/hash
+admission, genuine action correction/void/replay, new-use fences, concurrent retry,
+corruption/unaudited-row refusal, source-link privacy and no private file/HTTP I/O.
+Protected HTTP basis authorization/idempotency, durable matching decisions,
+canonical revisions/manual locks and entitlement/receipt workflows remain separate
+work. Paid/live provider and target NAS acceptance remain NOT_TESTED.

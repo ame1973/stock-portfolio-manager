@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import Connection, RowMapping, text
 
+from spm_api.audit import canonical
 from spm_api.decimal_types import from_scaled
 from spm_api.errors import ApiError, Model
 from spm_api.job_models import SourceOperation
@@ -101,6 +102,58 @@ def as_dividend(row: RowMapping) -> DividendObservationRecord:
                 "incomplete_reasons": sorted(source.incomplete_reasons),
             }
         )
+    except (ValueError, TypeError, KeyError, OverflowError):
+        raise ApiError(
+            503, "SOURCE_EVIDENCE_UNAVAILABLE", "The source assertion cannot be read safely"
+        ) from None
+
+
+def original_dividend(con: Connection, observation_id: UUID) -> DividendObservation | None:
+    """Load validated original v1 terms, never reconstruct a hash from a redacted public DTO."""
+    if not isinstance(observation_id, UUID):
+        raise ApiError(422, "INVALID_SOURCE_SCOPE", "An explicit source UUID is required")
+    row = (
+        con.execute(
+            text("""
+        WITH seen AS (
+          SELECT count(*) AS sightings_count,max(r.finished_at) AS last_seen_at
+          FROM provider_observation_sightings s JOIN provider_runs r ON r.id=s.run_id
+          WHERE s.dividend_observation_id=:id AND r.provenance_version=1
+        )
+        SELECT o.*,seen.sightings_count,seen.last_seen_at,
+          r.provenance_version AS first_run_provenance,r.operation AS first_run_operation,
+          r.status AS first_run_state,r.origin_group AS first_run_origin,
+          r.security_id AS first_run_security,r.provider_id AS first_run_provider,
+          r.finished_at AS first_finished_at,r.source_url AS first_source_url,
+          EXISTS(SELECT 1 FROM provider_observation_sightings s
+            WHERE s.dividend_observation_id=o.id AND s.run_id=o.provider_run_id) AS first_sighting
+        FROM dividend_observations o CROSS JOIN seen
+        LEFT JOIN provider_runs r ON r.id=o.provider_run_id
+        WHERE o.id=:id AND o.provenance_version=1
+    """),
+            {"id": str(observation_id)},
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return None
+    try:
+        # Reuse all exact mirror, provenance, pointer and timestamp validation, not its redaction.
+        as_dividend(row)
+        model = (
+            DividendEvidence
+            if row["provider_id"] in {"manual", "hkex_evidence", "sec_evidence"}
+            else DividendObservation
+        )
+        source = _source(row, model, "DIVIDENDS")
+        if (
+            row["first_sighting"] != 1
+            or row["first_run_origin"] != source.origin_group
+            or canonical(source.model_dump(mode="json")) != row["normalized_json"]
+        ):
+            raise ValueError("Noncanonical original source evidence")
+        return source
     except (ValueError, TypeError, KeyError, OverflowError):
         raise ApiError(
             503, "SOURCE_EVIDENCE_UNAVAILABLE", "The source assertion cannot be read safely"
