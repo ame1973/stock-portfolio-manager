@@ -2,7 +2,7 @@
 
 This is the implemented **read-only operator-file interface**. It is not an authenticated key-import API, a synchronization command, a live provider test or a license grant. No directory/key is created by the loader. Missing or invalid provider files do not make the financial application unready.
 
-The future owner-facing key-import/settings workflow must require reauthentication, audit and version checks. Privileged NAS/filesystem provisioning is a separate operator boundary; this interface does not bypass those future HTTP controls.
+The [owned policy-definition API](PROFILES.md) now enforces reauthentication, audit, idempotency and version checks for metadata. It does not import keys or activate these definitions. Privileged NAS/filesystem provisioning and active managed runtime integration remain separate, unfinished boundaries; current operator files stay authoritative.
 
 ## Paths and permissions
 
@@ -66,7 +66,7 @@ The loader checks descriptor/path identity before/after bounded reads and rechec
 
 Callers must use `ProviderConfigurationStore.unchanged(snapshot)` before/after external I/O and retain the observed alias/config versions. File timestamps alone are insufficient: a same-length rewrite can retain identical filesystem timestamps. The recheck also compares current/observed credential values in constant time **in server memory**, without logging, serializing or hashing the credential. A changed/unsafe/unreadable snapshot is not current.
 
-This does not make privileged operator filesystem edits into audited HTTP mutations. Managed key import, active-config persistence and job/version coordination remain subsequent implementation work.
+This does not make privileged operator filesystem edits into audited HTTP mutations. Managed key import and active runtime/job/version integration remain subsequent work; the policy-definition history/API does not replace this operator interface.
 
 ## Inactive immutable credential preparation
 
@@ -102,15 +102,16 @@ managed owner workflow must atomically bind a successful prepared edition to its
 reauthenticated/audited/versioned/idempotent policy transaction before runtime use.
 There is no database write, active-binding update, operator-file replacement,
 provider request, quota reset or financial effect in this preparation layer.
-Historical activation, orphan reconciliation and managed settings/import APIs/UI
+Historical activation, orphan reconciliation, key-import APIs and managed settings UI
 remain subsequent work, not fake success responses. Do not provision test artifacts
 or synthetic keys in a deployment's operator credential volume.
 
 ## Append-only managed policy schema
 
 Migration `0012_provider_profiles` adds an initially empty
-`provider_profile_revisions` table. This is an **inert storage foundation**, not
-an installed settings/import API or an active runtime selector. The current
+`provider_profile_revisions` table. This storage is now exposed through the
+[owned policy-definition API](PROFILES.md), **not an active runtime selector or
+key-import API**. The current
 operator-file loader, diagnostic CLI, worker selection and read-only secret
 mounts remain unchanged. No existing settings, jobs, profiles or credential files
 are adopted by the migration.
@@ -118,9 +119,9 @@ are adopted by the migration.
 Each owner/provider has a contiguous, increasing revision history. The first
 revision must be disabled; later changes, including disablement, credential
 rotation and credential clearing, append rather than rewrite or delete history.
-Competing inserts for the same next version cannot both commit. The future
-controller must select the greatest version, **not the last enabled version**;
-a disabled or unavailable managed selection must never silently fall back to an
+Competing inserts for the same next version cannot both commit. The controller selects the greatest version, **not the last enabled version**;
+a future managed runtime consumer must preserve that selection. A disabled or
+unavailable managed selection must never silently fall back to an
 older policy or discovered file.
 
 Typed columns retain declared enablement/rights, bounded integer minute/day
@@ -135,12 +136,13 @@ these declarations still do not prove licensed access, file readiness or health.
 
 SQLite enforces metadata shape, ownership, monotonic versions/times and immutable
 history. It cannot prove password reauthentication, private-file preparation or
-an HTTP idempotency result. The subsequent controller/API must verify the actual
-prepared edition outside the writer, then commit current session/reauth/CSRF,
-version checks, append-only audit and sensitive idempotency with the selection in
-one short transaction. Runtime integration must recheck that committed selection
-and the private credential around provider I/O. None of those later workflows is
-installed by this schema, and no provider request or quota reset is introduced.
+an HTTP idempotency result. The definition API now checks current session/CSRF,
+reauthentication before cached replay, version, audit and serialized result in
+one short transaction. A future credential-import caller must separately verify
+the actual prepared edition outside the writer and use sensitive session-HMAC
+idempotency. Runtime integration must recheck the committed selection and private
+credential around provider I/O. Key import/runtime use are not installed by this
+schema or definition API; no provider request or quota reset is introduced.
 
 ## Internal versioned controller
 
@@ -165,9 +167,11 @@ non-secret policy metadata and credential presence, never the credential or its
 plaintext hash. Reads select the greatest version even when disabled/cleared,
 validate canonical mirrored fields, contiguous progress and edition ownership,
 and reject corrupt retained rows with a fixed code without echo, repair or
-fallback. Reads write nothing. This does not install HTTP CSRF/reauthentication,
-sensitive idempotency, managed filesystem provisioning, diagnostics/runtime
-consumption or UI. Existing operator profiles remain the current runtime path;
+fallback. Reads write no definition/audit facts. The [definition API](PROFILES.md)
+now supplies HTTP session/CSRF/reauthentication and non-secret idempotency around
+this controller. Credential-bearing sensitive idempotency, managed filesystem
+provisioning, diagnostics/runtime consumption and UI remain unfinished. Existing
+operator profiles remain the current runtime path;
 managed declarations alone cause no provider request, quota reset or financial
 change.
 

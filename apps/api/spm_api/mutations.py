@@ -13,7 +13,7 @@ from sqlalchemy import Connection, text
 from spm_api.audit import canonical, digest, now, stamp
 from spm_api.db import unit_of_work
 from spm_api.errors import ApiError, Model
-from spm_api.security import COOKIE, Auth, WriteHeaders, read_auth, validate_csrf
+from spm_api.security import COOKIE, Auth, WriteHeaders, read_auth, require_reauth, validate_csrf
 
 
 def sensitive_fingerprint(request: Request, payload: Any) -> str:
@@ -31,6 +31,7 @@ def mutate[M: Model](
     action: Callable[[Connection, Auth], M],
     *,
     status: int = 200,
+    reauth: bool = False,
 ) -> M:
     """Serialize before commit so response validation cannot leave a partial financial write."""
     route = f"{request.method} {request.url.path}"
@@ -38,6 +39,8 @@ def mutate[M: Model](
     with unit_of_work(request.app.state.engine, write=True) as con:
         auth = read_auth(con, request.cookies.get(COOKIE))
         validate_csrf(auth, headers.csrf)
+        if reauth:
+            require_reauth(auth)
         owner = str(auth.owner.id)
         existing = (
             con.execute(

@@ -21,7 +21,9 @@ from spm_api.errors import ApiError, Error, Status, error_response
 from spm_api.finance import FinanceError
 from spm_api.master_routes import router as master_router
 from spm_api.observation_routes import router as observation_router
+from spm_api.profile_routes import router as profile_router
 from spm_api.provider_routes import router as provider_router
+from spm_api.providers.profiles import ProfileError
 from spm_api.schedule_routes import router as schedule_router
 from spm_api.schedule_service import ScheduleError
 from spm_api.sync_routes import router as sync_router
@@ -71,6 +73,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             409 if exc.code in {"INSUFFICIENT_SHARES", "NEEDS_REVIEW", "DUPLICATE_FACT"} else 422
         )
         return error_response(request, status, exc.code, str(exc))
+
+    @app.exception_handler(ProfileError)
+    async def profile_error(request: Request, exc: ProfileError) -> JSONResponse:
+        code = str(exc)
+        if code == "PROFILE_NOT_FOUND":
+            return error_response(
+                request, 404, "NOT_FOUND", "Managed provider definition not found"
+            )
+        if code == "PROVIDER_PROFILE_UNAVAILABLE":
+            return error_response(
+                request, 503, code, "The stored provider definition cannot be read safely"
+            )
+        if code.startswith("INVALID_"):
+            return error_response(
+                request, 422, "INVALID_PROVIDER_PROFILE", "Invalid provider definition"
+            )
+        return error_response(
+            request,
+            409,
+            "PROVIDER_PROFILE_CHANGE_REJECTED",
+            "The provider definition change could not be accepted",
+        )
 
     @app.exception_handler(ScheduleError)
     async def schedule_error(request: Request, exc: ScheduleError) -> JSONResponse:
@@ -145,6 +169,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(transfer_router)
     app.include_router(action_router)
     app.include_router(sync_router)
+    app.include_router(profile_router)
     app.include_router(provider_router)
     app.include_router(observation_router)
     app.include_router(schedule_router)

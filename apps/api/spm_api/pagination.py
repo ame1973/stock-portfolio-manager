@@ -3,6 +3,7 @@
 import base64
 import binascii
 import json
+import re
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
 from typing import Annotated, Any
@@ -83,6 +84,14 @@ def validate_date_page(query: PageQuery, start: str | None, end: str | None) -> 
             raise ApiError(422, "INVALID_CURSOR", "Invalid financial date cursor") from exc
 
 
+def validate_version_page(query: PageQuery) -> None:
+    value = query.cursor_value
+    if value is not None and (
+        re.fullmatch(r"[1-9][0-9]{0,9}", value) is None or int(value) > 2147483647
+    ):
+        raise ApiError(422, "INVALID_CURSOR", "Invalid version pagination cursor")
+
+
 def validate_time_page(query: PageQuery) -> None:
     if query.cursor_value is None:
         return
@@ -106,5 +115,5 @@ def paginate[T: Model](
     cursor = None
     if len(rows) > query.limit:
         row = rows[query.limit - 1]
-        cursor = base64.urlsafe_b64encode(json.dumps([row[key], row["id"]]).encode()).decode()
+        cursor = base64.urlsafe_b64encode(json.dumps([str(row[key]), row["id"]]).encode()).decode()
     return Page(items=[convert(row) for row in rows[: query.limit]], next_cursor=cursor)

@@ -70,7 +70,7 @@ def _flat(record: ManagedProfile) -> dict[str, Any]:
     return result
 
 
-def _decode(row: RowMapping) -> ManagedProfile:
+def from_row(row: RowMapping) -> ManagedProfile:
     original = dict(row)
     try:
         values = dict(original)
@@ -128,7 +128,7 @@ def latest(con: Connection, owner_id: UUID, provider_id: ProviderId) -> ManagedP
     )
     if row is None:
         return None
-    record = _decode(row)
+    record = from_row(row)
     progress = con.execute(
         text("""
         SELECT count(*),min(version),max(created_at) FROM provider_profile_revisions

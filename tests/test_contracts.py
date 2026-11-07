@@ -43,6 +43,14 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
     identifiers = [op["operationId"] for op in actual.values()]
     assert len(identifiers) == len(set(identifiers))
     extensions = {
+        ("/api/v1/provider-profiles", "get"): "list_provider_profiles",
+        ("/api/v1/provider-profiles", "post"): "create_provider_profile",
+        ("/api/v1/provider-profiles/{provider_id}", "get"): "get_provider_profile",
+        ("/api/v1/provider-profiles/{provider_id}", "patch"): "update_provider_profile",
+        (
+            "/api/v1/provider-profiles/{provider_id}/revisions",
+            "get",
+        ): "list_provider_profile_revisions",
         ("/api/v1/source-schedules", "get"): "list_source_schedules",
         ("/api/v1/source-schedules", "post"): "create_source_schedule",
         ("/api/v1/source-schedules/{id}", "get"): "get_source_schedule",
