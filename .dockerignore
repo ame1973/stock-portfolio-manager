@@ -5,6 +5,7 @@
 dev
 **/CLAUDE.md
 **/claude.md
+CONTEXT.md
 docs/IMPLEMENTATION_STATUS.md
 docs/16_ADRS_AND_OPEN_QUESTIONS.md
 .env

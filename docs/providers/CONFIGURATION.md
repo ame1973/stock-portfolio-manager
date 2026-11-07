@@ -50,7 +50,7 @@ There is deliberately no example key or guessed plan budget. Before enabling a n
 2. Set `terms_reference` to a bounded non-secret reference and `terms_reason` to an explicit explanation (10–1000 characters), then acknowledge the terms. This is an operator assertion, **not verified licensing or live coverage**.
 3. Supply positive integer minute/daily limits from that plan. Enabled network profiles require both; booleans, strings, zero, negative values and values above 2147483647 are rejected. The loader validates them; the worker enforces [durable shared-origin reservations and retry policy](BUDGETS.md).
 4. For EODHD/Alpha Vantage/Massive, provision the referenced private credential. Presence alone never enables traffic.
-5. Set `enabled` explicitly and inspect configuration status through `spm-manage providers-check`, the [authenticated diagnostic APIs](DIAGNOSTICS.md), or the [source workspace](WORKSPACE.md). The [worker](WORKER.md) dispatches source jobs explicitly queued through the [owner API](JOBS.md) or workspace, but startup creates none. Automatic schedules and managed key settings remain under development.
+5. Set `enabled` explicitly and inspect configuration status through `spm-manage providers-check`, the [authenticated diagnostic APIs](DIAGNOSTICS.md), or the [source workspace](WORKSPACE.md). The [worker](WORKER.md) dispatches source jobs explicitly queued through the [owner API](JOBS.md), workspace or explicitly enabled schedules; startup creates no default schedule or provider grant. Managed key settings remain under development.
 
 `version` and `credential_version` are explicit positive integers, at most 2147483647. `credential_source`/`credential_version` must appear together or both be null. Accepted sources are `LOCAL_FILE` and `DOCKER_SECRET`; no client-selected filename/path is accepted.
 
@@ -67,6 +67,44 @@ The loader checks descriptor/path identity before/after bounded reads and rechec
 Callers must use `ProviderConfigurationStore.unchanged(snapshot)` before/after external I/O and retain the observed alias/config versions. File timestamps alone are insufficient: a same-length rewrite can retain identical filesystem timestamps. The recheck also compares current/observed credential values in constant time **in server memory**, without logging, serializing or hashing the credential. A changed/unsafe/unreadable snapshot is not current.
 
 This does not make privileged operator filesystem edits into audited HTTP mutations. Managed key import, active-config persistence and job/version coordination remain subsequent implementation work.
+
+## Inactive immutable credential preparation
+
+An internal `CredentialArtifactStore` library now prepares a private immutable
+credential edition for EODHD, Alpha Vantage or Massive. **This is not an import API,
+owner authorization, active profile, terms acknowledgment or provider readiness.**
+It is not called by application/worker startup, diagnostics or current operator
+profile selection. Existing read-only Compose secret mounts are unchanged; there
+is no new key-writing CLI/HTTP/UI or automatic artifact-directory discovery.
+
+Preparation requires an explicitly supplied, pre-provisioned owner-only directory
+outside both data and backup trees, including resolved aliases. It creates no
+directory. Inputs are server-only `SecretStr` values of exactly 1–256 printable
+nonspace ASCII characters; unlike operator-file line endings, this input is not
+trimmed. Yahoo/yfinance and manual/official evidence profiles cannot prepare API
+credentials. Provider and server-generated UUID form fixed basenames; a caller
+cannot supply a path or overwrite an existing edition.
+
+The writer uses directory-relative no-follow/exclusive creation and mode0600,
+handles short writes, fsyncs the key and canonical non-secret ready manifest, then
+fsyncs the directory and rereads matching identities/value before returning.
+Symlinks, hard links, FIFOs, unsafe modes/owners, unsupported secure-open platforms,
+malformed/duplicate/nonfinite/oversized metadata, identity changes and I/O failures
+fail with fixed safe codes. The ready manifest contains only schema/provider/UUID
+and bounded length, **never a key or plaintext-key hash**. Snapshot repr hides
+credentials, paths and file signatures. `unchanged` compares current signatures
+and the actual credential in constant time only in server memory; timestamps alone
+are insufficient even after a same-length rewrite.
+
+Failed/crash-uncertain files are retained and unselected, not deleted or adopted.
+A complete file/ready manifest alone is not proof of a committed import: the future
+managed owner workflow must atomically bind a successful prepared edition to its
+reauthenticated/audited/versioned/idempotent policy transaction before runtime use.
+There is no database write, active-binding update, operator-file replacement,
+provider request, quota reset or financial effect in this preparation layer.
+Historical activation, orphan reconciliation and managed settings/import APIs/UI
+remain subsequent work, not fake success responses. Do not provision test artifacts
+or synthetic keys in a deployment's operator credential volume.
 
 ## Read-only diagnostics
 

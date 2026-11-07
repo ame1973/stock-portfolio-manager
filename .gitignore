@@ -5,6 +5,7 @@
 **/claude.md
 **/.claude.md
 **/.claude.local.md
+/CONTEXT.md
 /docs/IMPLEMENTATION_STATUS.md
 /docs/16_ADRS_AND_OPEN_QUESTIONS.md
 /.local/
