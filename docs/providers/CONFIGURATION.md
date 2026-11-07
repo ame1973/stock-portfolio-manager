@@ -106,6 +106,42 @@ Historical activation, orphan reconciliation and managed settings/import APIs/UI
 remain subsequent work, not fake success responses. Do not provision test artifacts
 or synthetic keys in a deployment's operator credential volume.
 
+## Append-only managed policy schema
+
+Migration `0012_provider_profiles` adds an initially empty
+`provider_profile_revisions` table. This is an **inert storage foundation**, not
+an installed settings/import API or an active runtime selector. The current
+operator-file loader, diagnostic CLI, worker selection and read-only secret
+mounts remain unchanged. No existing settings, jobs, profiles or credential files
+are adopted by the migration.
+
+Each owner/provider has a contiguous, increasing revision history. The first
+revision must be disabled; later changes, including disablement, credential
+rotation and credential clearing, append rather than rewrite or delete history.
+Competing inserts for the same next version cannot both commit. The future
+controller must select the greatest version, **not the last enabled version**;
+a disabled or unavailable managed selection must never silently fall back to an
+older policy or discovered file.
+
+Typed columns retain declared enablement/rights, bounded integer minute/day
+budgets, an optional opaque credential-artifact UUID, a concrete change reason,
+a server request UUID and canonical UTC time. Credentials, filesystem paths and
+plaintext-key hashes are not part of this table's contract. Only the three
+API-key providers accept artifact references; a referenced edition cannot be
+reassigned to another owner/provider. Manual/official evidence profiles accept
+no network budgets, and raw-payload storage remains false. An enabled declaration
+requires acknowledged terms and its access mode's budgets/credential reference;
+these declarations still do not prove licensed access, file readiness or health.
+
+SQLite enforces metadata shape, ownership, monotonic versions/times and immutable
+history. It cannot prove password reauthentication, private-file preparation or
+an HTTP idempotency result. The subsequent controller/API must verify the actual
+prepared edition outside the writer, then commit current session/reauth/CSRF,
+version checks, append-only audit and sensitive idempotency with the selection in
+one short transaction. Runtime integration must recheck that committed selection
+and the private credential around provider I/O. None of those later workflows is
+installed by this schema, and no provider request or quota reset is introduced.
+
 ## Read-only diagnostics
 
 ```sh
