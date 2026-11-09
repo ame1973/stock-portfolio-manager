@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import Connection, RowMapping, text
 
+from spm_api import trade_audit
 from spm_api.action_service import action_row, as_action
 from spm_api.audit import canonical, digest, stamp
 from spm_api.decimal_types import INT64_MAX
@@ -22,7 +23,9 @@ from spm_api.replay import Trade, Transfer
 from spm_api.trade_service import as_trade
 from spm_api.transfer_service import as_security
 
-TradeHistoryAuditScope = Literal["NO_RETIRED_TRADES", "RETIRED_TRADE_HISTORY_UNVERIFIED"]
+TradeHistoryAuditScope = Literal[
+    "NO_RETIRED_TRADES", "RETIRED_TRADE_HISTORY_UNVERIFIED", "RETIRED_TRADE_HASHES_MATCHED"
+]
 
 
 class EligibilityHistoryError(ValueError):
@@ -185,7 +188,7 @@ def _audited(
         raise ValueError("Inconsistent predecessor audit")
     matching_statuses: set[str] = set()
     if kind == "TRADE" and (not latest or row["status"] == "VOID"):
-        # Retirement overwrites updated_at; its original creation value cannot be reconstructed.
+        # A retained origin, when available, is verified separately with the retirement audit.
         hashes: set[str] | None = None
     elif kind == "TRADE":
         hashes = {digest(canonical(as_trade(row).model_dump(mode="json")))}
@@ -252,9 +255,10 @@ def _chains(
     rows: Sequence[RowMapping],
     kind: Literal["TRADE", "TRANSFER", "ACTION"],
     owner: str | None,
-) -> None:
-    """A missing latest fact must not silently turn recorded shares into zero."""
+) -> bool:
+    """Reject incomplete histories and report retired trades without reconstructible origins."""
     groups: dict[str, list[RowMapping]] = {}
+    unverified = False
     for row in rows:
         _sequence(row, kind)
         if (
@@ -300,6 +304,29 @@ def _chains(
                 if row["status"] not in statuses or (not latest and row["status"] == "VOID"):
                     raise ValueError("Inconsistent fact lifecycle")
             _audited(con, row, kind, owner, latest=latest, previous=previous)
+            if kind == "TRADE":
+                if owner is None:
+                    raise ValueError("Missing trade owner")
+                exists = con.execute(
+                    text("SELECT 1 FROM trade_audit_origins WHERE trade_id=:id"),
+                    {"id": row["id"]},
+                ).first()
+                retired = not latest or row["status"] == "VOID"
+                if exists is None:
+                    unverified = unverified or retired
+                    continue
+                origin = trade_audit.get_origin(con, UUID(owner), UUID(row["id"]))
+                if origin is None:
+                    raise ValueError("Missing retained trade origin")
+                if retired:
+                    retirement_row = row if latest else history[number]
+                    retirement_action = "VOID" if latest else "REVISE"
+                    retirement = _audit_entry(
+                        con, retirement_row, "TRADE", retirement_action, owner
+                    )
+                    if retirement["before_sha256"] != origin.before_sha256:
+                        raise ValueError("Inconsistent trade retirement audit")
+    return unverified
 
 
 def _accounts(con: Connection, owner: str, portfolio: str) -> list[str]:
@@ -322,7 +349,7 @@ def _accounts(con: Connection, owner: str, portfolio: str) -> list[str]:
 
 def _fact_scope(
     con: Connection, owner: str, portfolio: str, security: str, accounts: set[str]
-) -> bool:
+) -> tuple[bool, bool]:
     # ponytail: scan relevant retained roots; add indexed checkpoints if measured histories grow.
     params = {"portfolio": portfolio, "security": security}
     trades = (
@@ -356,7 +383,7 @@ def _fact_scope(
         ):
             raise ValueError("Inconsistent trade scope")
         _day(row["trade_date"])
-    _chains(con, trades, "TRADE", owner)
+    unverified_trades = _chains(con, trades, "TRADE", owner)
 
     transfers = (
         con.execute(
@@ -402,7 +429,7 @@ def _fact_scope(
             raise ValueError("Inconsistent transfer scope")
         _day(row["transfer_date"])
     _chains(con, transfers, "TRANSFER", owner)
-    return any(row["status"] in {"SUPERSEDED", "VOID"} for row in trades)
+    return any(row["status"] in {"SUPERSEDED", "VOID"} for row in trades), unverified_trades
 
 
 def _actions(con: Connection, security: str) -> None:
@@ -506,7 +533,7 @@ def get(
             raise ValueError("Invalid portfolio data revision")
         account_ids = _accounts(con, str(owner_id), str(portfolio_id))
         account_set = set(account_ids)
-        retired_trades = _fact_scope(
+        retired_trades, unverified_trades = _fact_scope(
             con, str(owner_id), str(portfolio_id), str(security_id), account_set
         )
         _actions(con, str(security_id))
@@ -536,7 +563,11 @@ def get(
             rule=rule,
         )
         trade_scope: TradeHistoryAuditScope = (
-            "RETIRED_TRADE_HISTORY_UNVERIFIED" if retired_trades else "NO_RETIRED_TRADES"
+            "NO_RETIRED_TRADES"
+            if not retired_trades
+            else "RETIRED_TRADE_HISTORY_UNVERIFIED"
+            if unverified_trades
+            else "RETIRED_TRADE_HASHES_MATCHED"
         )
         return RecordedEligibilityBook(
             owner_id,

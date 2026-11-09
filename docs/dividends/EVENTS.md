@@ -186,18 +186,25 @@ fail closed rather than being silently adopted as verified history. These checks
 are against the retained database records; hashes are not signatures or proof
 of an externally authenticated actor or complete market history.
 
-**Retired-trade limitation:** retiring a trade overwrites its original
-`updated_at`, so its original creation/revision after fingerprint and the
-retirement before fingerprint cannot always be reconstructed from the retained
-trade row. The reader checks the retained audit's presence, actor, metadata and
-fingerprint shape, but cannot detect every valid-shaped alteration of those old
-hashes. `trade_history_audit_scope=RETIRED_TRADE_HISTORY_UNVERIFIED` makes this
-limitation explicit whenever the relevant history contains a superseded or
-voided trade; otherwise it reports `NO_RETIRED_TRADES`. Do not treat the former
-as a fully verified historical audit chain. Restoring or independently verifying
-that lineage requires additional retained evidence or an explicit review path;
-the reader does not guess the lost timestamp or treat an expiring idempotency
-cache as durable proof.
+**Retired-trade evidence:** retiring a trade overwrites its original `updated_at`.
+When an immutable original-status/timestamp origin is retained, the reader checks
+its CREATE/REVISE after fingerprint and compares its reconstructed raw-row before
+fingerprint with the actual successor REVISE or terminal VOID audit. It checks
+origins for current rows too, and rejects an inconsistent or unsupported claim
+instead of repairing it. If every relevant retired trade has a matching origin
+and retirement hash, the scope is `RETIRED_TRADE_HASHES_MATCHED`; if none are
+retired, it is `NO_RETIRED_TRADES`.
+
+When any relevant retired trade has no origin, the reader reports
+`RETIRED_TRADE_HISTORY_UNVERIFIED`. It still checks all other available origins
+and reconstructible hashes, so missing legacy evidence cannot hide a mismatch in
+another chain. Without an origin, a valid-shaped alteration of the old trade's
+original after or retirement before hash may remain undetected. The reader never
+guesses a timestamp or treats an expiring idempotency cache as durable proof.
+Matched hashes describe consistency of retained records only: they are not a
+signature, authenticated external evidence, verified market ownership, complete
+history or a financial-use grant. All account results still carry
+`history_completeness=UNVERIFIED`.
 
 The reader performs no writes, provider requests or credential-file reads. It
 is not an entitlement projection, event/receipt API or UI. Before any economic
@@ -214,9 +221,9 @@ current schema to 56 business tables. A separate table matters because historica
 trade retirement audits hash the entire old trade row; adding a trade column
 would change the set of values needed to reconstruct those existing fingerprints.
 No origin is automatically backfilled or recovered by this migration. The trade
-writer now captures new physical rows and eligible current legacy rows, but the
-recorded-history reader still reports the retired-trade limitation above even
-when a matching origin is present.
+writer captures new physical rows and eligible current legacy rows. The
+recorded-history reader checks retained origins when present and preserves the
+explicit unverified scope for older rows with missing evidence.
 
 An origin can retain a physical trade's claimed original status and `updated_at`,
 its owner and exact CREATE/REVISE audit identity. Current-row claims must match
@@ -272,10 +279,9 @@ The protected trade writer now invokes this helper in the same transaction as
 trade creation, revision or void, alongside settlement, audit, idempotency and
 invalidation. Existing verified current rows without origins receive a correlated
 pre-retirement capture; completed historical HTTP replays remain zero-write.
-The dividend eligibility reader does not use the helper yet, so
-`RETIRED_TRADE_HISTORY_UNVERIFIED` remains unchanged. The helper and writer do
-not by themselves validate the whole retained chain, recover already-retired
-legacy evidence or enable an economic projection.
+The dividend eligibility reader checks each available origin, compares retired
+ones with their actual retirement audit, and labels absent evidence as unverified. Neither
+component recovers already-retired legacy evidence or enables an economic projection.
 
 ## Required future protected writer and projection work
 
@@ -316,6 +322,11 @@ additionally exercises upgrade preservation, atomic rollback, scoped immutable
 origin storage, canonical origin verification, actual trade-write transactions,
 concurrency and the distinction between valid-shaped stored metadata and a verified hash.
 The test does not turn SQL metadata into an authorized recovery workflow.
+
+`uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
+checks origin-to-retirement audit matching, mixed legacy histories, inconsistent
+retained claims and concurrent WAL read snapshots. These are internal recorded
+share checks, not authenticated event, entitlement or receipt endpoints.
 
 `uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`
 checks migration preservation and rollback, source and candidate scope, publication

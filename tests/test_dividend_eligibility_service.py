@@ -14,6 +14,7 @@ from sqlalchemy import Connection, Engine
 
 import spm_api.dividend_eligibility_service as service
 import spm_api.trade_service as trade_service
+from spm_api.audit import audit
 from spm_api.config import Settings
 from spm_api.db import unit_of_work
 from spm_api.providers.configuration import ProviderConfigurationStore
@@ -358,12 +359,12 @@ async def test_trade_revision_may_move_between_owned_portfolios_and_securities(
     assert response.status_code == 200, response.text
     old = load(engine, graph)
     assert all(row.recorded_quantity == "0.00000000" for row in old.accounts)
-    assert old.trade_history_audit_scope == "RETIRED_TRADE_HISTORY_UNVERIFIED"
+    assert old.trade_history_audit_scope == "RETIRED_TRADE_HASHES_MATCHED"
     corrected = load(
         engine, graph, portfolio_id=UUID(portfolio["id"]), security_id=UUID(security["id"])
     )
     assert quantities(corrected) == {account["id"]: "10.00000000"}
-    assert corrected.trade_history_audit_scope == "RETIRED_TRADE_HISTORY_UNVERIFIED"
+    assert corrected.trade_history_audit_scope == "RETIRED_TRADE_HASHES_MATCHED"
 
 
 async def test_security_transfer_revision_and_void_use_only_the_terminal_fact(
@@ -974,26 +975,29 @@ async def test_void_audit_must_link_the_previously_active_fact(
 async def test_retired_trade_audit_reconstruction_limit_is_explicit(
     client: httpx.AsyncClient, engine: Engine, graph: dict[str, Any]
 ) -> None:
-    trade = await create(client, "trades", trade_body(graph))
-    changed = await client.patch(
-        f"/api/v1/trades/{trade['id']}",
-        json=trade_body(graph, quantity="11", reason="Correct the synthetic recorded quantity"),
-        headers=version_headers(client, 1),
-    )
+    def synthetic_unrelated_creation(*args: Any, **kwargs: Any) -> None:
+        if args[2] == "trade" and args[4] == "CREATE":
+            kwargs["after"] = {"synthetic": "not the original trade"}
+        audit(*args, **kwargs)
+
+    # Construct a legacy-style chain without origins or a matching creation hash.
+    with (
+        patch.object(trade_service, "_remember_trade_origin"),
+        patch.object(trade_service, "_capture_trade_origin"),
+    ):
+        with patch.object(trade_service, "audit", side_effect=synthetic_unrelated_creation):
+            trade = await create(client, "trades", trade_body(graph))
+        changed = await client.patch(
+            f"/api/v1/trades/{trade['id']}",
+            json=trade_body(graph, quantity="11", reason="Correct the synthetic recorded quantity"),
+            headers=version_headers(client, 1),
+        )
     assert changed.status_code == 200
+    before = database_snapshot(engine)
     original = load(engine, graph)
     assert original.trade_history_audit_scope == "RETIRED_TRADE_HISTORY_UNVERIFIED"
     assert quantities(original)[graph["source"]["id"]] == "11.00000000"
-    with corrupt(engine, "audit_events") as con:
-        con.exec_driver_sql(
-            "UPDATE audit_events SET after_sha256=? "
-            "WHERE entity_type='trade' AND entity_id=? AND action='CREATE'",
-            ("0" * 64, trade["id"]),
-        )
-        result = service.get(con, **arguments(graph))
-        assert result is not None
-        assert result.trade_history_audit_scope == "RETIRED_TRADE_HISTORY_UNVERIFIED"
-        assert quantities(result)[graph["source"]["id"]] == "11.00000000"
+    assert database_snapshot(engine) == before
 
 
 async def test_audit_actor_must_match_the_owned_trade_portfolio(
