@@ -120,6 +120,42 @@ exposing event adoption, make the public source and candidate views unambiguous
 about any current or historical event linkage. No internal decision invokes a
 provider, reads credential files or verifies a cited document.
 
+## Recorded account-share calculation
+
+The internal `dividend_eligibility.recorded_eligibility` calculates an
+account-by-account view from **one portfolio's supplied recorded facts**. The
+caller must authorize the owner and portfolio, verify every trade and both sides
+of each transfer belong to that portfolio, and select current adopted actions;
+the pure function neither reads the database nor authenticates those inputs.
+Provider-only split observations are not adopted corporate actions.
+
+For the explicitly selected ordinary rule, an ex-date already reached uses only
+facts strictly before that date, including recorded transfers and previously
+confirmed rational splits; all ex-date events are excluded. Before the ex-date,
+the function instead reports recorded holdings through the supplied exchange-local
+as-of date, not a forecast or established entitlement. The caller must explicitly
+select review rather than the ordinary rule for special distribution, due-bill or
+other unknown eligibility conventions. It must also supply the local calendar date;
+the function never guesses it from the server clock.
+
+Results preserve the requested account order and exact eight-place share strings.
+A recorded zero means no shares were found in the supplied facts, **not** proof of
+complete ownership history. Every result is marked `RECORDED_SHARES_ONLY` and
+`UNVERIFIED`; no entitlement, tax, FX, gross/net payment or receipt is calculated.
+An unresolved action affecting held shares, or a split producing an unrepresentable
+fraction, returns `NEEDS_REVIEW` without a quantity. Transfer-connected accounts
+are conservatively reviewed together, including connections through accounts not
+requested in the result; independent account histories can still be reported.
+Connections are intentionally undirected across the requested historical interval,
+so review can extend to an account even if a transfer preceded the action. Invalid
+inputs and computable oversold histories fail closed; an unresolved component never
+publishes a guessed quantity.
+
+This pure calculation does not install a database-backed ownership loader, an
+entitlement projection, an event/receipt API, or a user interface. A future
+financial writer must reload and validate the correct current facts inside its
+own transaction before adopting any result.
+
 ## Required future protected writer and projection work
 
 These constraints are defense in depth, not authentication, authorization,
