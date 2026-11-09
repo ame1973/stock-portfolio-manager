@@ -6,7 +6,8 @@ merge observations, persist a canonical event/revision, verify a document, rebui
 entitlements or create actual receipts. The canonical dividend HTTP/UI workflow
 remains unfinished. Existing [source observations](../providers/OBSERVATIONS.md)
 and [quotation forms](../providers/CITED_ASSERTIONS.md) retain their source-only
-contract.
+contract. [Candidate hints](CANDIDATES.md) can identify pairs for review, but do
+not create the explicit association required by this comparison.
 
 ## An association is an input, not a date heuristic
 
