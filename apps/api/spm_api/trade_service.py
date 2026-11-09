@@ -3,11 +3,12 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Connection, RowMapping, text
 
+from spm_api import trade_audit
 from spm_api.audit import audit, now, stamp
 from spm_api.decimal_types import to_scaled
 from spm_api.errors import ApiError, Success
@@ -48,6 +49,46 @@ def owned_trade(con: Connection, owner: str, identifier: str) -> RowMapping:
     if row is None:
         raise ApiError(404, "NOT_FOUND", "Trade not found")
     return row
+
+
+def _remember_trade_origin(con: Connection, auth: Auth, identifier: str, request_id: str) -> None:
+    try:
+        trade_audit.remember_created(con, auth.owner.id, UUID(identifier), UUID(request_id))
+    except ValueError:
+        raise ApiError(
+            503, "TRADE_AUDIT_UNAVAILABLE", "Trade audit history is unavailable"
+        ) from None
+
+
+def _capture_trade_origin(con: Connection, auth: Auth, row: RowMapping, request_id: str) -> None:
+    if row["status"] in {"SUPERSEDED", "VOID"}:
+        raise ApiError(409, "INACTIVE_FACT", "Use the current trade revision")
+    identifier = row["id"]
+    origin = con.execute(
+        text("SELECT 1 FROM trade_audit_origins WHERE trade_id=:id"), {"id": identifier}
+    ).first()
+    if (
+        origin is None
+        and con.execute(
+            text("""
+            SELECT 1 FROM audit_events WHERE entity_type='trade' AND entity_id=:id
+            AND action=:action LIMIT 1
+        """),
+            {"id": identifier, "action": "CREATE" if row["revision"] == 1 else "REVISE"},
+        ).first()
+        is None
+    ):
+        raise ApiError(
+            409,
+            "NEEDS_REVIEW",
+            "The original trade audit is missing; review is required before correction",
+        )
+    try:
+        trade_audit.capture_before_retire(con, auth.owner.id, UUID(identifier), UUID(request_id))
+    except ValueError:
+        raise ApiError(
+            503, "TRADE_AUDIT_UNAVAILABLE", "Trade audit history is unavailable"
+        ) from None
 
 
 def _prepare(con: Connection, auth: Auth, body: TradeCreate) -> dict[str, Any]:
@@ -250,6 +291,7 @@ def create_trade(con: Connection, auth: Auth, body: TradeCreate, request_id: str
         after=result.model_dump(mode="json"),
         reason=body.override_reason or body.note,
     )
+    _remember_trade_origin(con, auth, identifier, request_id)
     return result
 
 
@@ -259,6 +301,7 @@ def revise_trade(
     before = owned_trade(con, str(auth.owner.id), identifier)
     check_version(before["version"], version)
     values = _prepare(con, auth, body)
+    _capture_trade_origin(con, auth, before, request_id)
     _retire(con, before, "SUPERSEDED")
     cash_entries = _reverse_settlement(con, before, body.reason)
     revised = str(uuid4())
@@ -289,6 +332,7 @@ def revise_trade(
         after=result.model_dump(mode="json"),
         reason=body.reason,
     )
+    _remember_trade_origin(con, auth, revised, request_id)
     return result
 
 
@@ -297,6 +341,7 @@ def void_trade(
 ) -> Success:
     before = owned_trade(con, str(auth.owner.id), identifier)
     check_version(before["version"], version)
+    _capture_trade_origin(con, auth, before, request_id)
     _retire(con, before, "VOID")
     cash_entries = _reverse_settlement(con, before, reason)
     _finalize(con, auth, [before], cash_entries, request_id)

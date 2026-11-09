@@ -1,6 +1,7 @@
 """Internal trade-audit origin checks never authenticate a caller or change ledger facts."""
 
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -11,6 +12,7 @@ from sqlalchemy import Connection, Engine
 
 from spm_api import trade_audit
 from spm_api.audit import canonical, digest
+from spm_api.config import Settings
 from spm_api.db import unit_of_work
 from spm_api.providers.configuration import ProviderConfigurationStore
 from spm_api.providers.http import ProviderHTTP
@@ -21,6 +23,16 @@ from tests.test_trades import book as book
 from tests.test_trades import payload
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture(autouse=True)
+def legacy_trade_writer(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings, tmp_path: Path
+) -> None:
+    """Exercise the primitive in a verified temporary DB without automatic capture."""
+    assert settings.database_path.resolve().is_relative_to(tmp_path.resolve())
+    monkeypatch.setattr("spm_api.trade_service._remember_trade_origin", lambda *args: None)
+    monkeypatch.setattr("spm_api.trade_service._capture_trade_origin", lambda *args: None)
 
 
 def identities(

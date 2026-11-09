@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -12,6 +13,7 @@ from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from spm_api.audit import audit, canonical, digest
+from spm_api.config import Settings
 from spm_api.db import migration_config, schema_head, unit_of_work
 from spm_api.trade_service import as_trade
 from tests.helpers import create, database_snapshot, version_headers
@@ -28,6 +30,16 @@ TABLE = "trade_audit_origins"
 ACTION = "MIGRATE_TRADE_AUDIT_ORIGINS"
 REASON = "Preserve the original synthetic trade audit inputs."
 pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture(autouse=True)
+def legacy_trade_writer(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings, tmp_path: Path
+) -> None:
+    """Exercise storage in an exclusive temporary DB without automatic writer capture."""
+    assert settings.database_path.resolve().is_relative_to(tmp_path.resolve())
+    monkeypatch.setattr("spm_api.trade_service._remember_trade_origin", lambda *args: None)
+    monkeypatch.setattr("spm_api.trade_service._capture_trade_origin", lambda *args: None)
 
 
 @pytest.fixture
@@ -555,7 +567,7 @@ async def test_scheduled_original_status_can_be_preserved_without_fx_or_cash(
         assert dict(con.exec_driver_sql(f"SELECT * FROM {TABLE}").mappings().one()) == values
 
 
-async def test_writer_does_not_automatically_capture_or_recover_old_origin(
+async def test_legacy_writer_does_not_automatically_capture_or_recover_old_origin(
     client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
 ) -> None:
     original = await create(client, "trades", payload(book))

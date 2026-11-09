@@ -213,9 +213,10 @@ without changing existing trade rows, cash, receipts or audit events. It brings
 current schema to 56 business tables. A separate table matters because historical
 trade retirement audits hash the entire old trade row; adding a trade column
 would change the set of values needed to reconstruct those existing fingerprints.
-No origin is automatically backfilled, captured or recovered by this migration or
-by the current trade writer. The recorded-history reader still reports the
-retired-trade limitation above, even if a row is inserted into this table.
+No origin is automatically backfilled or recovered by this migration. The trade
+writer now captures new physical rows and eligible current legacy rows, but the
+recorded-history reader still reports the retired-trade limitation above even
+when a matching origin is present.
 
 An origin can retain a physical trade's claimed original status and `updated_at`,
 its owner and exact CREATE/REVISE audit identity. Current-row claims must match
@@ -230,11 +231,16 @@ when a claim was captured or that its prerequisites shared a transaction. In
 particular, a well-shaped recovered timestamp can still be false. The mode named
 `AT_CREATION` is a stored claim, not database proof of capture timing.
 
-A future trade writer must verify the original audited DTO before recording it,
-and capture the original and all financial changes atomically before retiring a
-still-current trade. Recovery of an already-retired trade needs retained original
-response evidence, immutable field mirrors and an exact match to the old audit
-digest, with a separately audited authorized workflow. An expired or missing
+The trade writer verifies the original audited DTO before recording it, and
+captures the original and financial changes atomically before retiring a
+still-current trade. An older current trade with no original creation/revision
+audit returns 409 `NEEDS_REVIEW`; an inconsistent audit or stored origin returns
+503 `TRADE_AUDIT_UNAVAILABLE`. These failures do not change the fact, cash,
+origin, audit, idempotency or invalidation. A protected review/recovery workflow
+for the missing evidence remains unfinished, so the operator cannot yet resolve
+such a blocked correction in the app. Recovery of an already-retired trade needs
+retained original response evidence, immutable field mirrors and an exact match
+to the old audit digest, with a separately audited authorized workflow. An expired or missing
 response is not evidence: leave the history unverified and require explicit
 review rather than inventing a timestamp or rewriting the trade/audit. A stored
 origin is not by itself financial adoption or an eligibility authorization.
@@ -262,10 +268,14 @@ repair, provider request or private-file read. A `RETAINED_RESPONSE` SQL claim i
 not accepted by this helper because an authenticated recovery workflow has not
 been installed. Missing origins remain missing, not guessed.
 
-Neither the existing trade writer nor the dividend eligibility reader calls this
-helper yet. Consequently, new HTTP trade operations do not automatically capture
-origins and `RETIRED_TRADE_HISTORY_UNVERIFIED` remains unchanged. Installing the
-helper alone does not close the old-trade limitation or enable an economic writer.
+The protected trade writer now invokes this helper in the same transaction as
+trade creation, revision or void, alongside settlement, audit, idempotency and
+invalidation. Existing verified current rows without origins receive a correlated
+pre-retirement capture; completed historical HTTP replays remain zero-write.
+The dividend eligibility reader does not use the helper yet, so
+`RETIRED_TRADE_HISTORY_UNVERIFIED` remains unchanged. The helper and writer do
+not by themselves validate the whole retained chain, recover already-retired
+legacy evidence or enable an economic projection.
 
 ## Required future protected writer and projection work
 
@@ -301,10 +311,10 @@ using that workflow. No receipt posting or void HTTP endpoint is installed yet.
 
 ## Verification
 
-`uv run pytest tests/test_trade_audit_origin_migration.py tests/test_trade_audit_service.py`
+`uv run pytest tests/test_trade_audit_origin_migration.py tests/test_trade_audit_service.py tests/test_trade_origin_writer.py tests/test_trade_audit_legacy_guard.py`
 additionally exercises upgrade preservation, atomic rollback, scoped immutable
-origin storage, canonical origin verification, concurrency and the distinction
-between valid-shaped stored metadata and a verified hash.
+origin storage, canonical origin verification, actual trade-write transactions,
+concurrency and the distinction between valid-shaped stored metadata and a verified hash.
 The test does not turn SQL metadata into an authorized recovery workflow.
 
 `uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`

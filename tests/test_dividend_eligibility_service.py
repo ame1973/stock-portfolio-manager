@@ -3,6 +3,7 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -12,6 +13,8 @@ import pytest
 from sqlalchemy import Connection, Engine
 
 import spm_api.dividend_eligibility_service as service
+import spm_api.trade_service as trade_service
+from spm_api.config import Settings
 from spm_api.db import unit_of_work
 from spm_api.providers.configuration import ProviderConfigurationStore
 from spm_api.providers.http import ProviderHTTP
@@ -20,6 +23,12 @@ from tests.test_transfers import graph as graph
 from tests.test_transfers import stock_body, trade_body
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture(autouse=True)
+def verified_temporary_database(settings: Settings, tmp_path: Path) -> None:
+    """Keep synthetic corruption and rollback tests within pytest's temporary root."""
+    assert settings.database_path.resolve().is_relative_to(tmp_path.resolve())
 
 
 def arguments(graph: dict[str, Any], **changes: Any) -> dict[str, Any]:
@@ -843,14 +852,20 @@ async def test_tampered_current_terms_cannot_become_new_recorded_shares(
 
 
 async def test_missing_current_fact_audit_never_counts_as_authorized_history(
-    client: httpx.AsyncClient, engine: Engine, graph: dict[str, Any]
+    client: httpx.AsyncClient, engine: Engine, graph: dict[str, Any], tmp_path: Path
 ) -> None:
-    trade = await create(client, "trades", trade_body(graph))
-    with corrupt(engine, "audit_events") as con:
-        con.exec_driver_sql(
-            "DELETE FROM audit_events WHERE entity_type='trade' AND entity_id=?", (trade["id"],)
-        )
+    # Construct a legacy-style synthetic fact without changing any existing audit record.
+    assert engine.url.database is not None
+    assert Path(engine.url.database).resolve().is_relative_to(tmp_path.resolve())
+    with (
+        patch.object(trade_service, "audit"),
+        patch.object(trade_service, "_remember_trade_origin"),
+    ):
+        await create(client, "trades", trade_body(graph))
+    before = database_snapshot(engine)
+    with unit_of_work(engine) as con:
         expect_unavailable(con, graph)
+    assert database_snapshot(engine) == before
 
 
 @pytest.mark.parametrize("kind", ["TRANSFER", "ACTION"])
