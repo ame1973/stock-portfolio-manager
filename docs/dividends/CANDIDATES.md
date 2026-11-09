@@ -114,11 +114,16 @@ replay of the exact same already-audited internal revision returns its original
 historical comparison without writes after later action changes; different content,
 owner, request or creation time cannot reuse its revision identity.
 
-Reads validate canonical stored fields, association digest, the original source
-and retained basis, the current revision's exact audit and its predecessor snapshot.
-The candidate's retained revisions must have one owner/security and a contiguous
-version sequence; a corrupt later owner cannot revive an earlier version. A corrupt
-or unaudited row fails closed without repair or disclosure. The returned
+Reads validate every retained revision's canonical stored fields and exact audit
+chain, and validate the selected revision's original source and retained basis.
+The candidate's revisions must have one owner/security and a contiguous version
+sequence; a corrupt earlier audit cannot be hidden by a later revision, nor can a
+corrupt later audit revive an earlier version. New current use and idempotent
+historical replay also check the whole audit chain. A corrupt or unaudited row
+fails closed without repair or disclosure. This currently scans all retained
+revisions for each candidate read, so a history page can repeat that work; use
+verified checkpoints or batched validation if measured history sizes warrant it,
+not a shortcut that skips audits. The returned
 comparison is **historical**, not a claim that the basis is still current or that a
 payment exists. `require_current` checks the latest explicit version, OPEN state,
 source and full current basis/action scope inside a writer; it does not by itself

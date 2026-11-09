@@ -856,3 +856,38 @@ def test_corrupt_whole_history_never_reissues_a_historical_current_grant(
         with pytest.raises(candidates.CandidateError, match="^CANDIDATE_HISTORY_UNAVAILABLE$"):
             save(engine, first, request_id=request)
     assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize("corrupt_version", [1, 3])
+def test_any_corrupt_candidate_audit_blocks_historical_reads_replay_and_new_use(
+    engine: Engine, basis: SplitBasisAssertion, corrupt_version: int
+) -> None:
+    first, request = decision(basis), uuid4()
+    save(engine, first, request_id=request)
+    second = first.model_copy(update={"id": uuid4(), "revision_no": 2})
+    third = first.model_copy(update={"id": uuid4(), "revision_no": 3})
+    save(engine, second, at=AT + timedelta(seconds=1))
+    save(engine, third, at=AT + timedelta(seconds=2))
+    target = first if corrupt_version == 1 else third
+    with unit_of_work(engine, write=True) as con:
+        con.exec_driver_sql("DROP TRIGGER trg_audit_event_no_update")
+        con.exec_driver_sql(
+            "UPDATE audit_events SET after_sha256=? WHERE entity_id=? "
+            "AND action='DIVIDEND_CANDIDATE_REVISED'",
+            ("a" * 64, str(target.id)),
+        )
+    before = database_snapshot(engine)
+    for version in (None, 1, 2, 3):
+        with pytest.raises(candidates.CandidateError, match="^CANDIDATE_HISTORY_UNAVAILABLE$"):
+            get(engine, first.candidate_id, version=version)
+    with pytest.raises(candidates.CandidateError, match="^CANDIDATE_HISTORY_UNAVAILABLE$"):
+        current(engine, first.candidate_id, 3)
+    with pytest.raises(candidates.CandidateError, match="^CANDIDATE_HISTORY_UNAVAILABLE$"):
+        save(engine, first, request_id=request)
+    with pytest.raises(candidates.CandidateError, match="^CANDIDATE_HISTORY_UNAVAILABLE$"):
+        save(
+            engine,
+            third.model_copy(update={"id": uuid4(), "revision_no": 4}),
+            at=AT + timedelta(seconds=3),
+        )
+    assert database_snapshot(engine) == before

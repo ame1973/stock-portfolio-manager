@@ -172,6 +172,15 @@ def _history_scope(con: Connection, owner: UUID, identifier: UUID) -> bool:
         or row.first_security != row.last_security
     ):
         raise CandidateError("CANDIDATE_HISTORY_UNAVAILABLE")
+    # ponytail: verify the retained chain; add verified checkpoints if histories grow large.
+    revisions = con.execute(
+        text(
+            "SELECT * FROM dividend_candidate_revisions WHERE candidate_id=:id ORDER BY revision_no"
+        ),
+        {"id": str(identifier)},
+    ).mappings()
+    for revision in revisions:
+        _checked(con, revision)
     return True
 
 

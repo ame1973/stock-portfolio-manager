@@ -832,6 +832,45 @@ async def test_corrupt_latest_owner_never_revives_an_older_candidate_version(
     assert database_snapshot(engine) == before
 
 
+@pytest.mark.parametrize("corrupt_version", [1, 2])
+async def test_corrupt_candidate_audit_anywhere_blocks_http_reads_and_replays(
+    candidate_book: dict[str, Any], client: httpx.AsyncClient, engine: Engine, corrupt_version: int
+) -> None:
+    body = payload(candidate_book)
+    create_headers, revision_headers = write_headers(client), version_headers(client, 1)
+    first = await client.post(PATH, json=body, headers=create_headers)
+    assert first.status_code == 201
+    path = first.headers["location"]
+    second = await client.patch(path, json=body, headers=revision_headers)
+    assert second.status_code == 200
+    damaged = first if corrupt_version == 1 else second
+    with unit_of_work(engine, write=True) as con:
+        guard = con.exec_driver_sql(
+            "SELECT sql FROM sqlite_schema WHERE name='trg_audit_event_no_update'"
+        ).scalar_one()
+        con.exec_driver_sql("DROP TRIGGER trg_audit_event_no_update")
+        con.exec_driver_sql(
+            "UPDATE audit_events SET after_sha256=? WHERE entity_id=? "
+            "AND action='DIVIDEND_CANDIDATE_REVISED'",
+            ("a" * 64, damaged.json()["revision_id"]),
+        )
+        con.exec_driver_sql(guard)
+    before = database_snapshot(engine)
+    responses = [await client.get(url) for url in (PATH, path, path + "/revisions")]
+    responses.extend(
+        [
+            await client.post(PATH, json=body, headers=create_headers),
+            await client.patch(path, json=body, headers=revision_headers),
+            await client.patch(path, json=body, headers=version_headers(client, 2)),
+        ]
+    )
+    for response in responses:
+        assert response.status_code == 503
+        assert response.json()["code"] == "CANDIDATE_HISTORY_UNAVAILABLE"
+        safe(response)
+    assert database_snapshot(engine) == before
+
+
 async def test_exact_maximum_zero_and_missing_terms_remain_separate_without_evidence(
     candidate_book: dict[str, Any], client: httpx.AsyncClient, engine: Engine
 ) -> None:
