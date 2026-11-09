@@ -48,6 +48,38 @@ Receipts from all earlier revisions are included. A verification that does not
 change terms, or a receipt already voided, does not itself create a difference.
 This check does **not** calculate a reconciliation or rebuild any entitlement.
 
+## Audited historical reader
+
+The internal `dividend_event_service.get` reads a managed event only for the
+supplied owner and does not authenticate that owner. For a retained version it
+validates the whole revision chain, including later revisions, before returning
+the requested historical record. Missing, inconsistent or tampered decisions,
+links, audit fingerprints, candidate histories or original source/basis records
+fail closed with a fixed error; the reader never repairs them. Versions must be
+contiguous integers, timestamps canonical UTC and chronological, and each
+physical revision must have its own correlated audit.
+
+The revision audit's canonical before/after values contain the stable event and
+physical revision IDs, revision number, exact terms, review status, manual lock,
+decision kind, candidate revision ID, sorted evidence field links and creation
+time. The private citation and source URL contribute a separate canonical hash
+rather than their plaintext to that fingerprint. Owner, request and reason also
+must match the audit row. A candidate decision is checked against its original
+audited candidate and assessment, including each source's supporting fields.
+Manual decisions cannot manufacture corroboration or verification; unresolved
+adjustment terms remain incomplete, and verification is a separate explicit
+locked decision. Verification and withdrawal preserve the prior terms, while
+withdrawal also preserves the prior lock. Only an explicit manual revision can
+follow a withdrawal.
+
+This is a historical integrity check, not a current-use grant: a later candidate
+dismissal or action correction leaves a valid historical record readable, but
+new adoption must independently revalidate the current candidate and recorded
+basis/action scope. Internal records and citations are not public DTOs; future
+routes must authenticate the caller and withhold private URL details. The reader
+performs no writes, provider requests, credential-file access, entitlement
+calculation or receipt posting. No canonical event HTTP endpoint is installed.
+
 ## Required future writer and projection work
 
 These constraints are defense in depth, not authentication, authorization,
@@ -82,10 +114,11 @@ using that workflow. No receipt posting or void HTTP endpoint is installed yet.
 
 ## Verification
 
-`uv run pytest tests/test_dividend_event_migration.py` checks migration preservation
-and rollback, source and candidate scope, publication audits, manual locks,
-immutable history, exact scaled values, audited receipt reversal, competing
-writers and per-account review across revisions. These are synthetic native-SQL
-checks, not HTTP authorization, provider coverage, verified documents, receipt
-projection calculation, live-provider or NAS acceptance. Downgrade refuses to
-delete history; restore a validated pre-upgrade backup instead.
+`uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py`
+checks migration preservation and rollback, source and candidate scope, publication
+audits, manual locks, immutable history, whole-chain corruption detection, exact
+scaled values, audited receipt reversal, competing writers and per-account review
+across revisions. These are synthetic database and internal-library checks, not
+HTTP authorization, provider coverage, verified documents, receipt projection
+calculation, live-provider or NAS acceptance. Downgrade refuses to delete history;
+restore a validated pre-upgrade backup instead.
