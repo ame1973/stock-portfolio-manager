@@ -267,21 +267,51 @@ when a claim was first captured.
 A read checks the owner, account/broker and ledger-sequence scope, immutable trade
 values, exact original DTO fingerprint, capture metadata and any capture audit.
 It reconstructs the original raw-row `before_sha256` needed to compare a later
-revision or void audit. It does **not** itself validate that successor/void audit
-or the whole trade chain, authenticate an HTTP session, establish complete
-ownership history or authorize financial adoption. Hashes are not signatures.
-A malformed or inconsistent origin fails with a fixed private error; there is no
-repair, provider request or private-file read. A `RETAINED_RESPONSE` SQL claim is
-not accepted by this helper because an authenticated recovery workflow has not
-been installed. Missing origins remain missing, not guessed.
+revision or void audit. Recovered origins also recheck their immediate successor
+or void audit; other origins and the whole trade chain still require the caller's
+separate checks. None of these checks authenticate an HTTP session, establish
+complete ownership history or authorize financial adoption. Hashes are not
+signatures. A malformed or inconsistent origin fails with a fixed private error;
+there is no provider request or private-file read.
 
-The protected trade writer now invokes this helper in the same transaction as
+The protected trade writer invokes this helper in the same transaction as
 trade creation, revision or void, alongside settlement, audit, idempotency and
 invalidation. Existing verified current rows without origins receive a correlated
 pre-retirement capture; completed historical HTTP replays remain zero-write.
 The dividend eligibility reader checks each available origin, compares retired
-ones with their actual retirement audit, and labels absent evidence as unverified. Neither
-component recovers already-retired legacy evidence or enables an economic projection.
+ones with their actual retirement audit, and labels absent evidence as unverified.
+Neither component enables an economic projection.
+
+## Internal retained-response recovery
+
+`recover_from_response` accepts an explicitly supplied original `TradeRecord` only
+for a retired owned physical trade. It compares every public response field with
+the immutable stored fields reconstructed at the claimed original status and
+timestamp, checks the old CREATE/REVISE after fingerprint, and verifies the raw
+predecessor fingerprint against the actual successor REVISE or terminal VOID
+audit. Missing, unrelated or conflicting evidence is rejected without inventing a
+timestamp or modifying any old trade, cash entry or audit. An owner, transaction,
+reason and request identity are required; one new recovery audit and immutable
+origin are appended in the caller's writer transaction. The audit binds both the
+original response fingerprint and a digest of the supplied reason. Repeating the
+same internal request returns its original result without writes; a different
+request cannot replace an existing origin.
+
+Recovery changes the recorded audit scope even though the economic facts are
+unchanged. The same transaction increments the data revision and appends an
+invalidation for every owned portfolio in the trade root, from the earliest
+recorded trade date in that root. This matters when a later correction moved a
+trade to a different portfolio or security. Any failure must roll back the audit,
+origin and all invalidations together. A valid-shaped SQL claim or audit cannot
+prove that an authenticated user submitted a response; retained hashes are not
+signatures or external statements. Missing old creation audits remain unresolved.
+
+This is an **internal primitive**, not a protected HTTP route, user interface or
+authorization workflow. The caller must authenticate and enforce session, CSRF,
+reasoned intent and atomic idempotency before exposing it. No old origin is
+recovered automatically, and the operator cannot yet use this helper through
+the app. Missing evidence stays unverified; no entitlement, receipt or verified
+ownership is created.
 
 ## Required future protected writer and projection work
 
@@ -322,6 +352,12 @@ additionally exercises upgrade preservation, atomic rollback, scoped immutable
 origin storage, canonical origin verification, actual trade-write transactions,
 concurrency and the distinction between valid-shaped stored metadata and a verified hash.
 The test does not turn SQL metadata into an authorized recovery workflow.
+
+`uv run pytest tests/test_trade_audit_recovery.py` exercises retained-response
+matching, changed or missing audits, multiple retired revisions, cross-portfolio
+invalidation, competing recovery requests and rollback of the inner savepoint and
+outer transaction. It uses isolated synthetic databases and does not establish an
+HTTP authorization or an external source of ownership evidence.
 
 `uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent

@@ -1,7 +1,7 @@
 """Validate and retain original trade audit inputs inside caller-owned transactions."""
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -9,10 +9,12 @@ from sqlalchemy import Connection, RowMapping, text
 
 from spm_api.audit import audit, canonical, digest, stamp
 from spm_api.decimal_types import INT64_MAX, INT64_MIN
+from spm_api.master_service import invalidate_portfolio
 from spm_api.trade_codec import as_trade
+from spm_api.trade_models import TradeRecord
 
 OriginalStatus = Literal["ACTIVE", "DRAFT_SCHEDULED", "PENDING_FX"]
-CaptureMode = Literal["AT_CREATION", "BEFORE_RETIRE"]
+CaptureMode = Literal["AT_CREATION", "BEFORE_RETIRE", "RETAINED_RESPONSE"]
 CAPTURE_REASON = "Preserve the fingerprint-matched trade state before retirement."
 
 
@@ -197,16 +199,118 @@ def _creation(con: Connection, owner: UUID, trade: RowMapping) -> RowMapping:
 
 
 def _payload(
-    trade: RowMapping, creation: RowMapping, owner: UUID, status: str, updated: str
+    trade: RowMapping,
+    creation: RowMapping,
+    owner: UUID,
+    status: str,
+    updated: str,
+    mode: Literal["BEFORE_RETIRE", "RETAINED_RESPONSE"] = "BEFORE_RETIRE",
+    reason: str | None = None,
 ) -> dict[str, str]:
-    return {
+    payload = {
         "trade_id": trade["id"],
         "owner_id": str(owner),
         "creation_audit_id": creation["id"],
         "original_status": status,
         "original_updated_at": updated,
-        "capture_mode": "BEFORE_RETIRE",
+        "capture_mode": mode,
     }
+    if mode == "RETAINED_RESPONSE":
+        if not _reason(reason):
+            raise ValueError("Invalid recovery reason")
+        payload["retained_response_sha256"] = creation["after_sha256"]
+        payload["reason_sha256"] = digest(canonical(reason))
+    return payload
+
+
+def _reason(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and 10 <= len(value) <= 1000
+        and value == value.strip()
+        and "\0" not in value
+    )
+
+
+def _retirement(con: Connection, owner: UUID, trade: RowMapping, before_hash: str) -> None:
+    successors = (
+        con.execute(text("SELECT id FROM trades WHERE supersedes_id=:id"), {"id": trade["id"]})
+        .scalars()
+        .all()
+    )
+    if trade["status"] == "SUPERSEDED":
+        if len(successors) != 1:
+            raise ValueError("Invalid trade successor")
+        successor = _trade(con, owner, _identity(successors[0]))
+        if (
+            successor is None
+            or successor["root_id"] != trade["root_id"]
+            or successor["created_sequence"] != trade["created_sequence"]
+            or successor["revision"] != trade["revision"] + 1
+            or _creation(con, owner, successor)["before_sha256"] != before_hash
+        ):
+            raise ValueError("Inconsistent trade successor")
+    elif trade["status"] == "VOID":
+        entries = (
+            con.execute(
+                text(
+                    "SELECT * FROM audit_events WHERE entity_type='trade' "
+                    "AND entity_id=:id AND action='VOID'"
+                ),
+                {"id": trade["id"]},
+            )
+            .mappings()
+            .all()
+        )
+        if successors or len(entries) != 1:
+            raise ValueError("Invalid trade void")
+        entry = entries[0]
+        _identity(entry["id"])
+        _identity(entry["request_id"])
+        _time(entry["created_at"])
+        if (
+            entry["owner_id"] != str(owner)
+            or not _reason(entry["reason"])
+            or entry["before_sha256"] != before_hash
+            or entry["after_sha256"]
+            != digest(canonical({"status": "VOID", "version": trade["version"]}))
+        ):
+            raise ValueError("Inconsistent trade void")
+    else:
+        raise ValueError("Trade is not retired")
+
+
+def _invalidate_root(con: Connection, owner: UUID, trade: RowMapping) -> None:
+    rows = (
+        con.execute(
+            text("""
+        SELECT t.portfolio_id,t.trade_date,p.owner_id,p.data_revision
+        FROM trades t LEFT JOIN portfolios p ON p.id=t.portfolio_id WHERE t.root_id=:root
+    """),
+            {"root": trade["root_id"]},
+        )
+        .mappings()
+        .all()
+    )
+    portfolios: set[str] = set()
+    days: list[str] = []
+    for row in rows:
+        _identity(row["portfolio_id"])
+        day = row["trade_date"]
+        if (
+            row["owner_id"] != str(owner)
+            or type(row["data_revision"]) is not int
+            or not 0 <= row["data_revision"] < INT64_MAX
+            or not isinstance(day, str)
+            or date.fromisoformat(day).isoformat() != day
+        ):
+            raise ValueError("Invalid trade-root scope")
+        portfolios.add(row["portfolio_id"])
+        days.append(day)
+    if not portfolios:
+        raise ValueError("Missing trade-root scope")
+    for portfolio in sorted(portfolios):
+        invalidate_portfolio(con, portfolio, trade["id"], "TRADE_AUDIT_ORIGIN_RECOVERED", min(days))
 
 
 def _validate(
@@ -242,15 +346,20 @@ def _validate(
             or captured != creation["created_at"]
         ):
             raise ValueError("Inconsistent original capture")
-    elif mode == "BEFORE_RETIRE":
+    elif mode in ("BEFORE_RETIRE", "RETAINED_RESPONSE"):
         capture_id = _identity(stored["capture_audit_id"])
+        action = (
+            "TRADE_AUDIT_ORIGIN_CAPTURED"
+            if mode == "BEFORE_RETIRE"
+            else "TRADE_AUDIT_ORIGIN_RECOVERED"
+        )
         captures = (
             con.execute(
                 text("""
             SELECT * FROM audit_events WHERE entity_type='trade_audit_origin' AND entity_id=:id
-            AND action='TRADE_AUDIT_ORIGIN_CAPTURED'
+            AND action=:action
         """),
-                {"id": trade["id"]},
+                {"id": trade["id"], "action": action},
             )
             .mappings()
             .all()
@@ -263,14 +372,21 @@ def _validate(
             or entry["owner_id"] != str(owner)
             or entry["request_id"] != str(request)
             or entry["created_at"] != captured
-            or entry["reason"] != CAPTURE_REASON
+            or (
+                entry["reason"] != CAPTURE_REASON
+                if mode == "BEFORE_RETIRE"
+                else not _reason(entry["reason"])
+            )
             or entry["before_sha256"] is not None
             or entry["after_sha256"]
-            != digest(canonical(_payload(trade, creation, owner, status, updated)))
+            != digest(
+                canonical(_payload(trade, creation, owner, status, updated, mode, entry["reason"]))
+            )
         ):
             raise ValueError("Inconsistent capture audit")
+        if mode == "RETAINED_RESPONSE":
+            _retirement(con, owner, trade, digest(canonical(before)))
     else:
-        # Recovery is not installed; a valid-shaped SQL claim is not evidence.
         raise ValueError("Unsupported capture mode")
     return TradeAuditOrigin(
         owner,
@@ -301,6 +417,134 @@ def get_origin(con: Connection, owner: UUID, identifier: UUID) -> TradeAuditOrig
             .first()
         )
         return _validate(con, owner, trade, stored) if stored is not None else None
+    except TradeAuditError:
+        raise
+    except (ValueError, TypeError, KeyError, OverflowError):
+        raise TradeAuditError("TRADE_AUDIT_INCONSISTENT") from None
+
+
+def recover_from_response(
+    con: Connection,
+    owner: UUID,
+    identifier: UUID,
+    response: TradeRecord,
+    request_id: UUID,
+    reason: str,
+) -> TradeAuditOrigin:
+    """Retain a matched retired origin; the caller must authenticate and commit atomically."""
+    _writer(con)
+    if (
+        not isinstance(request_id, UUID)
+        or not isinstance(response, TradeRecord)
+        or not _reason(reason)
+    ):
+        raise TradeAuditError("INVALID_TRADE_AUDIT_SCOPE")
+    with con.begin_nested():
+        return _recover_response(con, owner, identifier, response, request_id, reason)
+
+
+def _recover_response(
+    con: Connection,
+    owner: UUID,
+    identifier: UUID,
+    response: TradeRecord,
+    request_id: UUID,
+    reason: str,
+) -> TradeAuditOrigin:
+    try:
+        trade = _trade(con, owner, identifier)
+        if trade is None:
+            raise TradeAuditError("TRADE_AUDIT_NOT_FOUND")
+        claimed = TradeRecord.model_validate(dict(response))
+        if (
+            trade["status"] not in ("SUPERSEDED", "VOID")
+            or claimed.id != identifier
+            or claimed.status not in ("ACTIVE", "DRAFT_SCHEDULED", "PENDING_FX")
+            or claimed.version != 1
+        ):
+            raise ValueError("Invalid retained response")
+        updated = _time(claimed.updated_at)
+        creation = _creation(con, owner, trade)
+        expected = as_trade(trade).model_copy(
+            update={"status": claimed.status, "updated_at": updated, "version": 1}
+        )
+        if (
+            claimed != expected
+            or digest(canonical(expected.model_dump(mode="json"))) != creation["after_sha256"]
+        ):
+            raise ValueError("Retained response does not match")
+        before = dict(trade)
+        before.update(status=claimed.status, updated_at=updated, version=1)
+        _retirement(con, owner, trade, digest(canonical(before)))
+        existing = get_origin(con, owner, identifier)
+        if existing is not None:
+            if (
+                existing.capture_mode != "RETAINED_RESPONSE"
+                or existing.capture_request_id != request_id
+                or con.execute(
+                    text("SELECT reason FROM audit_events WHERE id=:id"),
+                    {"id": str(existing.capture_audit_id)},
+                ).scalar_one()
+                != reason
+            ):
+                raise TradeAuditError("TRADE_AUDIT_ORIGIN_EXISTS")
+            return existing
+        if (
+            con.execute(
+                text(
+                    "SELECT 1 FROM audit_events WHERE entity_type='trade_audit_origin' "
+                    "AND entity_id=:id AND action='TRADE_AUDIT_ORIGIN_RECOVERED'"
+                ),
+                {"id": str(identifier)},
+            ).first()
+            is not None
+        ):
+            raise ValueError("Unassociated recovery audit")
+        audit(
+            con,
+            str(owner),
+            "trade_audit_origin",
+            str(identifier),
+            "TRADE_AUDIT_ORIGIN_RECOVERED",
+            request_id=str(request_id),
+            after=_payload(
+                trade, creation, owner, claimed.status, updated, "RETAINED_RESPONSE", reason
+            ),
+            reason=reason,
+        )
+        entry = (
+            con.execute(
+                text(
+                    "SELECT id,created_at FROM audit_events WHERE entity_type='trade_audit_origin' "
+                    "AND entity_id=:id AND action='TRADE_AUDIT_ORIGIN_RECOVERED'"
+                ),
+                {"id": str(identifier)},
+            )
+            .mappings()
+            .one()
+        )
+        con.execute(
+            text("""
+            INSERT INTO trade_audit_origins(trade_id,owner_id,creation_audit_id,original_status,
+                original_updated_at,capture_mode,capture_request_id,capture_audit_id,captured_at)
+            VALUES (:trade,:owner,:creation,:status,:updated,'RETAINED_RESPONSE',
+                    :request,:audit,:captured)
+        """),
+            {
+                "trade": str(identifier),
+                "owner": str(owner),
+                "creation": creation["id"],
+                "status": claimed.status,
+                "updated": updated,
+                "request": str(request_id),
+                "audit": entry["id"],
+                "captured": entry["created_at"],
+            },
+        )
+        result = get_origin(con, owner, identifier)
+        assert result is not None
+        _invalidate_root(con, owner, trade)
+        return result
     except TradeAuditError:
         raise
     except (ValueError, TypeError, KeyError, OverflowError):

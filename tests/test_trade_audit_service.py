@@ -581,7 +581,7 @@ async def test_revised_fact_cannot_be_relabelled_as_its_own_root(
             trade_audit.get_origin(con, owner, identifier)
 
 
-async def test_retained_response_sql_claim_is_not_an_installed_recovery_workflow(
+async def test_unrelated_sql_recovery_claim_is_not_a_matching_audit(
     client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
 ) -> None:
     from tests.provider_evidence_helpers import insert
