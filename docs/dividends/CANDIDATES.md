@@ -85,17 +85,44 @@ later actions do not rewrite earlier candidate or basis history.
 
 This SQL schema is **not** actor/session authorization, a recorded creation audit,
 cryptographic recomputation of the source or association hash, or proof that a
-basis declaration still matches current actions. A future protected writer must
-load original v1 sources, validate canonical content and fingerprints, perform the
-explicit actor/match decision, require current basis/action scope where used and
-commit its audit/idempotency atomically. Historical reads and completed retries
-must preserve original snapshots after legitimate later changes. Bare SQL rows
-without that validated audit must not be treated as accepted decisions. No worker,
-controller or public route currently writes or consumes the candidate table.
+basis declaration still matches current actions. Bare SQL rows without a validated
+matching audit must not be treated as accepted decisions. No worker or public
+route currently writes or consumes the candidate table.
 
 Upgrade retains prior rows and adds one schema audit per existing owner; a repeated
 upgrade is a no-op. Late DDL/audit failures roll back the upgrade. Downgrade refuses
 to delete candidate history: restore a validated backup instead.
+
+## Internal audited decisions
+
+`spm_api.dividend_candidate_service` provides an internal `save`, historical `get`
+and writer-only `require_current`. A caller explicitly supplies the candidate and
+revision UUIDs, observed next version, proposed terms, each source/hash and reason,
+optional owned basis ID, owner UUID, request UUID and aware creation time. The
+controller revalidates these inputs, sorts and bounds the distinct associations,
+loads the original v1 source content and hash, and requires the exact current owned
+basis/action scope for every basis used in a new revision. It appends the revision
+and a request-correlated audit with before/after decision fingerprints in one short
+writer transaction. It does not infer any association from a hint or ex-date.
+
+The internal owner UUID is **not HTTP authentication**. A future protected route
+must mint the IDs, recheck the current session and CSRF inside its writer, fence the
+observed version, and commit the serialized idempotency response with the audit.
+The internal controller itself is not an API or an idempotency-key receipt. A
+replay of the exact same already-audited internal revision returns its original
+historical comparison without writes after later action changes; different content,
+owner, request or creation time cannot reuse its revision identity.
+
+Reads validate canonical stored fields, association digest, the original source
+and retained basis, the current revision's exact audit and its predecessor snapshot.
+A corrupt or unaudited row fails closed without repair or disclosure. The returned
+comparison is **historical**, not a claim that the basis is still current or that a
+payment exists. `require_current` checks the latest explicit version, OPEN state,
+source and full current basis/action scope inside a writer; it does not by itself
+verify or adopt terms. A new DISMISSED revision also checks any basis references it
+contains. If an old basis has become stale, a caller may explicitly omit that
+reference from the dismissal while retaining the original historical revision.
+No source sync, financial ledger, event, entitlement or receipt is changed.
 
 ## Checks and remaining work
 
@@ -110,9 +137,12 @@ is constructed by suggestion. This is not a live provider request.
 `uv run pytest tests/test_dividend_candidate_migration.py` checks empty upgrade,
 preservation/rollback, version fencing, immutable history, source/basis scope,
 nullable/exact financial values, malformed JSON and the byte/entry limits.
+`uv run pytest tests/test_dividend_candidate_service.py` additionally exercises the
+internal audited writer, historical replay, stale action fences, cross-owner and
+corrupt-history rejection, concurrent revisions, exact comparison, 100 explicit
+matches and an actual mock-HTTP source capture. It does not claim a live request.
 
-An authenticated audited candidate writer and historical reader, explicit current
-match decisions, review APIs/UI, canonical immutable event revisions/manual locks,
-entitlement rebuilding and actual receipts remain unfinished. A current observation
-or a hint is never a claim of confirmed income or a current-use grant for a
-split-basis declaration.
+An authenticated candidate API, review UI, canonical immutable event
+revisions/manual locks, entitlement rebuilding and actual receipts remain
+unfinished. A current observation, hint or internal candidate result is never a
+claim of confirmed income or a current-use grant for a split-basis declaration.

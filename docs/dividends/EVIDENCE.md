@@ -20,15 +20,16 @@ The security identity must equal the proposed security. Duplicate
 observation IDs, cross-security/candidate scope and invalid internal copies fail
 with `INVALID_DIVIDEND_COMPARISON`, without dumping source contents.
 
-These inputs are not authorization or evidence of an actual stored association.
-The [candidate revision schema](CANDIDATES.md#inert-candidate-revision-storage)
-can retain bounded snapshots but has no installed audited writer or consumer yet.
-A future protected controller must authorize the current actor, load/validate
-original immutable v1 assertions and their hashes, prove/retain the matching
-choice, fence its observed versions and commit audit/decisions atomically. Do not
-hash an enriched/redacted public DTO as the original assertion or treat a supplied
-UUID/reason as proof. No DB, private configuration, document or upstream call runs
-in the comparison. Static provider origin metadata is reused from the registry.
+These pure inputs are not authorization or evidence of an actual stored association.
+The [internal audited candidate controller](CANDIDATES.md#internal-audited-decisions)
+loads original immutable v1 assertions and their hashes, retains the explicit match
+choice, fences current basis/action versions and commits the decision and audit
+atomically. A future protected route must still authenticate the current session,
+check CSRF and commit its idempotency response in the same writer. Do not hash an
+enriched/redacted public DTO as the original assertion or treat a supplied UUID or
+reason as HTTP authorization. The pure comparison itself accesses no database,
+private configuration, document or upstream; it uses static provider origin
+metadata from the registry.
 
 Different distributions may share an ex-date. Nearby dates, equal DPS, a current
 ticker or source period alone do not prove the same distribution. This library
