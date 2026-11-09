@@ -7368,6 +7368,93 @@
         "title": "SyncDividendRequest",
         "type": "object"
       },
+      "TradeAuditOriginRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "default": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "MISSING",
+              "AT_CREATION",
+              "BEFORE_RETIRE",
+              "RETAINED_RESPONSE"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "scope": {
+            "const": "DATABASE_AUDIT_ORIGIN_ONLY",
+            "default": "DATABASE_AUDIT_ORIGIN_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "trade_id": {
+            "format": "uuid",
+            "title": "Trade Id",
+            "type": "string"
+          },
+          "trade_status": {
+            "enum": [
+              "ACTIVE",
+              "DRAFT_SCHEDULED",
+              "PENDING_FX",
+              "SUPERSEDED",
+              "VOID"
+            ],
+            "title": "Trade Status",
+            "type": "string"
+          },
+          "trade_version": {
+            "title": "Trade Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trade_id",
+          "trade_version",
+          "trade_status",
+          "origin",
+          "captured_at"
+        ],
+        "title": "TradeAuditOriginRecord",
+        "type": "object"
+      },
+      "TradeAuditRecovery": {
+        "additionalProperties": false,
+        "properties": {
+          "original_response": {
+            "$ref": "#/components/schemas/TradeRecord"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "original_response",
+          "reason"
+        ],
+        "title": "TradeAuditRecovery",
+        "type": "object"
+      },
       "TradeCreate": {
         "additionalProperties": false,
         "properties": {
@@ -21968,6 +22055,265 @@
           }
         ],
         "summary": "Revise Trade",
+        "tags": [
+          "Trades"
+        ]
+      }
+    },
+    "/api/v1/trades/{id}/audit-origin": {
+      "get": {
+        "operationId": "get_trade_audit_origin",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeAuditOriginRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Trade Audit Origin",
+        "tags": [
+          "Trades"
+        ]
+      }
+    },
+    "/api/v1/trades/{id}/audit-origin/recover": {
+      "post": {
+        "description": "Reauthenticate an owned recovery; matched hashes are not ownership verification.",
+        "operationId": "recover_trade_audit_origin",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
+              "title": "If-Match",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradeAuditRecovery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeAuditOriginRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Recover Trade Audit Origin",
         "tags": [
           "Trades"
         ]

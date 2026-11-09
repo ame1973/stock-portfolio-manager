@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AfterValidator, Field, StringConstraints, model_validator
+from pydantic import AfterValidator, Field, StringConstraints, field_validator, model_validator
 
 from spm_api.decimal_types import FxRate, IsoDate, Money, NonNegativeMoney, PositiveQuantity, Price
 from spm_api.errors import Model
@@ -102,3 +102,25 @@ class TradeRecord(Model):
     note: str
     created_at: str
     updated_at: str
+
+
+class TradeAuditRecovery(Model):
+    original_response: TradeRecord = Field(repr=False)
+    reason: ChangeReason
+
+    @field_validator("reason")
+    @classmethod
+    def no_nul_reason(cls, value: str) -> str:
+        if "\0" in value:
+            raise ValueError("The recovery reason cannot contain NUL")
+        return value
+
+
+class TradeAuditOriginRecord(Model):
+    trade_id: UUID
+    trade_version: int
+    trade_status: Literal["ACTIVE", "DRAFT_SCHEDULED", "PENDING_FX", "SUPERSEDED", "VOID"]
+    origin: Literal["MISSING", "AT_CREATION", "BEFORE_RETIRE", "RETAINED_RESPONSE"]
+    captured_at: str | None
+    scope: Literal["DATABASE_AUDIT_ORIGIN_ONLY"] = "DATABASE_AUDIT_ORIGIN_ONLY"
+    history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"

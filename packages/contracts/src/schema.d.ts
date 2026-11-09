@@ -1122,6 +1122,43 @@ export interface paths {
         patch: operations["revise_trade"];
         trace?: never;
     };
+    "/api/v1/trades/{id}/audit-origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trade Audit Origin */
+        get: operations["get_trade_audit_origin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trades/{id}/audit-origin/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recover Trade Audit Origin
+         * @description Reauthenticate an owned recovery; matched hashes are not ownership verification.
+         */
+        post: operations["recover_trade_audit_origin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3982,6 +4019,46 @@ export interface components {
              * Format: date
              */
             to_date: string;
+        };
+        /** TradeAuditOriginRecord */
+        TradeAuditOriginRecord: {
+            /** Captured At */
+            captured_at: string | null;
+            /**
+             * History Completeness
+             * @default UNVERIFIED
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "MISSING" | "AT_CREATION" | "BEFORE_RETIRE" | "RETAINED_RESPONSE";
+            /**
+             * Scope
+             * @default DATABASE_AUDIT_ORIGIN_ONLY
+             * @constant
+             */
+            scope: "DATABASE_AUDIT_ORIGIN_ONLY";
+            /**
+             * Trade Id
+             * Format: uuid
+             */
+            trade_id: string;
+            /**
+             * Trade Status
+             * @enum {string}
+             */
+            trade_status: "ACTIVE" | "DRAFT_SCHEDULED" | "PENDING_FX" | "SUPERSEDED" | "VOID";
+            /** Trade Version */
+            trade_version: number;
+        };
+        /** TradeAuditRecovery */
+        TradeAuditRecovery: {
+            original_response: components["schemas"]["TradeRecord"];
+            /** Reason */
+            reason: string;
         };
         /** TradeCreate */
         TradeCreate: {
@@ -12895,6 +12972,184 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradeRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_trade_audit_origin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradeAuditOriginRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    recover_trade_audit_origin: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradeAuditRecovery"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradeAuditOriginRecord"];
                 };
             };
             /** @description Unauthorized */

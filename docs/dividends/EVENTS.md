@@ -243,14 +243,15 @@ captures the original and financial changes atomically before retiring a
 still-current trade. An older current trade with no original creation/revision
 audit returns 409 `NEEDS_REVIEW`; an inconsistent audit or stored origin returns
 503 `TRADE_AUDIT_UNAVAILABLE`. These failures do not change the fact, cash,
-origin, audit, idempotency or invalidation. A protected review/recovery workflow
-for the missing evidence remains unfinished, so the operator cannot yet resolve
-such a blocked correction in the app. Recovery of an already-retired trade needs
-retained original response evidence, immutable field mirrors and an exact match
-to the old audit digest, with a separately audited authorized workflow. An expired or missing
-response is not evidence: leave the history unverified and require explicit
-review rather than inventing a timestamp or rewriting the trade/audit. A stored
-origin is not by itself financial adoption or an eligibility authorization.
+origin, audit, idempotency or invalidation. An explicit review workflow for a
+current trade with a missing creation audit remains unfinished, so the operator
+cannot yet resolve that blocked correction in the app. Recovery of an
+already-retired trade needs retained original response evidence, immutable field
+mirrors and an exact match to the old audit digest, with a separately audited
+authorized workflow. An expired or missing response is not evidence: leave the
+history unverified and require explicit review rather than inventing a timestamp
+or rewriting the trade/audit. A stored origin is not by itself financial adoption
+or an eligibility authorization.
 
 ## Internal trade-audit origin verifier
 
@@ -306,12 +307,40 @@ origin and all invalidations together. A valid-shaped SQL claim or audit cannot
 prove that an authenticated user submitted a response; retained hashes are not
 signatures or external statements. Missing old creation audits remain unresolved.
 
-This is an **internal primitive**, not a protected HTTP route, user interface or
-authorization workflow. The caller must authenticate and enforce session, CSRF,
-reasoned intent and atomic idempotency before exposing it. No old origin is
-recovered automatically, and the operator cannot yet use this helper through
-the app. Missing evidence stays unverified; no entitlement, receipt or verified
-ownership is created.
+The helper alone is an **internal primitive** and does not authenticate a caller.
+The protected API below supplies that boundary; neither it nor the helper
+recovers an old origin automatically or creates an entitlement, receipt or verified
+ownership. Missing evidence stays unverified.
+
+## Protected trade-audit recovery API
+
+`GET /api/v1/trades/{id}/audit-origin` returns an owner-scoped physical trade's
+version and status, origin mode (`MISSING`, `AT_CREATION`, `BEFORE_RETIRE` or
+`RETAINED_RESPONSE`) and capture time if one exists. The response scope is
+`DATABASE_AUDIT_ORIGIN_ONLY` and history completeness is always `UNVERIFIED`.
+`MISSING` does not establish that a creation audit or recoverable response exists.
+A malformed retained origin fails closed with 503; foreign trades return 404.
+
+`POST /api/v1/trades/{id}/audit-origin/recover` requires the complete originally
+returned `TradeRecord` in `original_response`, a reason, current session and CSRF,
+a recent password confirmation, an idempotency key, and `If-Match` containing the
+quoted **physical trade version** from the read or trade endpoint. Only a retired
+physical trade is eligible; a response or audit that cannot be matched returns
+409 `TRADE_ORIGIN_REVIEW_REQUIRED`. An already retained origin cannot be replaced.
+The resulting response contains origin metadata only, not the supplied financial
+response. It is not a financial adoption, complete chain verification or proof of
+external ownership. Neither operation makes provider requests or reads private
+provider files.
+
+The writer rechecks session, CSRF and recent password confirmation inside the
+transaction before both new writes and cached replay. Recovery audit, origin,
+portfolio invalidations and the idempotency receipt commit together; response
+serialization failure rolls them all back. A completed retry with the same key,
+version and normalized body returns the original response with no new writes,
+even after a later successor correction. Replay also revalidates its cached
+metadata and original intent against the retained audited origin. Both operations
+are private and `no-store`. No browser recovery form is installed yet, and an
+absent original creation audit still needs a separate explicit unverified review.
 
 ## Required future protected writer and projection work
 
@@ -358,6 +387,11 @@ matching, changed or missing audits, multiple retired revisions, cross-portfolio
 invalidation, competing recovery requests and rollback of the inner savepoint and
 outer transaction. It uses isolated synthetic databases and does not establish an
 HTTP authorization or an external source of ownership evidence.
+
+`uv run pytest tests/test_trade_audit_recovery_api.py` covers owned metadata reads,
+reauthentication, CSRF, physical version bounds, idempotent replay, competing
+requests, response-cache validation and atomic failure. These tests use synthetic
+temporary databases and do not prove external market ownership or a browser UI.
 
 `uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent
