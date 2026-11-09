@@ -80,7 +80,47 @@ routes must authenticate the caller and withhold private URL details. The reader
 performs no writes, provider requests, credential-file access, entitlement
 calculation or receipt posting. No canonical event HTTP endpoint is installed.
 
-## Required future writer and projection work
+## Audited internal decision writer
+
+The private `dividend_event_writer.save` appends an explicitly identified manual,
+candidate, verification or withdrawal decision in an existing writer transaction.
+It checks the active owner, retained event history and expected next version;
+it does **not** authenticate an HTTP caller. A new candidate decision resolves
+one current open owned candidate, rechecks its original sources and current
+recorded basis/action chain, derives its exact terms, assessment and per-source
+supporting fields, and cannot reuse that candidate for a different event. A
+manual decision requires explicit terms and a cited reference. Unknown or
+split-adjusted manual terms stay incomplete; only an explicit separate
+`AS_DECLARED` verification locks unchanged terms. Withdrawal preserves the
+prior terms and lock, and reopening it requires a new explicit manual revision.
+These are owner decisions, not independent verification of an external document.
+
+The writer inserts the event revision, source links, correlated audit, affected
+owner-portfolio invalidations and any conflict/incomplete evidence reviews in
+one transaction. Reviews are attached to affected portfolios, or to the event
+when none exists. An explicit later decision resolves outstanding reviews only
+after rechecking their original event revision, canonical detail, owner and
+creation audit; corrupt review history aborts the whole transaction. Historical
+replay of the same internal revision identity, request and timestamp is zero-write
+even after a later source/action change or receipt. A new candidate use is not
+such a replay and must pass current-scope checks again.
+
+**Projection safety fence:** if *any* prior revision of an event has an
+entitlement, this internal writer rejects a new revision—even a verification with
+unchanged terms—until an atomic projection rebuild is installed. Repointing the
+current event without replacing the applicable projection could otherwise hide
+old entitlements and receipts. Initial decisions only invalidate affected
+portfolios; they do not calculate entitlements or create actual receipts. A
+protected API must not be exposed until it can atomically maintain those
+projections and reconciliation, and the receipt workflow remains separate.
+
+Source-observation responses currently describe their own source-only payload;
+their `NOT_ADOPTED` marker is not a query for later event evidence links. Before
+exposing event adoption, make the public source and candidate views unambiguous
+about any current or historical event linkage. No internal decision invokes a
+provider, reads credential files or verifies a cited document.
+
+## Required future protected writer and projection work
 
 These constraints are defense in depth, not authentication, authorization,
 cryptographic validation or an application workflow. SQL checks stored source
@@ -114,11 +154,12 @@ using that workflow. No receipt posting or void HTTP endpoint is installed yet.
 
 ## Verification
 
-`uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py`
+`uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`
 checks migration preservation and rollback, source and candidate scope, publication
-audits, manual locks, immutable history, whole-chain corruption detection, exact
-scaled values, audited receipt reversal, competing writers and per-account review
-across revisions. These are synthetic database and internal-library checks, not
-HTTP authorization, provider coverage, verified documents, receipt projection
-calculation, live-provider or NAS acceptance. Downgrade refuses to delete history;
-restore a validated pre-upgrade backup instead.
+audits, manual locks, immutable history, whole-chain and review corruption
+detection, exact scaled values, audited receipt reversal, competing writers,
+projection invalidation and the pre-rebuild entitlement fence. These are synthetic
+database and internal-library checks, not HTTP authorization, provider coverage,
+verified documents, receipt projection calculation, live-provider or NAS
+acceptance. Downgrade refuses to delete history; restore a validated pre-upgrade
+backup instead.

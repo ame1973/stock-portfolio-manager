@@ -199,6 +199,7 @@ replay, tamper rejection, scope corruption, limits and physical keyset pages.
 
 The candidate review UI, protected canonical event workflow, entitlement rebuilding
 and actual receipts remain unfinished. The separate [event integrity foundation](EVENTS.md)
-adds storage fences but does not adopt a candidate. A current observation, hint or
-candidate result is never a claim of confirmed income or a current-use grant for a
-split-basis declaration.
+includes an internal decision writer that can retain explicitly selected candidate
+lineage, but the candidate API itself does not publish an event. A current
+observation, hint or candidate result is never a claim of confirmed income or a
+current-use grant for a split-basis declaration.
