@@ -48,9 +48,11 @@ checks do not verify the completeness or contents of external market documents.
 ## Durable declaration schema
 
 Migration `0014_dividend_basis_assertions` adds one initially empty
-`dividend_basis_assertions` table: 52 business tables in total. It does not adopt
-old quotations or create a default assertion. The existing pure calculation remains
-separate, and the protected API below records an explicit owner declaration.
+`dividend_basis_assertions` table, bringing that schema to 52 business tables.
+The later inert candidate revision store brings the current total to 53. Migration
+0014 does not adopt old quotations or create a default assertion. The existing pure
+calculation remains separate, and the protected API below records an explicit owner
+declaration.
 
 Each append-only row retains an active owner, server request UUID, canonical UTC
 creation time, original observation/security/ex-date/hash pins and explicit source

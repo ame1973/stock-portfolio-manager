@@ -60,6 +60,43 @@ Only an explicit, authorized association may later be evaluated by
 [the exact evidence comparison](EVIDENCE.md), including its adjustment-basis,
 currency and conservative tolerance rules.
 
+## Inert candidate revision storage
+
+Migration `0015_dividend_candidates` adds one initially empty
+`dividend_candidate_revisions` table, for 53 business tables in total. It preserves
+all prior facts and does not create candidates from old observations or install a
+public candidate workflow. Each append-only revision carries a stable candidate ID,
+owner/security scope, contiguous revision number, `OPEN` or `DISMISSED` state,
+nullable proposed dates/DPS/currency, original adjustment basis, an explicit
+bounded list of observation/hash/basis/reason associations, a change reason,
+request UUID and canonical UTC creation time. These states are not canonical
+`VERIFIED` or `WITHDRAWN` statuses.
+
+The SQLite INSERT fence requires an active owner, unchanged owner/security across
+a candidate's revisions, contiguous version and nondecreasing creation time. It
+rejects reusing an ID or replacing an existing version; same-security same-date
+candidates with distinct IDs are allowed. Dates and scaled INT64 values are
+constrained without rounding. An association list may be explicitly empty or have
+at most 100 entries, bounded to 128 KiB in **bytes**. Duplicate IDs, malformed or
+extra/missing JSON keys, mismatched security/hash, legacy provenance, missing first
+sightings and foreign basis references reject. An optional basis reference must
+belong to the same owner, security and original observation/hash. Corrections to
+later actions do not rewrite earlier candidate or basis history.
+
+This SQL schema is **not** actor/session authorization, a recorded creation audit,
+cryptographic recomputation of the source or association hash, or proof that a
+basis declaration still matches current actions. A future protected writer must
+load original v1 sources, validate canonical content and fingerprints, perform the
+explicit actor/match decision, require current basis/action scope where used and
+commit its audit/idempotency atomically. Historical reads and completed retries
+must preserve original snapshots after legitimate later changes. Bare SQL rows
+without that validated audit must not be treated as accepted decisions. No worker,
+controller or public route currently writes or consumes the candidate table.
+
+Upgrade retains prior rows and adds one schema audit per existing owner; a repeated
+upgrade is a no-op. Late DDL/audit failures roll back the upgrade. Downgrade refuses
+to delete candidate history: restore a validated backup instead.
+
 ## Checks and remaining work
 
 `uv run pytest tests/test_dividend_candidates.py tests/test_dividend_evidence.py`
@@ -70,7 +107,12 @@ v1 EODHD mock response is also reloaded from SQLite and passed through the pure
 function while the complete database remains unchanged and no provider HTTP client
 is constructed by suggestion. This is not a live provider request.
 
-Persisted candidate identities and explicit match decisions, authenticated review
-APIs/UI, canonical immutable event revisions/manual locks, entitlement rebuilding
-and actual receipts remain unfinished. A current observation or a hint is never a
-claim of confirmed income or a current-use grant for a split-basis declaration.
+`uv run pytest tests/test_dividend_candidate_migration.py` checks empty upgrade,
+preservation/rollback, version fencing, immutable history, source/basis scope,
+nullable/exact financial values, malformed JSON and the byte/entry limits.
+
+An authenticated audited candidate writer and historical reader, explicit current
+match decisions, review APIs/UI, canonical immutable event revisions/manual locks,
+entitlement rebuilding and actual receipts remain unfinished. A current observation
+or a hint is never a claim of confirmed income or a current-use grant for a
+split-basis declaration.

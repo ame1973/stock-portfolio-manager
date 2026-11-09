@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from spm_api.audit import canonical, digest
 from spm_api.cli import migrate
 from spm_api.config import Settings
-from spm_api.db import make_engine, migration_config, schema_head, unit_of_work
+from spm_api.db import make_engine, migration_config, unit_of_work
 from spm_api.decimal_types import to_scaled
 from spm_api.dividend_basis import SplitBasisAssertion, SplitReference
 from spm_api.providers.base import DividendObservation
@@ -213,7 +213,7 @@ def test_upgrade_adds_only_an_empty_declaration_store_and_schema_audits(
 ) -> None:
     before, definitions = database_snapshot(old_engine), schema(old_engine)
     present = settings.provider_secret_dir.exists()
-    migrate(settings)
+    upgrade_to(old_engine, HEAD)
     after = database_snapshot(old_engine)
     assert set(after) == {*before, TABLE}
     assert after[TABLE] == []
@@ -227,7 +227,6 @@ def test_upgrade_adds_only_an_empty_declaration_store_and_schema_audits(
     assert after["audit_events"][: len(before["audit_events"])] == before["audit_events"]
     assert all(row in schema(old_engine) for row in definitions if row[1] != "alembic_version")
     with unit_of_work(old_engine) as con:
-        assert schema_head() == HEAD
         assert con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == HEAD
         assert (
             con.exec_driver_sql(
@@ -247,13 +246,13 @@ def test_upgrade_adds_only_an_empty_declaration_store_and_schema_audits(
     assert settings.provider_secret_dir.exists() is present
     assert not (settings.data_dir / "provider-config").exists()
     assert not settings.backup_dir.exists() and settings.managed_provider_secret_dir is None
-    migrate(settings)
+    upgrade_to(old_engine, HEAD)
     assert database_snapshot(old_engine) == after
 
 
 @pytest.mark.parametrize("failure", ["ddl", "second_owner_audit"])
 def test_failed_upgrade_restores_all_schema_head_facts_and_audits(
-    old_engine: Engine, settings: Settings, failure: str
+    old_engine: Engine, failure: str
 ) -> None:
     with old_engine.begin() as con:
         if failure == "ddl":
@@ -267,7 +266,7 @@ def test_failed_upgrade_restores_all_schema_head_facts_and_audits(
             """)
     before, definitions = database_snapshot(old_engine), schema(old_engine)
     with pytest.raises((OperationalError, IntegrityError)):
-        migrate(settings)
+        upgrade_to(old_engine, HEAD)
     assert database_snapshot(old_engine) == before and schema(old_engine) == definitions
     with old_engine.connect() as con:
         assert (
@@ -799,15 +798,22 @@ def test_legacy_evidence_stays_unadmitted_after_upgrade(settings: Settings) -> N
         engine.dispose()
 
 
-def test_downgrade_refuses_to_delete_retained_declarations(
-    engine: Engine, basis: dict[str, Any]
-) -> None:
-    with unit_of_work(engine, write=True) as con:
-        insert(con, TABLE, basis)
-    before, definitions = database_snapshot(engine), schema(engine)
-    with engine.connect() as con:
+def test_downgrade_refuses_to_delete_retained_declarations(old_engine: Engine) -> None:
+    upgrade_to(old_engine, HEAD)
+    with old_engine.begin() as con:
+        observed = dict(
+            con.exec_driver_sql(
+                "SELECT * FROM dividend_observations WHERE security_id=? AND dps_e8=60000000",
+                (str(SECURITY),),
+            )
+            .mappings()
+            .one()
+        )
+        insert(con, TABLE, declaration(con, observed))
+    before, definitions = database_snapshot(old_engine), schema(old_engine)
+    with old_engine.connect() as con:
         config = migration_config()
         config.attributes["connection"] = con
         with pytest.raises(RuntimeError, match="validated"):
             command.downgrade(config, "0013_managed_source_contexts")
-    assert database_snapshot(engine) == before and schema(engine) == definitions
+    assert database_snapshot(old_engine) == before and schema(old_engine) == definitions

@@ -21,6 +21,8 @@ observation IDs, cross-security/candidate scope and invalid internal copies fail
 with `INVALID_DIVIDEND_COMPARISON`, without dumping source contents.
 
 These inputs are not authorization or evidence of an actual stored association.
+The [candidate revision schema](CANDIDATES.md#inert-candidate-revision-storage)
+can retain bounded snapshots but has no installed audited writer or consumer yet.
 A future protected controller must authorize the current actor, load/validate
 original immutable v1 assertions and their hashes, prove/retain the matching
 choice, fence its observed versions and commit audit/decisions atomically. Do not

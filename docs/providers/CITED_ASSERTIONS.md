@@ -148,8 +148,9 @@ No jobs, upstream reservations/outcomes, provider-status projection, canonical
 dividends/receipts/actions, portfolio revisions, cash, shares or FX are changed.
 Query/fragment citation links remain withheld in public observation views without
 changing the original stored assertion/hash. Migration
-`0014_dividend_basis_assertions` separately adds an inert declaration store
-(52 business tables); this quotation API does not write/select it. Operator
+`0014_dividend_basis_assertions` separately added a declaration store; the later
+candidate revision store brings the schema to 53 business tables. This quotation
+API writes or selects neither. Operator
 `providers-check` remains file-only with no DB/bootstrap/upstream probe. Canonical
 reconciliation and paid/live provider/target NAS acceptance remain unfinished or
 NOT_TESTED.
