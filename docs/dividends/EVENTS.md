@@ -239,6 +239,34 @@ response is not evidence: leave the history unverified and require explicit
 review rather than inventing a timestamp or rewriting the trade/audit. A stored
 origin is not by itself financial adoption or an eligibility authorization.
 
+## Internal trade-audit origin verifier
+
+The separate `trade_audit` helper can read one explicitly owned origin or retain
+one in a caller-supplied writer transaction. `remember_created` matches a current
+trade's original DTO and request to its CREATE/REVISE audit before inserting an
+`AT_CREATION` claim. `capture_before_retire` verifies the current physical trade
+and its original audit first, then appends a canonical capture audit and origin
+in the caller's transaction. An existing valid origin is reused without writes.
+The caller is responsible for placing these operations in the same transaction
+as the original creation or retirement; invoking the helper later cannot prove
+when a claim was first captured.
+
+A read checks the owner, account/broker and ledger-sequence scope, immutable trade
+values, exact original DTO fingerprint, capture metadata and any capture audit.
+It reconstructs the original raw-row `before_sha256` needed to compare a later
+revision or void audit. It does **not** itself validate that successor/void audit
+or the whole trade chain, authenticate an HTTP session, establish complete
+ownership history or authorize financial adoption. Hashes are not signatures.
+A malformed or inconsistent origin fails with a fixed private error; there is no
+repair, provider request or private-file read. A `RETAINED_RESPONSE` SQL claim is
+not accepted by this helper because an authenticated recovery workflow has not
+been installed. Missing origins remain missing, not guessed.
+
+Neither the existing trade writer nor the dividend eligibility reader calls this
+helper yet. Consequently, new HTTP trade operations do not automatically capture
+origins and `RETIRED_TRADE_HISTORY_UNVERIFIED` remains unchanged. Installing the
+helper alone does not close the old-trade limitation or enable an economic writer.
+
 ## Required future protected writer and projection work
 
 These constraints are defense in depth, not authentication, authorization,
@@ -273,9 +301,10 @@ using that workflow. No receipt posting or void HTTP endpoint is installed yet.
 
 ## Verification
 
-`uv run pytest tests/test_trade_audit_origin_migration.py` additionally exercises
-upgrade preservation, atomic rollback, scoped immutable origin storage and the
-important distinction between valid-shaped stored metadata and a verified hash.
+`uv run pytest tests/test_trade_audit_origin_migration.py tests/test_trade_audit_service.py`
+additionally exercises upgrade preservation, atomic rollback, scoped immutable
+origin storage, canonical origin verification, concurrency and the distinction
+between valid-shaped stored metadata and a verified hash.
 The test does not turn SQL metadata into an authorized recovery workflow.
 
 `uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`
