@@ -114,3 +114,25 @@ The same pinned private fixture/reporter and no-recording/debug rules apply.
 Subprocess diagnostics are captured, not published; the wrapper emits only a
 fixed result. CI defines this gate after the privacy control and built-SPA checks;
 that definition is not evidence that hosted CI ran.
+
+## Separate trade-origin recovery fixture
+
+```sh
+npm run build
+npm run test:e2e:trade-origin
+```
+
+This isolated real-browser flow uses the same private temporary server and
+redaction policy, with a newly initialized synthetic owner and database. It adds
+new synthetic legacy trades and matching audits without removing audit guards or
+modifying existing audit events. The workflow verifies actual password confirmation,
+a committed response dropped in transit, unchanged-key replay and exact raw JSON
+integer digits at `2^53+1` and `INT64_MAX`. Its wrapper prints only a fixed result
+and, on failure, an allowlisted non-secret stage label. It does not print request
+bodies, database contents, token, password or subprocess errors.
+
+Explicitly setting `SPM_E2E_SAFE_SCREENSHOT=1` captures only the synthetic recovery
+sheet before its password, JSON and reason are filled, at three viewport widths.
+The ignored `.local/screenshots/` files are not automatic failure artifacts. Do not
+capture filled private forms. This fixture does not test provider traffic, a
+container, NAS, TLS or external ownership.

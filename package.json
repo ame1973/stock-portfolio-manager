@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "test:e2e:privacy": "node tests/e2e/privacy/check.mjs",
     "test:e2e:credentials": "node tests/e2e/credentials/check.mjs",
+    "test:e2e:trade-origin": "node tests/e2e/credentials/check.mjs --trade-origin",
     "generate:contracts": "uv run python scripts/export_openapi.py && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",
     "check:contracts": "uv run python scripts/export_openapi.py --check && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts --check"
   },

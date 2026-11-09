@@ -339,8 +339,39 @@ serialization failure rolls them all back. A completed retry with the same key,
 version and normalized body returns the original response with no new writes,
 even after a later successor correction. Replay also revalidates its cached
 metadata and original intent against the retained audited origin. Both operations
-are private and `no-store`. No browser recovery form is installed yet, and an
-absent original creation audit still needs a separate explicit unverified review.
+are private and `no-store`. An absent original creation audit still needs a separate
+explicit unverified review; the application does not yet provide that review.
+
+## Browser recovery workspace
+
+In **Transactions** (`/transactions`), include historical revisions, expand the
+relevant physical trade and open **Trade audit origin**. A missing origin is not
+proof that the original response or audit exists. For a missing origin on a
+superseded or void trade, the recovery sheet accepts the complete original JSON
+response, a reason and an explicit acknowledgment. It asks for a recent password
+confirmation separately; confirming the password alone does not recover anything.
+The backend compares the supplied response with the recorded creation and
+retirement fingerprints. No old trade, cash entry or audit is rewritten.
+
+Paste the original response as received, not a reconstructed current trade or a
+JSON object reserialized by a program using binary floating-point numbers. A
+`created_sequence` can exceed JavaScript's safe integer range. The form validates
+JSON and identity, but sends the original JSON text unchanged so its integer digits
+survive. Do not paste passwords or provider keys. The input and retry key remain in
+form memory, not browser storage or the query cache; closing or reloading discards
+them. If the response is uncertain, keep the sheet open and retry the unchanged
+input after password confirmation if needed. The observed physical version and
+operation key stay fixed; editing the response or reason creates a new intent.
+A stale version requires closing, reloading and reviewing the current state. An
+already retained origin cannot establish that a different uncertain request caused
+it. A physical version outside the browser's safe integer range cannot be submitted
+from this form; inspect the exact server response and use the protected API rather
+than guessing a version.
+
+The result reports consistency of retained database records only. It is not an
+external ownership statement, complete holdings history, entitlement or receipt.
+If the original response or creation audit is missing, do not invent one; the
+separate explicit unverified-review workflow remains unfinished.
 
 ## Required future protected writer and projection work
 
@@ -391,7 +422,17 @@ HTTP authorization or an external source of ownership evidence.
 `uv run pytest tests/test_trade_audit_recovery_api.py` covers owned metadata reads,
 reauthentication, CSRF, physical version bounds, idempotent replay, competing
 requests, response-cache validation and atomic failure. These tests use synthetic
-temporary databases and do not prove external market ownership or a browser UI.
+temporary databases and do not prove external market ownership.
+
+`npm run build && npm run test:e2e:trade-origin` uses an exclusive temporary
+loopback application and real Chromium. It creates synthetic legacy drafts and
+new audit rows without changing existing audit rows or guards. It exercises the
+responsive form, password confirmation, committed-but-lost response and original
+zero-write retry, and checks the actual wire body for `2^53+1` and `INT64_MAX`
+sequence digits. Synthetic financial facts, historical FX and existing audits
+remain unchanged. This is not a container, NAS, TLS, live-provider or external
+ownership test; the private fixture suppresses diagnostics and removes its own
+temporary tree after shutdown.
 
 `uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent

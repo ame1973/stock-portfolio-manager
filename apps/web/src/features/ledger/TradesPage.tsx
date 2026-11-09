@@ -11,9 +11,11 @@ import { FilterChips } from "../../components/forms/filter-chips";
 import { useViewState } from "../../lib/view-state";
 import { RecordList } from "../settings/RecordList";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
+import { PasswordForm } from "../settings/SecuritySettingsPage";
 import { usePageState } from "../settings/data";
 import { reason } from "./inputs";
 import { TradeForm, type Trade } from "./TradeForm";
+import { TradeOriginPanel, TradeOriginRecoveryForm, type TradeOrigin } from "./TradeOrigin";
 import { useAccount, useSecurity } from "./data";
 import { AccountName, SecurityName } from "./ReferenceName";
 
@@ -48,7 +50,7 @@ function TradeDetails({ record, children }: { record: Trade; children: ReactNode
           ["交收捨入差額", `${record.currency} ${record.rounding_delta}`], ["實際金額覆寫", `${record.settlement_override ? "原幣實際值" : "計算交收"}；${record.hkd_override ? "HKD 實際值" : "按歷史 FX"}`],
           ["覆寫依據", record.override_reason || "未覆寫"], ["備註", record.note || "未填寫"],
           ["交易識別碼", record.id], ["穩定事件識別碼", record.root_id], ["前一修訂", record.supersedes_id ?? "首個版本"],
-          ["修訂／控制版本", `${record.revision} / ${record.version}`], ["穩定排序序號", String(record.created_sequence)],
+          ["修訂／控制版本", `${record.revision} / ${record.version}`], ["穩定排序序號", Number.isSafeInteger(record.created_sequence) ? String(record.created_sequence) : "超過瀏覽器精確整數範圍；請以原始伺服器 JSON 為準"],
           ["證券識別碼", record.security_id], ["帳戶識別碼", record.account_id], ["建立時間", record.created_at],
         ].map(([label, value]) => <div key={label}><dt className="text-secondary">{label}</dt><dd className="mt-1 break-all">{value}</dd></div>)}
       </dl>
@@ -77,6 +79,17 @@ function VoidTrade({ record, onDone, onCancel }: { record: Trade; onDone: () => 
   </section>;
 }
 
+function RecoveryEditor({ origin, onCancel, onSaved }: {
+  origin: TradeOrigin; onCancel: () => void; onSaved: () => void;
+}) {
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  return <EditorSheet title="恢復交易稽核來源" onClose={onCancel}>
+    <div className="mb-6"><PasswordForm disabled={recoveryBusy} onPendingChange={setPasswordBusy} /></div>
+    <TradeOriginRecoveryForm origin={origin} disabled={passwordBusy} onPendingChange={setRecoveryBusy} onCancel={onCancel} onSaved={onSaved} />
+  </EditorSheet>;
+}
+
 const initialFilters = { portfolio_id: "", account_id: "", security_id: "", from_date: "", to_date: "", root_id: "", include_history: false };
 
 export function TradesPage() {
@@ -85,6 +98,7 @@ export function TradesPage() {
   const [filters, setFilters] = useViewState("filters:trades", initialFilters);
   const [editor, setEditor] = useState<Trade | "new" | null>(null);
   const [voiding, setVoiding] = useState<Trade | null>(null);
+  const [recovery, setRecovery] = useState<TradeOrigin | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const result = useQuery({ queryKey: ["ledger", "trades", filters, page.q, page.cursor], queryFn: async ({ signal }) =>
     checked(await api.GET("/api/v1/trades", { params: { query: {
@@ -97,10 +111,14 @@ export function TradesPage() {
     void cache.invalidateQueries({ queryKey: ["ledger"] });
     void cache.invalidateQueries({ queryKey: ["portfolios"] });
   }
+  function closeRecovery() {
+    if (recovery) void cache.invalidateQueries({ queryKey: ["ledger", "trade-audit-origin", recovery.trade_id] });
+    setRecovery(null);
+  }
   return <div className="grid gap-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="max-w-2xl"><h1 className="text-2xl font-semibold">交易紀錄</h1><p className="mt-2 text-sm leading-7 text-secondary">逐帳戶記錄買賣與歷史交收。更正建立新版本，不覆寫原值；缺少 FX 不會被當作零，也不會以現價補填。</p></div>
-      <Button data-editor-create disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增交易</Button>
+      <Button data-editor-create disabled={editor !== null || voiding !== null || recovery !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增交易</Button>
     </div>
     <p className="text-sm leading-7 text-secondary">請先在<Link to="/settings/accounts" className="inline-flex min-h-11 items-center text-primary underline">管理設定</Link>建立組合、帳戶與證券。此頁不是現金估值或目前持倉總額。</p>
     {notice && <p role="status" className="text-sm leading-7 text-success">{notice}</p>}
@@ -109,6 +127,8 @@ export function TradesPage() {
         onSaved={record => { setEditor(null); setNotice(record.status === "DRAFT_SCHEDULED" ? "已儲存未來交易草稿；沒有現金或目前持倉影響。" : "已儲存交易；原始版本與歷史匯率會保留。請核對下方伺服器入帳結果。"); refresh(); }} />
     </EditorSheet>}
     {voiding && <VoidTrade key={voiding.id} record={voiding} onCancel={() => setVoiding(null)} onDone={() => { setVoiding(null); setNotice("交易已作廢；原值、精確沖銷及審計仍保留。"); refresh(); }} />}
+    {recovery && <RecoveryEditor origin={recovery} onCancel={closeRecovery}
+      onSaved={() => { setRecovery(null); setNotice("已留存與資料庫稽核相符的交易來源；這不是完整持倉或股息實收證明。"); refresh(); }} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="cursor-pointer font-medium">篩選交易</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <ReferenceSelect kind="portfolios" label="篩選組合" value={filters.portfolio_id} registration={{ onChange: event => filter({ portfolio_id: event.target.value, account_id: "" }) }} clearSelection={() => filter({ portfolio_id: "", account_id: "" })} />
@@ -130,9 +150,10 @@ export function TradesPage() {
       { id: "booked", header: "歷史 HKD，非估值", cell: ({ row }) => row.original.booked_hkd === null ? "未知，不是零" : `HKD ${row.original.booked_hkd}` },
       { id: "status", header: "紀錄狀態", cell: ({ row }) => statuses[row.original.status] },
     ]}>{record => <TradeDetails record={record}>
+      <TradeOriginPanel tradeId={record.id} disabled={editor !== null || voiding !== null || recovery !== null} onRecover={origin => { setNotice(null); setRecovery(origin); }} />
       <div className="flex flex-wrap gap-3">
-        {editable(record) && <><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor(record); }}>更正交易</Button>
-          <Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setVoiding(record); }}>作廢交易</Button></>}
+        {editable(record) && <><Button variant="outline" disabled={editor !== null || voiding !== null || recovery !== null} onClick={() => { setNotice(null); setEditor(record); }}>更正交易</Button>
+          <Button variant="outline" disabled={editor !== null || voiding !== null || recovery !== null} onClick={() => { setNotice(null); setVoiding(record); }}>作廢交易</Button></>}
         <Button variant="outline" onClick={() => { filter({ root_id: record.root_id, include_history: true }); page.search(""); }}>查看此事件修訂鏈</Button>
       </div>
     </TradeDetails>}</RecordList>

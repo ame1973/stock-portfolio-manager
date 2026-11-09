@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { FormSavedContext } from "../../lib/form-lifecycle";
+import { EditorCloseContext } from "../../lib/editor-lifecycle";
 import { Button } from "./button";
 
 export function EditorSheet({ title, children, onClose, successFocus = "[data-editor-create]" }: {
@@ -32,9 +33,9 @@ export function EditorSheet({ title, children, onClose, successFocus = "[data-ed
           <div className="grid shrink-0 gap-3 border-b border-border p-4 sm:p-6">
             <div className="flex items-start justify-between gap-4"><Dialog.Title className="text-xl font-semibold">{title}</Dialog.Title><Button data-editor-close variant="outline" onClick={close}>關閉編輯</Button></div>
             <Dialog.Description className="text-sm leading-6 text-secondary">取消或 Escape 會離開編輯；儲存中請等待伺服器確認，不會離線排程或自動宣稱成功。</Dialog.Description>
-            {waiting && <p role="status" className="text-sm text-secondary">如正在儲存，請等候回應後再關閉；輸入與操作識別碼會保留。</p>}
+            {waiting && <p role="status" className="text-sm text-secondary">如正在處理，請等候回應後再關閉；輸入與操作識別碼會保留。</p>}
           </div>
-          <div className="editor-sheet-body min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">{children}</div>
+          <div className="editor-sheet-body min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6"><EditorCloseContext value={close}>{children}</EditorCloseContext></div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

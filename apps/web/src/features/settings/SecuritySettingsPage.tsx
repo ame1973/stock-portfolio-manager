@@ -9,7 +9,9 @@ import { clearSession } from "../../lib/session";
 import { usePageState } from "./data";
 import { RecordList } from "./RecordList";
 
-export function PasswordForm({ changing = false }: { changing?: boolean }) {
+export function PasswordForm({ changing = false, disabled = false, onPendingChange }: {
+  changing?: boolean; disabled?: boolean; onPendingChange?: (pending: boolean) => void;
+}) {
   const cache = useQueryClient();
   const key = useRef(crypto.randomUUID());
   const [pending, setPending] = useState(false);
@@ -17,7 +19,7 @@ export function PasswordForm({ changing = false }: { changing?: boolean }) {
   const [notice, setNotice] = useState<string | null>(null);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || disabled) return;
     const form = event.currentTarget;
     const values = new FormData(form);
     const password = String(values.get("password") ?? "");
@@ -27,7 +29,7 @@ export function PasswordForm({ changing = false }: { changing?: boolean }) {
       setError("兩次輸入的新密碼不一致。");
       return;
     }
-    setPending(true);
+    setPending(true); onPendingChange?.(true);
     try {
       const header = await mutationHeaders(key.current);
       // Do not put passwords into TanStack mutation/query state or persistent browser storage.
@@ -42,13 +44,13 @@ export function PasswordForm({ changing = false }: { changing?: boolean }) {
     } catch (cause) {
       setError(failureMessage(cause));
       if (cause instanceof ApiRequestError && cause.code === "UNAUTHORIZED") void cache.invalidateQueries({ queryKey: ["owner"] });
-    } finally { setPending(false); }
+    } finally { setPending(false); onPendingChange?.(false); }
   }
   return <form aria-label={changing ? "變更密碼" : "重新驗證"} aria-busy={pending} onSubmit={event => void submit(event)}
     onChange={() => { key.current = crypto.randomUUID(); setError(null); setNotice(null); }} className="panel grid gap-5">
     <h2 className="text-lg font-semibold">{changing ? "變更密碼" : "重新驗證"}</h2>
     <p className="text-sm leading-7 text-secondary">{changing ? "成功後會立即撤銷所有裝置的登入，包括目前裝置。你需要使用新密碼重新登入。" : "執行敏感操作前再次確認密碼。驗證不會替你執行其他操作。"}</p>
-    <fieldset disabled={pending} className="grid gap-5">
+    <fieldset disabled={pending || disabled} className="grid gap-5">
       <Field label={changing ? "舊密碼" : "目前密碼"} name="password" type="password" required maxLength={200} autoComplete="current-password" />
       {changing && <>
         <Field label="新密碼" name="replacement" type="password" required minLength={12} maxLength={200} autoComplete="new-password" help="至少 12 個字元；使用獨立、不常見的密碼或長密語。" />
@@ -57,7 +59,7 @@ export function PasswordForm({ changing = false }: { changing?: boolean }) {
     </fieldset>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     {notice && <p role="status" className="text-sm text-success">{notice}</p>}
-    <Button type="submit" disabled={pending}>{pending ? "正在驗證…" : changing ? "變更密碼並登出所有裝置" : "確認目前密碼"}</Button>
+    <Button type="submit" disabled={pending || disabled}>{pending ? "正在驗證…" : changing ? "變更密碼並登出所有裝置" : "確認目前密碼"}</Button>
   </form>;
 }
 
