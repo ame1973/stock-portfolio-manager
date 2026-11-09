@@ -403,7 +403,7 @@ def reverse_receipt(con: Any, values: dict[str, Any], *, owner: UUID = OWNER) ->
 
 def test_schema_adds_empty_managed_provenance_without_adopting_events(engine: Engine) -> None:
     with unit_of_work(engine) as con:
-        assert schema_head() == HEAD
+        assert schema_head() == "0017_trade_audit_origins"
         assert con.exec_driver_sql("SELECT count(*) FROM dividend_event_controls").scalar_one() == 0
         assert (
             con.exec_driver_sql("SELECT count(*) FROM dividend_revision_decisions").scalar_one()
@@ -414,7 +414,7 @@ def test_schema_adds_empty_managed_provenance_without_adopting_events(engine: En
                 "SELECT count(*) FROM sqlite_schema WHERE type='table' "
                 "AND name NOT LIKE 'sqlite_%' AND name<>'alembic_version'"
             ).scalar_one()
-            == 55
+            == 56
         )
         plan = con.exec_driver_sql(
             "EXPLAIN QUERY PLAN SELECT account_id FROM dividend_receipts "
@@ -560,10 +560,10 @@ def test_managed_event_cannot_gain_another_owners_entitlement(
 
 
 def test_upgrade_preserves_legacy_events_receipts_fx_and_adds_only_empty_controls(
-    old_engine: Engine, settings: Settings
+    old_engine: Engine,
 ) -> None:
     before, definitions = database_snapshot(old_engine), schema(old_engine)
-    migrate(settings)
+    upgrade_to(old_engine, HEAD)
     after = database_snapshot(old_engine)
     added = {"dividend_event_controls", "dividend_revision_decisions"}
     assert set(after) == set(before) | added and all(after[name] == [] for name in added)
@@ -603,7 +603,7 @@ def test_upgrade_preserves_legacy_events_receipts_fx_and_adds_only_empty_control
         ).one() == (6000000, 7800000000000, 46123456)
         assert con.exec_driver_sql("PRAGMA integrity_check").scalar_one() == "ok"
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
-    migrate(settings)
+    upgrade_to(old_engine, HEAD)
     assert database_snapshot(old_engine) == after
 
 
@@ -634,19 +634,36 @@ def test_late_upgrade_failure_restores_old_schema_facts_and_audits(
         )
 
 
-def test_downgrade_refuses_to_remove_managed_event_history(
-    engine: Engine, source: dict[str, Any]
-) -> None:
-    with unit_of_work(engine, write=True) as con:
+def test_downgrade_refuses_to_remove_managed_event_history(old_engine: Engine) -> None:
+    upgrade_to(old_engine, HEAD)
+    source = {
+        "candidate": {
+            "id": str(uuid4()),
+            "event_type": "REGULAR",
+            "ex_date": "2026-01-08",
+            "announce_date": None,
+            "record_date": None,
+            "pay_date": None,
+            "dps_e8": 60000000,
+            "currency": "USD",
+            "adjustment_basis": "AS_DECLARED",
+        }
+    }
+    with old_engine.begin() as con:
+        con.exec_driver_sql(
+            "INSERT INTO owners(id,password_hash,password_changed_at,created_at) "
+            "VALUES (?,'synthetic',?,?)",
+            (str(OWNER), AT, AT),
+        )
         parent, rev, _ = staged(con, source, manual=True, status="PROVISIONAL")
         publish(con, parent, rev)
-    before, definitions = database_snapshot(engine), schema(engine)
-    with engine.connect() as con:
+    before, definitions = database_snapshot(old_engine), schema(old_engine)
+    with old_engine.connect() as con:
         config = migration_config()
         config.attributes["connection"] = con
         with pytest.raises(RuntimeError, match="validated"):
             command.downgrade(config, "0015_dividend_candidates")
-    assert database_snapshot(engine) == before and schema(engine) == definitions
+    assert database_snapshot(old_engine) == before and schema(old_engine) == definitions
 
 
 def test_two_competing_revision_writers_publish_only_one_version(

@@ -1,8 +1,8 @@
 # Dividend event integrity foundation
 
-Migration `0016_dividend_event_controls` adds database safeguards for a future
-owner-controlled dividend workflow. It adds two initially empty provenance tables
-and brings the schema to 55 business tables. It neither adopts a source observation
+Migration `0016_dividend_event_controls` added database safeguards for a future
+owner-controlled dividend workflow. It added two initially empty provenance tables
+and brought that schema revision to 55 business tables. It neither adopts a source observation
 nor installs an event, entitlement, receipt or reconciliation API. An ordinary
 source sync still cannot create canonical income or mark a dividend received.
 
@@ -206,6 +206,39 @@ limitation in the same transaction as the financial changes; an earlier read or
 `data_revision` alone does not authorize adoption. Root-history and audit scans
 may need indexed batching if measured portfolio histories grow.
 
+## Inert trade-audit origin storage
+
+Migration `0017_trade_audit_origins` adds one initially empty append-only table
+without changing existing trade rows, cash, receipts or audit events. It brings
+current schema to 56 business tables. A separate table matters because historical
+trade retirement audits hash the entire old trade row; adding a trade column
+would change the set of values needed to reconstruct those existing fingerprints.
+No origin is automatically backfilled, captured or recovered by this migration or
+by the current trade writer. The recorded-history reader still reports the
+retired-trade limitation above, even if a row is inserted into this table.
+
+An origin can retain a physical trade's claimed original status and `updated_at`,
+its owner and exact CREATE/REVISE audit identity. Current-row claims must match
+the currently stored status, timestamp and version. A pre-retirement capture or
+retained-response recovery additionally requires a separately correlated audit;
+recoveries are only permitted for a retired trade. SQL checks ownership, account
+and broker scope, actual ledger sequence kind/root, one matching creation audit,
+canonical metadata shapes, capture mode and immutable uniqueness. It rejects
+updates, deletes and replacement writes, but **cannot verify the canonical
+content of an audit hash or an old response**, authenticate an actor, or prove
+when a claim was captured or that its prerequisites shared a transaction. In
+particular, a well-shaped recovered timestamp can still be false. The mode named
+`AT_CREATION` is a stored claim, not database proof of capture timing.
+
+A future trade writer must verify the original audited DTO before recording it,
+and capture the original and all financial changes atomically before retiring a
+still-current trade. Recovery of an already-retired trade needs retained original
+response evidence, immutable field mirrors and an exact match to the old audit
+digest, with a separately audited authorized workflow. An expired or missing
+response is not evidence: leave the history unverified and require explicit
+review rather than inventing a timestamp or rewriting the trade/audit. A stored
+origin is not by itself financial adoption or an eligibility authorization.
+
 ## Required future protected writer and projection work
 
 These constraints are defense in depth, not authentication, authorization,
@@ -239,6 +272,11 @@ prevent a direct writer from committing an isolated receipt or reversal without
 using that workflow. No receipt posting or void HTTP endpoint is installed yet.
 
 ## Verification
+
+`uv run pytest tests/test_trade_audit_origin_migration.py` additionally exercises
+upgrade preservation, atomic rollback, scoped immutable origin storage and the
+important distinction between valid-shaped stored metadata and a verified hash.
+The test does not turn SQL metadata into an authorized recovery workflow.
 
 `uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`
 checks migration preservation and rollback, source and candidate scope, publication
