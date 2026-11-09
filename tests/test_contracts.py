@@ -43,6 +43,9 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
     identifiers = [op["operationId"] for op in actual.values()]
     assert len(identifiers) == len(set(identifiers))
     extensions = {
+        ("/api/v1/dividends/basis-assertions", "post"): "create_dividend_basis_assertion",
+        ("/api/v1/dividends/basis-assertions", "get"): "list_dividend_basis_assertions",
+        ("/api/v1/dividends/basis-assertions/{id}", "get"): "get_dividend_basis_assertion",
         ("/api/v1/providers/cited-observations", "post"): "create_cited_source_observation",
         ("/api/v1/provider-profiles", "get"): "list_provider_profiles",
         ("/api/v1/provider-profiles", "post"): "create_provider_profile",

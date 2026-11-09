@@ -20,7 +20,12 @@ from spm_api.observation_models import (
     SplitObservationRecord,
 )
 from spm_api.pagination import PageQuery, paginate, validate_time_page
-from spm_api.providers.base import DividendObservation, SourceObservation, SplitObservation
+from spm_api.providers.base import (
+    DividendObservation,
+    EvidenceCitation,
+    SourceObservation,
+    SplitObservation,
+)
 from spm_api.providers.manual import DividendEvidence, SplitEvidence
 
 
@@ -52,16 +57,22 @@ def _source[S: SourceObservation](row: RowMapping, model: type[S], operation: So
     return source
 
 
+def public_citation(citation: EvidenceCitation | None) -> PublicCitation | None:
+    """Share explicit citation fields only; never serialize subclass/private source metadata."""
+    if citation is None:
+        return None
+    link = urlsplit(citation.url) if citation.url is not None else None
+    withheld = link is not None and bool(link.query or link.fragment)
+    return PublicCitation(
+        id=citation.id,
+        citation=citation.citation,
+        reason=citation.reason,
+        url=None if withheld else citation.url,
+        url_withheld=withheld,
+    )
+
+
 def _values(row: RowMapping, source: SourceObservation) -> dict[str, Any]:
-    evidence = None
-    if source.evidence is not None:
-        citation = source.evidence
-        link = urlsplit(citation.url) if citation.url is not None else None
-        withheld = link is not None and bool(link.query or link.fragment)
-        evidence = PublicCitation(
-            **{**citation.model_dump(), "url": None if withheld else citation.url},
-            url_withheld=withheld,
-        )
     return {
         **source.model_dump(mode="json"),
         "id": row["id"],
@@ -72,7 +83,7 @@ def _values(row: RowMapping, source: SourceObservation) -> dict[str, Any]:
         "retrieved_at": row["retrieved_at"],
         "sightings_count": row["sightings_count"],
         "last_seen_at": row["last_seen_at"],
-        "evidence": evidence,
+        "evidence": public_citation(source.evidence),
     }
 
 

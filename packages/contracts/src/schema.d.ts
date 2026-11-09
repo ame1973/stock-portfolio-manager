@@ -359,6 +359,44 @@ export interface paths {
         patch: operations["revise_corporate_action"];
         trace?: never;
     };
+    "/api/v1/dividends/basis-assertions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Basis */
+        get: operations["list_dividend_basis_assertions"];
+        put?: never;
+        /**
+         * Create Basis
+         * @description Derive snapshots from real current rows, not caller-supplied ownership or ratios.
+         */
+        post: operations["create_dividend_basis_assertion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dividends/basis-assertions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Basis */
+        get: operations["get_dividend_basis_assertion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/observations": {
         parameters: {
             query?: never;
@@ -1174,6 +1212,60 @@ export interface components {
          * @enum {string}
          */
         Availability: "OBSERVATIONS_AVAILABLE" | "DATA_NOT_CONFIRMED" | "DATA_UNAVAILABLE" | "PROVIDER_UNSUPPORTED";
+        /** BasisActionPin */
+        BasisActionPin: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+            /** Version */
+            version: number;
+        };
+        /** BasisActionSnapshot */
+        BasisActionSnapshot: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+            /**
+             * Action Root Id
+             * Format: uuid
+             */
+            action_root_id: string;
+            /**
+             * Action Type
+             * @enum {string}
+             */
+            action_type: "SPLIT" | "REVERSE_SPLIT";
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /**
+             * Observed Lifecycle Status
+             * @constant
+             */
+            observed_lifecycle_status: "CURRENT";
+            /**
+             * Observed Status
+             * @constant
+             */
+            observed_status: "CONFIRMED";
+            /** Observed Version */
+            observed_version: number;
+            /** Ratio Denominator */
+            ratio_denominator: string;
+            /** Ratio Numerator */
+            ratio_numerator: string;
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+        };
         /** Broker */
         Broker: {
             /** Dividend Fee */
@@ -1816,6 +1908,120 @@ export interface components {
             /** Unvalued Entries */
             unvalued_entries: number;
         };
+        /** DividendBasisCreate */
+        DividendBasisCreate: {
+            /** Actions */
+            actions: components["schemas"]["BasisActionPin"][];
+            citation: components["schemas"]["CitationInput"];
+            /** Complete */
+            complete: boolean;
+            /**
+             * Observation Id
+             * Format: uuid
+             */
+            observation_id: string;
+            /**
+             * Share Basis Date
+             * Format: date
+             */
+            share_basis_date: string;
+            /**
+             * Source Basis
+             * @constant
+             */
+            source_basis: "AFTER_EFFECTIVE_DATE_ACTIONS";
+            /** Source Sha256 */
+            source_sha256: string;
+            /** Split Only */
+            split_only: boolean;
+            /**
+             * Target Basis
+             * @constant
+             */
+            target_basis: "PRE_EX_DATE_EVENTS";
+        };
+        /** DividendBasisRecord */
+        DividendBasisRecord: {
+            /** Actions */
+            actions: components["schemas"]["BasisActionSnapshot"][];
+            /**
+             * Canonical Adoption
+             * @default NOT_ADOPTED
+             * @constant
+             */
+            canonical_adoption: "NOT_ADOPTED";
+            citation: components["schemas"]["PublicCitation"];
+            /**
+             * Complete
+             * @constant
+             */
+            complete: true;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Current Use Scope
+             * @default REVALIDATION_REQUIRED_FOR_NEW_ADOPTION
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED_FOR_NEW_ADOPTION";
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Market History
+             * @default OWNER_ASSERTED_NOT_VERIFIED
+             * @constant
+             */
+            market_history: "OWNER_ASSERTED_NOT_VERIFIED";
+            /**
+             * Observation Id
+             * Format: uuid
+             */
+            observation_id: string;
+            /**
+             * Scope
+             * @default BASIS_DECLARATION_ONLY
+             * @constant
+             */
+            scope: "BASIS_DECLARATION_ONLY";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /**
+             * Share Basis Date
+             * Format: date
+             */
+            share_basis_date: string;
+            /**
+             * Source Basis
+             * @constant
+             */
+            source_basis: "AFTER_EFFECTIVE_DATE_ACTIONS";
+            /** Source Sha256 */
+            source_sha256: string;
+            /**
+             * Split Only
+             * @constant
+             */
+            split_only: true;
+            /**
+             * Target Basis
+             * @constant
+             */
+            target_basis: "PRE_EX_DATE_EVENTS";
+        };
         /** DividendObservationRecord */
         DividendObservationRecord: {
             /**
@@ -2319,6 +2525,13 @@ export interface components {
         Page_CorporateAction_: {
             /** Items */
             items: components["schemas"]["CorporateAction"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[DividendBasisRecord] */
+        Page_DividendBasisRecord_: {
+            /** Items */
+            items: components["schemas"]["DividendBasisRecord"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -7055,6 +7268,243 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_dividend_basis_assertions: {
+        parameters: {
+            query?: {
+                observation_id?: string | null;
+                security_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DividendBasisRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    create_dividend_basis_assertion: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DividendBasisCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DividendBasisRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_dividend_basis_assertion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DividendBasisRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

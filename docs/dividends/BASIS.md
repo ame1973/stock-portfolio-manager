@@ -2,8 +2,8 @@
 
 `spm_api.dividend_basis.normalize_basis` derives comparison-only per-share units
 from a SPLIT_ADJUSTED assertion and an explicit cited split-basis declaration. It
-is an internal pure calculation, **not an authenticated proof-import API, verified
-market history, adopted corporate action or financial posting**. The
+is a pure calculation, **not authentication, verified market history, an adopted
+corporate action or a financial posting**. The
 [comparison library](EVIDENCE.md) can use its separate derived view without changing
 original observations, their source basis or normalized fingerprints.
 
@@ -41,14 +41,16 @@ actual documented share basis, verify/fence the referenced real action rows and
 versions, check relevant non-split/unallocated exceptions, retain the completeness
 authority and commit actor/audit/decisions atomically. Merely listing recorded
 splits does not establish a complete historical chain. No such public controller
-or automatic completeness discovery is installed by this library.
+or automatic completeness discovery is supplied by this calculation. The protected
+API described below derives its snapshots from real rows, but its recorded-scope
+checks do not verify the completeness or contents of external market documents.
 
 ## Durable declaration schema
 
 Migration `0014_dividend_basis_assertions` adds one initially empty
 `dividend_basis_assertions` table: 52 business tables in total. It does not adopt
-old quotations, create a default assertion, change a source's basis or install a
-public basis-import controller. The existing pure calculation remains separate.
+old quotations or create a default assertion. The existing pure calculation remains
+separate, and the protected API below records an explicit owner declaration.
 
 Each append-only row retains an active owner, server request UUID, canonical UTC
 creation time, original observation/security/ex-date/hash pins and explicit source
@@ -76,17 +78,17 @@ history. SQL compares the stored source fingerprint and constrains the declarati
 hash's format; it does not cryptographically recompute either JSON fingerprint or
 replace the typed citation/URL validator. The internal writer below validates
 original v1 content/hash and canonical declaration/hash and commits its creation
-audit atomically. A future HTTP route must still authorize the current session,
-bind server identities and commit its idempotent response in that same short
-transaction. Owner/request UUIDs alone are not authentication.
+audit atomically. The protected API authorizes the current session, binds server
+identities and commits its idempotent response in the same short transaction.
+Owner/request UUIDs supplied to the internal library alone are not authentication.
 
 UPDATE, DELETE and INSERT OR REPLACE reject. A later legitimate action revision or
 void preserves the historical declaration, rather than blocking the financial
 correction or rewriting history; the old reference cannot authorize a new INSERT.
 A future canonical writer must recheck source/action scope at each new adoption,
 not treat the existence of a previously stored row as current proof or a replay
-grant. Only the internal library below currently writes/reads declarations; no
-public route, worker or canonical consumer is installed.
+grant. The protected API writes/reads declarations; no worker or canonical consumer
+is installed.
 
 Upgrade preserves all previous source and financial rows and appends one schema
 audit per existing owner; a repeat upgrade writes nothing. Late DDL/audit failure
@@ -140,9 +142,77 @@ alias does not rewrite historical source identity/content.
 A basis statement does not fill null source DPS/currency or make nonrepresentable
 rational results valid. Even current recorded agreement is only conditional on the
 owner's cited completeness declaration, never complete external market evidence,
-VERIFIED income or a receipt. This library adds no endpoint, default statement,
-worker dispatch, canonical matching/revision/lock, financial replay, entitlement or
-cash posting. A protected basis API and canonical consumers remain separate work.
+VERIFIED income or a receipt. The private library itself adds no endpoint, default
+statement, worker dispatch, canonical matching/revision/lock, financial replay,
+entitlement or cash posting. The protected API below wraps declaration storage;
+canonical consumers remain separate work.
+
+## Protected declaration API
+
+`POST /api/v1/dividends/basis-assertions` records one explicit cited declaration.
+It requires a current authenticated session, matching Origin, CSRF token and
+`Idempotency-Key`; this is ordinary owner-authenticated evidence entry, not the
+password reauthentication required for sensitive provider credentials. All
+responses are `Cache-Control: no-store`.
+
+Obtain the original observation ID and `normalized_sha256` from the source
+observation API, and the current physical action IDs and integer versions from
+corporate-action reads. The request must explicitly provide all scope fields:
+
+```json
+{
+  "observation_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "share_basis_date": "2026-01-10",
+  "source_basis": "AFTER_EFFECTIVE_DATE_ACTIONS",
+  "target_basis": "PRE_EX_DATE_EVENTS",
+  "complete": true,
+  "split_only": true,
+  "actions": [{"action_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "version": 1}],
+  "citation": {
+    "citation": "Example document, page 2",
+    "reason": "Explicitly state the source share units and complete recorded split scope.",
+    "url": "https://example.com/example-document.pdf"
+  }
+}
+```
+
+These identifiers and the document are examples only. An empty `actions` array
+must be a deliberate completeness assertion, not a missing-data default. The
+server derives the security and ex-date from the validated original observation,
+reads each real current action's root/date/status and exact ratio, mints the
+assertion/citation and request IDs, and rechecks the whole recorded quantity scope
+in its writer. Caller-supplied ownership, ratios, statuses or adoption claims are
+rejected. No document is fetched and no provider configuration, credential or
+upstream request is needed. A changed source/action pin or an omitted current
+quantity action fails rather than creating a partial statement.
+
+A successful response is `201` with a declaration `Location`; the exact action
+ratios are JSON decimal **strings**. `scope=BASIS_DECLARATION_ONLY`,
+`canonical_adoption=NOT_ADOPTED`, `market_history=OWNER_ASSERTED_NOT_VERIFIED`
+and `current_use_scope=REVALIDATION_REQUIRED_FOR_NEW_ADOPTION` are explicit
+limits. Citation reference and reason are visible to the authenticated owner;
+a URL with a query or fragment is withheld with `url_withheld=true`, without
+rewriting the stored statement. Do not put secrets in citation text or URL paths.
+
+`GET /api/v1/dividends/basis-assertions/{id}` reads owned historical evidence;
+`GET /api/v1/dividends/basis-assertions` lists it with optional `observation_id`,
+`security_id`, literal `q`, `limit` and opaque keyset cursor. IDs from another
+owner return the same 404 as missing IDs. List order is creation time and ID,
+descending; it does not imply that a historical action snapshot is still current.
+There is no update, delete or public adoption operation for a declaration.
+
+An unchanged retry with the same idempotency key returns the original 201 and
+`Location` after rechecking the current session/CSRF, even if an action was revised
+or voided. Within that writer, the cached DTO is also compared with its audited
+historical declaration and the normalized original request, not with current action
+terms. A changed body using that key conflicts; action-pin order alone does not
+change the intent. A **new** declaration must recheck the current recorded scope.
+Malformed, mismatched or unaudited cached history fails safely without repair or
+echo; audit, assertion and idempotent response commit or roll back together. These
+checks are not cryptographic protection against a privileged database writer
+replacing multiple mutually consistent records. These operations never create
+canonical dividends, entitlements, receipts, cash or action changes.
 
 ## Date moments follow the ordinary eligibility contract
 
@@ -215,6 +285,9 @@ immutable history, byte bounds and upgrade rollback.
 checks internal audited storage, owned historical reads, original-content/hash
 admission, genuine action correction/void/replay, new-use fences, concurrent retry,
 corruption/unaudited-row refusal, source-link privacy and no private file/HTTP I/O.
-Protected HTTP basis authorization/idempotency, durable matching decisions,
-canonical revisions/manual locks and entitlement/receipt workflows remain separate
-work. Paid/live provider and target NAS acceptance remain NOT_TESTED.
+`uv run pytest tests/test_basis_api.py tests/test_contracts.py` checks the protected
+HTTP boundary, writer-time session/CSRF rechecks, concurrent and historical replay,
+exact ratio strings, scope pins, rollback, owned keyset reads and private-safe
+failures. Durable matching decisions, canonical revisions/manual locks and
+entitlement/receipt workflows remain separate work. Paid/live provider and target
+NAS acceptance remain NOT_TESTED.

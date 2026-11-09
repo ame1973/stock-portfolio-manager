@@ -344,6 +344,98 @@
         "title": "Availability",
         "type": "string"
       },
+      "BasisActionPin": {
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "format": "uuid",
+            "title": "Action Id",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action_id",
+          "version"
+        ],
+        "title": "BasisActionPin",
+        "type": "object"
+      },
+      "BasisActionSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "format": "uuid",
+            "title": "Action Id",
+            "type": "string"
+          },
+          "action_root_id": {
+            "format": "uuid",
+            "title": "Action Root Id",
+            "type": "string"
+          },
+          "action_type": {
+            "enum": [
+              "SPLIT",
+              "REVERSE_SPLIT"
+            ],
+            "title": "Action Type",
+            "type": "string"
+          },
+          "effective_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Effective Date",
+            "type": "string"
+          },
+          "observed_lifecycle_status": {
+            "const": "CURRENT",
+            "title": "Observed Lifecycle Status",
+            "type": "string"
+          },
+          "observed_status": {
+            "const": "CONFIRMED",
+            "title": "Observed Status",
+            "type": "string"
+          },
+          "observed_version": {
+            "title": "Observed Version",
+            "type": "integer"
+          },
+          "ratio_denominator": {
+            "title": "Ratio Denominator",
+            "type": "string"
+          },
+          "ratio_numerator": {
+            "title": "Ratio Numerator",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_id",
+          "action_root_id",
+          "security_id",
+          "observed_version",
+          "action_type",
+          "effective_date",
+          "ratio_numerator",
+          "ratio_denominator",
+          "observed_status",
+          "observed_lifecycle_status"
+        ],
+        "title": "BasisActionSnapshot",
+        "type": "object"
+      },
       "Broker": {
         "additionalProperties": false,
         "properties": {
@@ -2037,6 +2129,182 @@
         "title": "CurrencyCashBalance",
         "type": "object"
       },
+      "DividendBasisCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/BasisActionPin"
+            },
+            "maxItems": 100,
+            "title": "Actions",
+            "type": "array"
+          },
+          "citation": {
+            "$ref": "#/components/schemas/CitationInput"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "observation_id": {
+            "format": "uuid",
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "share_basis_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Share Basis Date",
+            "type": "string"
+          },
+          "source_basis": {
+            "const": "AFTER_EFFECTIVE_DATE_ACTIONS",
+            "title": "Source Basis",
+            "type": "string"
+          },
+          "source_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          },
+          "split_only": {
+            "title": "Split Only",
+            "type": "boolean"
+          },
+          "target_basis": {
+            "const": "PRE_EX_DATE_EVENTS",
+            "title": "Target Basis",
+            "type": "string"
+          }
+        },
+        "required": [
+          "observation_id",
+          "source_sha256",
+          "share_basis_date",
+          "source_basis",
+          "target_basis",
+          "complete",
+          "split_only",
+          "actions",
+          "citation"
+        ],
+        "title": "DividendBasisCreate",
+        "type": "object"
+      },
+      "DividendBasisRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/BasisActionSnapshot"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "canonical_adoption": {
+            "const": "NOT_ADOPTED",
+            "default": "NOT_ADOPTED",
+            "title": "Canonical Adoption",
+            "type": "string"
+          },
+          "citation": {
+            "$ref": "#/components/schemas/PublicCitation"
+          },
+          "complete": {
+            "const": true,
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED_FOR_NEW_ADOPTION",
+            "default": "REVALIDATION_REQUIRED_FOR_NEW_ADOPTION",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "ex_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Ex Date",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "market_history": {
+            "const": "OWNER_ASSERTED_NOT_VERIFIED",
+            "default": "OWNER_ASSERTED_NOT_VERIFIED",
+            "title": "Market History",
+            "type": "string"
+          },
+          "observation_id": {
+            "format": "uuid",
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "BASIS_DECLARATION_ONLY",
+            "default": "BASIS_DECLARATION_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "share_basis_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Share Basis Date",
+            "type": "string"
+          },
+          "source_basis": {
+            "const": "AFTER_EFFECTIVE_DATE_ACTIONS",
+            "title": "Source Basis",
+            "type": "string"
+          },
+          "source_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          },
+          "split_only": {
+            "const": true,
+            "title": "Split Only",
+            "type": "boolean"
+          },
+          "target_basis": {
+            "const": "PRE_EX_DATE_EVENTS",
+            "title": "Target Basis",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "observation_id",
+          "source_sha256",
+          "security_id",
+          "ex_date",
+          "share_basis_date",
+          "source_basis",
+          "target_basis",
+          "complete",
+          "split_only",
+          "actions",
+          "citation",
+          "created_at"
+        ],
+        "title": "DividendBasisRecord",
+        "type": "object"
+      },
       "DividendObservationRecord": {
         "additionalProperties": false,
         "properties": {
@@ -3439,6 +3707,34 @@
           "items"
         ],
         "title": "Page[CorporateAction]",
+        "type": "object"
+      },
+      "Page_DividendBasisRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DividendBasisRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[DividendBasisRecord]",
         "type": "object"
       },
       "Page_Exchange_": {
@@ -12335,6 +12631,385 @@
         "summary": "Revise Action",
         "tags": [
           "CorporateActions"
+        ]
+      }
+    },
+    "/api/v1/dividends/basis-assertions": {
+      "get": {
+        "operationId": "list_dividend_basis_assertions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "observation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Observation Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "security_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Security Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_DividendBasisRecord_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "List Basis",
+        "tags": [
+          "Dividend basis declarations"
+        ]
+      },
+      "post": {
+        "description": "Derive snapshots from real current rows, not caller-supplied ownership or ratios.",
+        "operationId": "create_dividend_basis_assertion",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DividendBasisCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DividendBasisRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Create Basis",
+        "tags": [
+          "Dividend basis declarations"
+        ]
+      }
+    },
+    "/api/v1/dividends/basis-assertions/{id}": {
+      "get": {
+        "operationId": "get_dividend_basis_assertion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DividendBasisRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Get Basis",
+        "tags": [
+          "Dividend basis declarations"
         ]
       }
     },

@@ -14,10 +14,12 @@ from starlette.responses import Response
 from spm_api import __version__
 from spm_api.action_routes import router as action_router
 from spm_api.auth_routes import router as auth_router
+from spm_api.basis_routes import router as basis_router
 from spm_api.cash_routes import router as cash_router
 from spm_api.cited_routes import router as cited_router
 from spm_api.config import Settings
 from spm_api.db import check_database, make_engine
+from spm_api.dividend_basis_service import BasisError
 from spm_api.errors import ApiError, Error, Status, error_response
 from spm_api.finance import FinanceError
 from spm_api.master_routes import router as master_router
@@ -137,6 +139,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "The source schedule change could not be accepted",
         )
 
+    @app.exception_handler(BasisError)
+    async def basis_error(request: Request, exc: BasisError) -> JSONResponse:
+        code = str(exc)
+        if code == "BASIS_ASSERTION_NOT_FOUND":
+            return error_response(request, 404, "NOT_FOUND", "Basis declaration not found")
+        if code == "BASIS_OWNER_UNAVAILABLE":
+            return error_response(request, 401, "UNAUTHORIZED", "Authentication is required")
+        if code in {"INVALID_BASIS_SCOPE", "INVALID_BASIS_ASSERTION"}:
+            return error_response(request, 422, code, "The basis declaration is invalid")
+        if code in {"BASIS_SOURCE_CHANGED", "BASIS_ACTIONS_CHANGED", "BASIS_ASSERTION_CONFLICT"}:
+            return error_response(request, 409, code, "The basis declaration no longer matches")
+        return error_response(
+            request,
+            503,
+            "BASIS_ASSERTION_UNAVAILABLE",
+            "The basis declaration cannot be read safely",
+        )
+
     @app.exception_handler(IntegrityError)
     async def integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
         return error_response(request, 409, "CONFLICT", "The change violates a data constraint")
@@ -184,6 +204,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(provider_router)
     app.include_router(observation_router)
     app.include_router(cited_router)
+    app.include_router(basis_router)
     app.include_router(schedule_router)
     return app
 

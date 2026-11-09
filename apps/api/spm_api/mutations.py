@@ -70,6 +70,7 @@ def mutate[M: Model](
     *,
     status: int = 200,
     reauth: bool = False,
+    validate_replay: Callable[[Connection, Auth, M], None] | None = None,
 ) -> M:
     """Serialize before commit so response validation cannot leave a partial financial write."""
     route = f"{request.method} {request.url.path}"
@@ -78,7 +79,10 @@ def mutate[M: Model](
         auth, existing = _checked_request(con, request, headers, fingerprint, reauth=reauth)
         owner = str(auth.owner.id)
         if existing is not None:
-            return model.model_validate(json.loads(existing["response_json"]))
+            result = model.model_validate(json.loads(existing["response_json"]))
+            if validate_replay is not None:
+                validate_replay(con, auth, result)
+            return result
         result = action(con, auth)
         encoded = result.model_dump_json()
         con.execute(
