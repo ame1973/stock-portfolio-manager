@@ -150,6 +150,31 @@ def _scope(owner: UUID, identifier: UUID, version: int | None = None) -> None:
         raise CandidateError("INVALID_CANDIDATE_SCOPE")
 
 
+def _history_scope(con: Connection, owner: UUID, identifier: UUID) -> bool:
+    row = con.execute(
+        text("""
+        SELECT count(*) AS total,
+          sum(CASE WHEN owner_id=:owner THEN 1 ELSE 0 END) AS owned,
+          min(revision_no) AS first_version,max(revision_no) AS last_version,
+          count(security_id) AS securities,min(security_id) AS first_security,
+          max(security_id) AS last_security
+        FROM dividend_candidate_revisions WHERE candidate_id=:id
+    """),
+        {"owner": str(owner), "id": str(identifier)},
+    ).one()
+    if not row.total or not row.owned:
+        return False
+    if (
+        row.owned != row.total
+        or row.first_version != 1
+        or row.last_version != row.total
+        or row.securities != row.total
+        or row.first_security != row.last_security
+    ):
+        raise CandidateError("CANDIDATE_HISTORY_UNAVAILABLE")
+    return True
+
+
 def _writer(con: Connection, owner: UUID) -> None:
     if not con.in_transaction() or not con.get_execution_options().get("writer"):
         raise CandidateError("WRITE_UNIT_OF_WORK_REQUIRED")
@@ -297,6 +322,8 @@ def get(
 ) -> ReviewedCandidate | None:
     """Read an audited original decision, never claiming a basis remains current."""
     _scope(owner_id, candidate_id, version)
+    if not _history_scope(con, owner_id, candidate_id):
+        return None
     row = (
         con.execute(
             text("""
@@ -321,6 +348,8 @@ def require_current(
     if type(version) is not int:
         raise CandidateError("INVALID_CANDIDATE_SCOPE")
     _scope(owner_id, candidate_id, version)
+    if not _history_scope(con, owner_id, candidate_id):
+        raise CandidateError("CANDIDATE_NOT_FOUND")
     row = (
         con.execute(
             text("""
@@ -378,6 +407,8 @@ def save(
         if existing["owner_id"] != str(owner_id):
             raise CandidateError("CANDIDATE_REVISION_CONFLICT")
         original = _historical(con, existing)
+        if not _history_scope(con, owner_id, original.record.decision.candidate_id):
+            raise CandidateError("CANDIDATE_HISTORY_UNAVAILABLE")
         if _flat(original.record) != values:
             raise CandidateError("CANDIDATE_REVISION_CONFLICT")
         return original
@@ -394,7 +425,7 @@ def save(
     )
     previous = None
     if previous_row is not None:
-        if previous_row["owner_id"] != str(owner_id):
+        if not _history_scope(con, owner_id, record.decision.candidate_id):
             raise CandidateError("CANDIDATE_VERSION_CONFLICT")
         previous = _historical(con, previous_row).record
         if (

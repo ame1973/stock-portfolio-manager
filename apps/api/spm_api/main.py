@@ -15,11 +15,13 @@ from spm_api import __version__
 from spm_api.action_routes import router as action_router
 from spm_api.auth_routes import router as auth_router
 from spm_api.basis_routes import router as basis_router
+from spm_api.candidate_routes import router as candidate_router
 from spm_api.cash_routes import router as cash_router
 from spm_api.cited_routes import router as cited_router
 from spm_api.config import Settings
 from spm_api.db import check_database, make_engine
 from spm_api.dividend_basis_service import BasisError
+from spm_api.dividend_candidate_service import CandidateError
 from spm_api.errors import ApiError, Error, Status, error_response
 from spm_api.finance import FinanceError
 from spm_api.master_routes import router as master_router
@@ -157,6 +159,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "The basis declaration cannot be read safely",
         )
 
+    @app.exception_handler(CandidateError)
+    async def candidate_error(request: Request, exc: CandidateError) -> JSONResponse:
+        code = str(exc)
+        if code == "CANDIDATE_NOT_FOUND":
+            return error_response(request, 404, "NOT_FOUND", "Dividend candidate not found")
+        if code == "CANDIDATE_OWNER_UNAVAILABLE":
+            return error_response(request, 401, "UNAUTHORIZED", "Authentication is required")
+        if code in {"INVALID_CANDIDATE_SCOPE", "INVALID_CANDIDATE_DECISION"}:
+            return error_response(request, 422, code, "The candidate decision is invalid")
+        if code in {
+            "CANDIDATE_BASIS_CHANGED",
+            "CANDIDATE_BASIS_UNAVAILABLE",
+            "CANDIDATE_SOURCE_CHANGED",
+            "CANDIDATE_SOURCE_UNAVAILABLE",
+            "CANDIDATE_SECURITY_UNAVAILABLE",
+            "CANDIDATE_REVISION_CONFLICT",
+            "CANDIDATE_VERSION_CONFLICT",
+            "CANDIDATE_VERSION_EXHAUSTED",
+            "CANDIDATE_TIME_CONFLICT",
+        }:
+            return error_response(request, 409, code, "The candidate decision cannot be accepted")
+        return error_response(
+            request, 503, "CANDIDATE_HISTORY_UNAVAILABLE", "The candidate cannot be read safely"
+        )
+
     @app.exception_handler(IntegrityError)
     async def integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
         return error_response(request, 409, "CONFLICT", "The change violates a data constraint")
@@ -205,6 +232,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(observation_router)
     app.include_router(cited_router)
     app.include_router(basis_router)
+    app.include_router(candidate_router)
     app.include_router(schedule_router)
     return app
 

@@ -86,8 +86,9 @@ later actions do not rewrite earlier candidate or basis history.
 This SQL schema is **not** actor/session authorization, a recorded creation audit,
 cryptographic recomputation of the source or association hash, or proof that a
 basis declaration still matches current actions. Bare SQL rows without a validated
-matching audit must not be treated as accepted decisions. No worker or public
-route currently writes or consumes the candidate table.
+matching audit must not be treated as accepted decisions. The protected API below
+uses the controller explicitly; no worker automatically writes or consumes the
+candidate table.
 
 Upgrade retains prior rows and adds one schema audit per existing owner; a repeated
 upgrade is a no-op. Late DDL/audit failures roll back the upgrade. Downgrade refuses
@@ -105,9 +106,9 @@ basis/action scope for every basis used in a new revision. It appends the revisi
 and a request-correlated audit with before/after decision fingerprints in one short
 writer transaction. It does not infer any association from a hint or ex-date.
 
-The internal owner UUID is **not HTTP authentication**. A future protected route
-must mint the IDs, recheck the current session and CSRF inside its writer, fence the
-observed version, and commit the serialized idempotency response with the audit.
+The internal owner UUID is **not HTTP authentication**. The protected route below
+mints the IDs, rechecks the current session and CSRF inside its writer, fences the
+observed version, and commits the serialized idempotency response with the audit.
 The internal controller itself is not an API or an idempotency-key receipt. A
 replay of the exact same already-audited internal revision returns its original
 historical comparison without writes after later action changes; different content,
@@ -115,7 +116,9 @@ owner, request or creation time cannot reuse its revision identity.
 
 Reads validate canonical stored fields, association digest, the original source
 and retained basis, the current revision's exact audit and its predecessor snapshot.
-A corrupt or unaudited row fails closed without repair or disclosure. The returned
+The candidate's retained revisions must have one owner/security and a contiguous
+version sequence; a corrupt later owner cannot revive an earlier version. A corrupt
+or unaudited row fails closed without repair or disclosure. The returned
 comparison is **historical**, not a claim that the basis is still current or that a
 payment exists. `require_current` checks the latest explicit version, OPEN state,
 source and full current basis/action scope inside a writer; it does not by itself
@@ -123,6 +126,50 @@ verify or adopt terms. A new DISMISSED revision also checks any basis references
 contains. If an old basis has become stale, a caller may explicitly omit that
 reference from the dismissal while retaining the original historical revision.
 No source sync, financial ledger, event, entitlement or receipt is changed.
+
+## Protected candidate review API
+
+All operations require an owner session and return `Cache-Control: no-store`:
+
+- `POST /api/v1/dividends/candidates` creates one review candidate and returns 201,
+  a stable candidate `Location` and version `ETag`.
+- `GET /api/v1/dividends/candidates` lists the latest version per owned candidate,
+  with optional `security_id`, `state`, literal search and bounded keyset pagination.
+- `GET /api/v1/dividends/candidates/{id}` reads the current owned revision;
+  `GET /api/v1/dividends/candidates/{id}/revisions` lists retained versions newest
+  first with bounded version keyset pagination.
+- `PATCH /api/v1/dividends/candidates/{id}` appends a full explicit revision. It
+  requires the observed quoted `If-Match`; stale versions return 412. A candidate
+  cannot move to another security. There is no delete or canonical-adoption action.
+
+Create and revise bodies require `state`, explicit `terms`, `matches` and
+`change_reason`. Each match supplies the existing observation UUID, its original
+`source_sha256`, an optional owned `basis_assertion_id` and an association reason.
+An explicitly empty list is allowed. Caller-supplied owner, candidate/revision ID,
+version, confidence, verification or receipt fields are rejected. Amounts are
+nonnegative exact decimal strings with up to eight places; null currency/date/DPS
+remain unknown, and known zero remains zero. The API never fills dividend currency
+from a security quote. Same-day distributions require separate explicit candidates.
+
+Writes require `X-CSRF-Token` and `Idempotency-Key`; session and CSRF are rechecked
+inside the writer before both a new decision and cached replay. Revision fingerprints
+include `If-Match`; unchanged source associations are sorted before fingerprinting.
+A completed retry returns its original body, candidate ID and ETag even after a
+later action correction, provided the original audited history remains intact.
+Before replay, the server checks that the cached DTO and normalized request still
+match that owned historical record; it does not repair tampered receipts. A new
+revision referencing a stale basis instead returns `CANDIDATE_BASIS_CHANGED` (409).
+To dismiss without reusing a stale basis, explicitly omit that match in the new
+reasoned revision; old revisions and evidence remain available.
+
+Responses distinguish the stable candidate `id` from physical `revision_id`, and
+include exact proposed terms, explicit matches, review reasons and a field-level
+historical `assessment`. `CANDIDATE_REVIEW_ONLY`, `NOT_ADOPTED` and
+`REVALIDATION_REQUIRED` are explicit: an assessment is not a current action-scope
+check, official verification, canonical event, entitlement or payment. Source
+payloads, private URLs, owner/request IDs, provider credentials and raw association
+JSON are not returned. A malformed or unaudited retained candidate fails safely
+with 503 rather than silently falling back or repairing history.
 
 ## Checks and remaining work
 
@@ -141,8 +188,11 @@ nullable/exact financial values, malformed JSON and the byte/entry limits.
 internal audited writer, historical replay, stale action fences, cross-owner and
 corrupt-history rejection, concurrent revisions, exact comparison, 100 explicit
 matches and an actual mock-HTTP source capture. It does not claim a live request.
+`uv run pytest tests/test_candidate_api.py` checks owner/session/CSRF protection,
+server-minted identities, exact terms, CAS, concurrent idempotency, historical
+replay, tamper rejection, scope corruption, limits and physical keyset pages.
 
-An authenticated candidate API, review UI, canonical immutable event
-revisions/manual locks, entitlement rebuilding and actual receipts remain
-unfinished. A current observation, hint or internal candidate result is never a
-claim of confirmed income or a current-use grant for a split-basis declaration.
+The candidate review UI, canonical immutable event revisions/manual locks,
+entitlement rebuilding and actual receipts remain unfinished. A current observation,
+hint or candidate result is never a claim of confirmed income or a current-use grant
+for a split-basis declaration.

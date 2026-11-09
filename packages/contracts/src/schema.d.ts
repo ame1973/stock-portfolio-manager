@@ -397,6 +397,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Candidates */
+        get: operations["list_dividend_candidates"];
+        put?: never;
+        /** Create Candidate */
+        post: operations["create_dividend_candidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dividends/candidates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Candidate */
+        get: operations["get_dividend_candidate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Revise Candidate */
+        patch: operations["revise_dividend_candidate"];
+        trace?: never;
+    };
+    "/api/v1/dividends/candidates/{id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Revisions */
+        get: operations["list_dividend_candidate_revisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/observations": {
         parameters: {
             query?: never;
@@ -1322,6 +1375,129 @@ export interface components {
          * @description An optional empty body rejects accidental credential or financial inputs.
          */
         CancelJobRequest: Record<string, never>;
+        /** CandidateAssessment */
+        CandidateAssessment: {
+            /** Checks */
+            checks: components["schemas"]["CandidateEvidenceCheck"][];
+            /** Conflicting Fields */
+            conflicting_fields: ("ex_date" | "announce_date" | "record_date" | "pay_date" | "event_type" | "currency" | "dps" | "adjustment_basis")[];
+            /** Eligible Observation Ids */
+            eligible_observation_ids: string[];
+            /** Incomplete Reasons */
+            incomplete_reasons: string[];
+            /** Independent Origins */
+            independent_origins: ("EODHD" | "ALPHAVANTAGE" | "MASSIVE" | "YAHOO" | "HKEX_OFFICIAL" | "SEC_OFFICIAL" | "USER_VERIFIED")[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "PROVISIONAL" | "CORROBORATED" | "CONFLICT" | "INCOMPLETE";
+        };
+        /** CandidateEvidenceCheck */
+        CandidateEvidenceCheck: {
+            /** Basis Assertion Id */
+            basis_assertion_id: string | null;
+            /**
+             * Comparison Basis
+             * @enum {string}
+             */
+            comparison_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /** Comparison Dps */
+            comparison_dps: string | null;
+            /** Conflicting Fields */
+            conflicting_fields: ("ex_date" | "announce_date" | "record_date" | "pay_date" | "event_type" | "currency" | "dps" | "adjustment_basis")[];
+            /** Incomplete Reasons */
+            incomplete_reasons: string[];
+            /**
+             * Observation Id
+             * Format: uuid
+             */
+            observation_id: string;
+            /** Supporting Fields */
+            supporting_fields: ("ex_date" | "announce_date" | "record_date" | "pay_date" | "event_type" | "currency" | "dps" | "adjustment_basis")[];
+        };
+        /**
+         * CandidateMatch
+         * @description One explicit source association, not proof of event identity.
+         */
+        CandidateMatch: {
+            /** Basis Assertion Id */
+            basis_assertion_id?: string | null;
+            /**
+             * Observation Id
+             * Format: uuid
+             */
+            observation_id: string;
+            /** Reason */
+            reason: string;
+            /** Source Sha256 */
+            source_sha256: string;
+        };
+        /** CandidateRecord */
+        CandidateRecord: {
+            assessment: components["schemas"]["CandidateAssessment"];
+            /**
+             * Canonical Adoption
+             * @default NOT_ADOPTED
+             * @constant
+             */
+            canonical_adoption: "NOT_ADOPTED";
+            /** Change Reason */
+            change_reason: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Current Use Scope
+             * @default REVALIDATION_REQUIRED
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Matches */
+            matches: components["schemas"]["CandidateMatch"][];
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /**
+             * Scope
+             * @default CANDIDATE_REVIEW_ONLY
+             * @constant
+             */
+            scope: "CANDIDATE_REVIEW_ONLY";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "OPEN" | "DISMISSED";
+            terms: components["schemas"]["DividendTerms"];
+            /** Version */
+            version: number;
+        };
+        /**
+         * CandidateWrite
+         * @description Full explicit review intent; owner, candidate and revision IDs are server-owned.
+         */
+        CandidateWrite: {
+            /** Change Reason */
+            change_reason: string;
+            /** Matches */
+            matches: components["schemas"]["CandidateMatch"][];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "OPEN" | "DISMISSED";
+            terms: components["schemas"]["DividendTerms"];
+        };
         /** CashEntry */
         CashEntry: {
             /**
@@ -2119,6 +2295,41 @@ export interface components {
             /** Source Url */
             source_url: string | null;
         };
+        /**
+         * DividendTerms
+         * @description Proposed terms can remain incomplete; they are not a financial event revision.
+         */
+        DividendTerms: {
+            /**
+             * Adjustment Basis
+             * @default UNKNOWN
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /** Announce Date */
+            announce_date?: string | null;
+            /** Currency */
+            currency?: ("HKD" | "USD") | null;
+            /** Dps */
+            dps?: string | null;
+            /**
+             * Event Type
+             * @default UNKNOWN
+             * @enum {string}
+             */
+            event_type: "REGULAR" | "SPECIAL" | "INTERIM" | "FINAL" | "SUPPLEMENTAL" | "ETF_DISTRIBUTION" | "REIT_DISTRIBUTION" | "UNKNOWN";
+            /** Ex Date */
+            ex_date?: string | null;
+            /** Pay Date */
+            pay_date?: string | null;
+            /** Record Date */
+            record_date?: string | null;
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+        };
         /** Error */
         Error: {
             /** Code */
@@ -2504,6 +2715,13 @@ export interface components {
         Page_Broker_: {
             /** Items */
             items: components["schemas"]["Broker"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[CandidateRecord] */
+        Page_CandidateRecord_: {
+            /** Items */
+            items: components["schemas"]["CandidateRecord"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -7505,6 +7723,452 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_dividend_candidates: {
+        parameters: {
+            query?: {
+                security_id?: string | null;
+                state?: ("OPEN" | "DISMISSED") | null;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CandidateRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    create_dividend_candidate: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_dividend_candidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revise_dividend_candidate: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_dividend_candidate_revisions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CandidateRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
                 headers: {
                     [name: string]: unknown;
                 };

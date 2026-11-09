@@ -24,12 +24,12 @@ These pure inputs are not authorization or evidence of an actual stored associat
 The [internal audited candidate controller](CANDIDATES.md#internal-audited-decisions)
 loads original immutable v1 assertions and their hashes, retains the explicit match
 choice, fences current basis/action versions and commits the decision and audit
-atomically. A future protected route must still authenticate the current session,
-check CSRF and commit its idempotency response in the same writer. Do not hash an
-enriched/redacted public DTO as the original assertion or treat a supplied UUID or
-reason as HTTP authorization. The pure comparison itself accesses no database,
-private configuration, document or upstream; it uses static provider origin
-metadata from the registry.
+atomically. Its [protected review API](CANDIDATES.md#protected-candidate-review-api)
+authenticates the current session, checks CSRF and commits its idempotency response
+in the same writer. Do not hash an enriched/redacted public DTO as the original
+assertion or treat a supplied UUID or reason as HTTP authorization. The pure
+comparison itself accesses no database, private configuration, document or
+upstream; it uses static provider origin metadata from the registry.
 
 Different distributions may share an ex-date. Nearby dates, equal DPS, a current
 ticker or source period alone do not prove the same distribution. This library

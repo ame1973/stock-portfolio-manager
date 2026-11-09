@@ -815,3 +815,44 @@ def test_one_hundred_explicit_source_matches_are_retained_and_compared(
     assert result.assessment.status == "INCOMPLETE" and len(result.assessment.checks) == 100
     assert len(result.record.decision.matches) == 100
     assert get(engine, body.candidate_id) == result
+
+
+@pytest.mark.parametrize("corruption", ["foreign-latest", "older-gap"])
+def test_corrupt_whole_history_never_reissues_a_historical_current_grant(
+    engine: Engine, basis: SplitBasisAssertion, corruption: str
+) -> None:
+    first, request = decision(basis), uuid4()
+    save(engine, first, request_id=request)
+    second = first.model_copy(update={"id": uuid4(), "revision_no": 2})
+    third = first.model_copy(update={"id": uuid4(), "revision_no": 3})
+    save(engine, second, at=AT + timedelta(seconds=1))
+    save(engine, third, at=AT + timedelta(seconds=2))
+    with unit_of_work(engine, write=True) as con:
+        if corruption == "foreign-latest":
+            con.exec_driver_sql("DROP TRIGGER trg_dividend_candidate_no_update")
+            con.exec_driver_sql(
+                "UPDATE dividend_candidate_revisions SET owner_id=? WHERE id=?",
+                (str(OTHER), str(third.id)),
+            )
+        else:
+            con.exec_driver_sql("DROP TRIGGER trg_dividend_candidate_no_delete")
+            con.exec_driver_sql(
+                "DELETE FROM dividend_candidate_revisions WHERE id=?", (str(first.id),)
+            )
+    before = database_snapshot(engine)
+    for operation in ("get", "current", "new"):
+        with pytest.raises(candidates.CandidateError, match="^CANDIDATE_HISTORY_UNAVAILABLE$"):
+            if operation == "get":
+                get(engine, first.candidate_id)
+            elif operation == "current":
+                current(engine, first.candidate_id, 2)
+            else:
+                save(
+                    engine,
+                    third.model_copy(update={"id": uuid4(), "revision_no": 4}),
+                    at=AT + timedelta(seconds=3),
+                )
+    if corruption == "foreign-latest":
+        with pytest.raises(candidates.CandidateError, match="^CANDIDATE_HISTORY_UNAVAILABLE$"):
+            save(engine, first, request_id=request)
+    assert database_snapshot(engine) == before
