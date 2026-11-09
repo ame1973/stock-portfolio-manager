@@ -109,7 +109,8 @@ properties; any omitted currency/basis needed for a complete synthetic compariso
 is explicitly supplied by the test, never inferred in production. The [audited basis writer and protected owner API](BASIS.md#protected-declaration-api)
 check original source content/hash and real current action scope, retaining
 historical declarations with their authorship audits. They do not trust a stored
-row as a new adoption grant. Canonical matching, revisions/manual locks,
-entitlements, receipts/reconciliation
-and their public workflows still require separate implementation and acceptance.
+row as a new adoption grant. The [event integrity foundation](EVENTS.md) adds
+storage fences, not a canonical writer. Canonical matching, protected revisions and
+manual locks, entitlements, receipts/reconciliation and their public workflows
+still require separate implementation and acceptance.
 Paid/live provider and NAS validation remain NOT_TESTED.

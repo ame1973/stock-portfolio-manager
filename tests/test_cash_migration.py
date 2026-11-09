@@ -225,7 +225,7 @@ def test_sql_corrections_need_a_reversed_manual_parent_same_owner_and_one_succes
         reverse(con, "original")
         cash(con, "corrected", account="B", source="CASH_CORRECTION", previous="original")
     with (
-        pytest.raises(IntegrityError, match="UNIQUE constraint failed"),
+        pytest.raises(IntegrityError, match="IMMUTABLE_CASH_ENTRY"),
         unit_of_work(engine, write=True) as con,
     ):
         cash(con, "fork", source="CASH_CORRECTION", previous="original")

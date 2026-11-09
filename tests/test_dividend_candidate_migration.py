@@ -12,7 +12,6 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from spm_api.audit import canonical, digest
-from spm_api.cli import migrate
 from spm_api.config import Settings
 from spm_api.db import make_engine, migration_config, schema_head, unit_of_work
 from tests.helpers import database_snapshot
@@ -106,14 +105,14 @@ def rejected(engine: Engine, values: dict[str, Any], *, replace: bool = False) -
 
 def test_new_current_schema_exposes_only_an_empty_candidate_revision_store(engine: Engine) -> None:
     with unit_of_work(engine) as con:
-        assert schema_head() == HEAD
+        assert schema_head() == "0016_dividend_event_controls"
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert (
             con.exec_driver_sql(
                 "SELECT count(*) FROM sqlite_schema WHERE type='table' "
                 "AND name NOT LIKE 'sqlite_%' AND name<>'alembic_version'"
             ).scalar_one()
-            == 53
+            == 55
         )
 
 
@@ -122,7 +121,7 @@ def test_upgrade_preserves_all_old_facts_adds_one_empty_table_and_audits_each_ow
 ) -> None:
     before, definitions = database_snapshot(old_engine), schema(old_engine)
     secret_dir_present = settings.provider_secret_dir.exists()
-    migrate(settings)
+    upgrade_to(old_engine, HEAD)
     after = database_snapshot(old_engine)
     assert set(after) == {*before, TABLE} and after[TABLE] == []
     assert {
@@ -148,13 +147,13 @@ def test_upgrade_preserves_all_old_facts_adds_one_empty_table_and_audits_each_ow
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     assert settings.provider_secret_dir.exists() is secret_dir_present
     assert not settings.backup_dir.exists()
-    migrate(settings)
+    upgrade_to(old_engine, HEAD)
     assert database_snapshot(old_engine) == after
 
 
 @pytest.mark.parametrize("failure", ["ddl", "second-owner-audit"])
 def test_failed_upgrade_rolls_back_schema_facts_and_audits(
-    old_engine: Engine, settings: Settings, failure: str
+    old_engine: Engine, failure: str
 ) -> None:
     with old_engine.begin() as con:
         if failure == "ddl":
@@ -168,7 +167,7 @@ def test_failed_upgrade_rolls_back_schema_facts_and_audits(
             """)
     before, definitions = database_snapshot(old_engine), schema(old_engine)
     with pytest.raises((OperationalError, IntegrityError)):
-        migrate(settings)
+        upgrade_to(old_engine, HEAD)
     assert database_snapshot(old_engine) == before and schema(old_engine) == definitions
     with old_engine.connect() as con:
         assert (
@@ -540,15 +539,17 @@ def test_valid_calendar_boundaries_are_preserved(
         ).one() == (day, day, day, day)
 
 
-def test_downgrade_refuses_to_delete_candidate_history(
-    engine: Engine, source: dict[str, Any]
-) -> None:
-    with unit_of_work(engine, write=True) as con:
+def test_downgrade_refuses_to_delete_candidate_history(old_engine: Engine) -> None:
+    upgrade_to(old_engine, HEAD)
+    with old_engine.begin() as con:
+        source = dict(
+            con.exec_driver_sql("SELECT * FROM dividend_basis_assertions").mappings().one()
+        )
         insert(con, TABLE, candidate(source))
-    before, definitions = database_snapshot(engine), schema(engine)
-    with engine.connect() as con:
+    before, definitions = database_snapshot(old_engine), schema(old_engine)
+    with old_engine.connect() as con:
         config = migration_config()
         config.attributes["connection"] = con
         with pytest.raises(RuntimeError, match="validated"):
             command.downgrade(config, "0014_dividend_basis_assertions")
-    assert database_snapshot(engine) == before and schema(engine) == definitions
+    assert database_snapshot(old_engine) == before and schema(old_engine) == definitions

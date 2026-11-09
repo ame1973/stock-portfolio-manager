@@ -192,7 +192,8 @@ matches and an actual mock-HTTP source capture. It does not claim a live request
 server-minted identities, exact terms, CAS, concurrent idempotency, historical
 replay, tamper rejection, scope corruption, limits and physical keyset pages.
 
-The candidate review UI, canonical immutable event revisions/manual locks,
-entitlement rebuilding and actual receipts remain unfinished. A current observation,
-hint or candidate result is never a claim of confirmed income or a current-use grant
-for a split-basis declaration.
+The candidate review UI, protected canonical event workflow, entitlement rebuilding
+and actual receipts remain unfinished. The separate [event integrity foundation](EVENTS.md)
+adds storage fences but does not adopt a candidate. A current observation, hint or
+candidate result is never a claim of confirmed income or a current-use grant for a
+split-basis declaration.
