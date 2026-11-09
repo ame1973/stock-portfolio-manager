@@ -151,10 +151,60 @@ so review can extend to an account even if a transfer preceded the action. Inval
 inputs and computable oversold histories fail closed; an unresolved component never
 publishes a guessed quantity.
 
-This pure calculation does not install a database-backed ownership loader, an
-entitlement projection, an event/receipt API, or a user interface. A future
-financial writer must reload and validate the correct current facts inside its
-own transaction before adopting any result.
+The pure calculation does not itself read a database, authenticate a caller,
+calculate an entitlement or post a receipt.
+
+## Owned recorded-history reader
+
+The separate internal `dividend_eligibility_service.get` loads one explicitly
+identified owner's portfolio and security within the caller's existing database
+transaction. It requires an active owner, returns no portfolio for a foreign or
+missing identity, includes active and archived accounts, and validates account,
+broker and portfolio ownership. Results are ordered by account identity and
+carry the requested ex-date, exchange-local as-of date, explicit rule and the
+portfolio's observed `data_revision`. The latter is a snapshot value, **not** a
+current-use grant or a substitute for rechecking all facts. Authentication and
+CSRF still belong to a future protected caller.
+
+For relevant trade and security-transfer roots, the reader checks retained
+revision and predecessor continuity even when a later revision moved to another
+portfolio or security owned by the same owner. It validates both sides of each
+transfer, action security identity, current/void lifecycle, canonical dates,
+rational directions and the real ledger sequence's kind and stable root. A
+missing current successor cannot silently turn shares into zero. Actual active
+facts, current adopted splits and unresolved current actions are then read by
+the existing ledger replay; source-only factors are never adopted.
+
+The reader requires one actor/request-correlated `CREATE` or `REVISE` audit per
+retained fact. It checks the canonical after fingerprint of every retained
+security transfer and corporate action, their reconstructible revision/void
+before fingerprints, each current non-void trade's canonical after fingerprint,
+and each terminal void's status/version audit. Action review flags may have
+changed independently since the original action; both possible historical flag
+values are checked without changing the fact. Facts lacking the required audits
+fail closed rather than being silently adopted as verified history. These checks
+are against the retained database records; hashes are not signatures or proof
+of an externally authenticated actor or complete market history.
+
+**Retired-trade limitation:** retiring a trade overwrites its original
+`updated_at`, so its original creation/revision after fingerprint and the
+retirement before fingerprint cannot always be reconstructed from the retained
+trade row. The reader checks the retained audit's presence, actor, metadata and
+fingerprint shape, but cannot detect every valid-shaped alteration of those old
+hashes. `trade_history_audit_scope=RETIRED_TRADE_HISTORY_UNVERIFIED` makes this
+limitation explicit whenever the relevant history contains a superseded or
+voided trade; otherwise it reports `NO_RETIRED_TRADES`. Do not treat the former
+as a fully verified historical audit chain. Restoring or independently verifying
+that lineage requires additional retained evidence or an explicit review path;
+the reader does not guess the lost timestamp or treat an expiring idempotency
+cache as durable proof.
+
+The reader performs no writes, provider requests or credential-file reads. It
+is not an entitlement projection, event/receipt API or UI. Before any economic
+use, a writer must revalidate current owner, facts, action scope and the audit
+limitation in the same transaction as the financial changes; an earlier read or
+`data_revision` alone does not authorize adoption. Root-history and audit scans
+may need indexed batching if measured portfolio histories grow.
 
 ## Required future protected writer and projection work
 
