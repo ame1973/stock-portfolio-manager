@@ -419,11 +419,11 @@ acknowledgment is no longer a current-use review, even when the later record
 matches. It does not treat a later audit as proof it existed at creation.
 
 These helpers do not authenticate an HTTP session or validate the entire trade
-root, ownership history or economic scope. The protected API below authenticates
-review decisions; no review UI, trade-writer grant or eligibility integration
-consumes them yet. A future financial writer must consult the review history even
-when an audit later appears, and must revalidate the complete relevant scope in its
-own transaction. No provider or private-file access is performed.
+root, ownership history or economic scope. The protected API and browser workspace
+below authenticate review decisions; no trade-writer grant or eligibility
+integration consumes them yet. A future financial writer must consult the review
+history even when an audit later appears, and must revalidate the complete relevant
+scope in its own transaction. No provider or private-file access is performed.
 
 ## Protected unverified trade-history review API
 
@@ -477,10 +477,31 @@ version**; reread the status for current state. Review responses do not issue an
 ETag for the combined trade/review state; use the status's `trade_version` or the
 trade endpoint's ETag for the next physical `If-Match`. The response omits owner,
 audit/request IDs, raw trade snapshot and snapshot hash. Neither this API nor a
-bare SQL row unblocks trade
-PATCH/DELETE, establishes verified ownership, creates an entitlement or posts a
-receipt. The separate writer/eligibility integration and browser review UI remain
-unfinished.
+bare SQL row unblocks trade PATCH/DELETE, establishes verified ownership, creates
+an entitlement or posts a receipt. The separate writer/eligibility integration
+remains unfinished. **Known limitation:** if a missing creation audit is later
+inserted with matching contents, the current trade writer can accept a correction
+or void without proving when that audit was created, including after withdrawal.
+Do not rely on this path until the writer's review-history fence is installed.
+
+## Trade-history review in the browser
+
+On `/transactions`, expand a physical trade's **unverified trade-history review**
+section to load its current status and, separately, its paginated decision history.
+A reasoned acknowledgment or withdrawal requires recent password confirmation and
+an explicit scope acknowledgment. The editor freezes the observed physical version,
+exact review-revision string and gap. Withdrawal retains the last decision's gap
+even when later evidence has changed. The browser does not guess unsafe versions or
+treat a failed status read as verified history.
+
+If a response is uncertain, keep the editor open and retry the same normalized
+reason: its original idempotency key and observed intent remain in memory, including
+after password confirmation. Changing only leading or trailing whitespace does not
+change the submitted reason or key. Closing the editor discards the unsaved input
+and key; if it was closed, inspect the decision history before making another
+choice. Passwords, reasons and request bodies are not saved in browser storage. A
+review is not ownership, complete holdings, income or permission to revise or void
+a trade, and it does not post cash or dividends.
 
 ## Required future protected writer and projection work
 
@@ -563,6 +584,15 @@ concurrency, exact revision strings, pagination, corrupt audits, cached-intent
 validation and atomic rollback. It also checks that an acknowledged audit gap does
 not yet unblock either trade correction or void. These are isolated synthetic
 HTTP/SQLite tests, not proof of external ownership or eligibility.
+
+`npm run build && npm run test:e2e:trade-review` runs the actual application and
+Chromium against an exclusive temporary database. It checks reasoned review and
+withdrawal, recent password confirmation, a committed-but-lost response and its
+unchanged-key zero-write replay, and withdrawal after retained-origin recovery
+changes the evidence. It adds only new synthetic legacy facts and checks that
+existing audits, financial facts and historical FX remain unchanged. It does not
+exercise a worker, provider, deployment volume, container, NAS, TLS or external
+ownership; private diagnostics follow the pinned browser policy.
 
 `uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent

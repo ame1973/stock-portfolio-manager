@@ -16,6 +16,7 @@ import { usePageState } from "../settings/data";
 import { reason } from "./inputs";
 import { TradeForm, type Trade } from "./TradeForm";
 import { TradeOriginPanel, TradeOriginRecoveryForm, type TradeOrigin } from "./TradeOrigin";
+import { TradeHistoryReviewForm, TradeHistoryReviewPanel, type ReviewIntent } from "./TradeHistoryReview";
 import { useAccount, useSecurity } from "./data";
 import { AccountName, SecurityName } from "./ReferenceName";
 
@@ -90,6 +91,19 @@ function RecoveryEditor({ origin, onCancel, onSaved }: {
   </EditorSheet>;
 }
 
+function ReviewEditor({ intent, onCancel, onSaved }: {
+  intent: ReviewIntent; onCancel: () => void; onSaved: (withdrawn: boolean) => void;
+}) {
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const title = intent.decision === "WITHDRAW" ? "撤回未驗證審核" : "記錄未驗證審核";
+  return <EditorSheet title={title} onClose={onCancel}>
+    <div className="mb-6"><PasswordForm disabled={reviewBusy} onPendingChange={setPasswordBusy} /></div>
+    <TradeHistoryReviewForm intent={intent} disabled={passwordBusy} onPendingChange={setReviewBusy} onCancel={onCancel}
+      onSaved={record => onSaved(record.decision === "WITHDRAW")} />
+  </EditorSheet>;
+}
+
 const initialFilters = { portfolio_id: "", account_id: "", security_id: "", from_date: "", to_date: "", root_id: "", include_history: false };
 
 export function TradesPage() {
@@ -99,7 +113,9 @@ export function TradesPage() {
   const [editor, setEditor] = useState<Trade | "new" | null>(null);
   const [voiding, setVoiding] = useState<Trade | null>(null);
   const [recovery, setRecovery] = useState<TradeOrigin | null>(null);
+  const [review, setReview] = useState<ReviewIntent | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const editing = editor !== null || voiding !== null || recovery !== null || review !== null;
   const result = useQuery({ queryKey: ["ledger", "trades", filters, page.q, page.cursor], queryFn: async ({ signal }) =>
     checked(await api.GET("/api/v1/trades", { params: { query: {
       q: page.q, cursor: page.cursor, limit: 25, include_history: filters.include_history,
@@ -115,10 +131,14 @@ export function TradesPage() {
     if (recovery) void cache.invalidateQueries({ queryKey: ["ledger", "trade-audit-origin", recovery.trade_id] });
     setRecovery(null);
   }
+  function closeReview() {
+    if (review) void cache.invalidateQueries({ queryKey: ["ledger", "trade-history-review", review.trade_id] });
+    setReview(null);
+  }
   return <div className="grid gap-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="max-w-2xl"><h1 className="text-2xl font-semibold">交易紀錄</h1><p className="mt-2 text-sm leading-7 text-secondary">逐帳戶記錄買賣與歷史交收。更正建立新版本，不覆寫原值；缺少 FX 不會被當作零，也不會以現價補填。</p></div>
-      <Button data-editor-create disabled={editor !== null || voiding !== null || recovery !== null} onClick={() => { setNotice(null); setEditor("new"); }}>新增交易</Button>
+      <Button data-editor-create disabled={editing} onClick={() => { setNotice(null); setEditor("new"); }}>新增交易</Button>
     </div>
     <p className="text-sm leading-7 text-secondary">請先在<Link to="/settings/accounts" className="inline-flex min-h-11 items-center text-primary underline">管理設定</Link>建立組合、帳戶與證券。此頁不是現金估值或目前持倉總額。</p>
     {notice && <p role="status" className="text-sm leading-7 text-success">{notice}</p>}
@@ -129,6 +149,9 @@ export function TradesPage() {
     {voiding && <VoidTrade key={voiding.id} record={voiding} onCancel={() => setVoiding(null)} onDone={() => { setVoiding(null); setNotice("交易已作廢；原值、精確沖銷及審計仍保留。"); refresh(); }} />}
     {recovery && <RecoveryEditor origin={recovery} onCancel={closeRecovery}
       onSaved={() => { setRecovery(null); setNotice("已留存與資料庫稽核相符的交易來源；這不是完整持倉或股息實收證明。"); refresh(); }} />}
+    {review && <ReviewEditor intent={review} onCancel={closeReview} onSaved={withdrawn => {
+      setReview(null); setNotice(withdrawn ? "已撤回未驗證審核；先前決定與審計仍保留，交易和股息沒有改變。" : "已記錄未驗證審核；這不是持倉或股息證明，也不會解除交易更正或作廢限制。"); refresh();
+    }} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="cursor-pointer font-medium">篩選交易</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <ReferenceSelect kind="portfolios" label="篩選組合" value={filters.portfolio_id} registration={{ onChange: event => filter({ portfolio_id: event.target.value, account_id: "" }) }} clearSelection={() => filter({ portfolio_id: "", account_id: "" })} />
@@ -150,10 +173,11 @@ export function TradesPage() {
       { id: "booked", header: "歷史 HKD，非估值", cell: ({ row }) => row.original.booked_hkd === null ? "未知，不是零" : `HKD ${row.original.booked_hkd}` },
       { id: "status", header: "紀錄狀態", cell: ({ row }) => statuses[row.original.status] },
     ]}>{record => <TradeDetails record={record}>
-      <TradeOriginPanel tradeId={record.id} disabled={editor !== null || voiding !== null || recovery !== null} onRecover={origin => { setNotice(null); setRecovery(origin); }} />
+      <TradeOriginPanel tradeId={record.id} disabled={editing} onRecover={origin => { setNotice(null); setRecovery(origin); }} />
+      <TradeHistoryReviewPanel tradeId={record.id} disabled={editing} onReview={intent => { setNotice(null); setReview(intent); }} />
       <div className="flex flex-wrap gap-3">
-        {editable(record) && <><Button variant="outline" disabled={editor !== null || voiding !== null || recovery !== null} onClick={() => { setNotice(null); setEditor(record); }}>更正交易</Button>
-          <Button variant="outline" disabled={editor !== null || voiding !== null || recovery !== null} onClick={() => { setNotice(null); setVoiding(record); }}>作廢交易</Button></>}
+        {editable(record) && <><Button variant="outline" disabled={editing} onClick={() => { setNotice(null); setEditor(record); }}>更正交易</Button>
+          <Button variant="outline" disabled={editing} onClick={() => { setNotice(null); setVoiding(record); }}>作廢交易</Button></>}
         <Button variant="outline" onClick={() => { filter({ root_id: record.root_id, include_history: true }); page.search(""); }}>查看此事件修訂鏈</Button>
       </div>
     </TradeDetails>}</RecordList>

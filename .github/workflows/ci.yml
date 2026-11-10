@@ -35,6 +35,8 @@ jobs:
         run: npm run test:e2e:credentials
       - name: Verify isolated trade-origin recovery browser workflow
         run: npm run test:e2e:trade-origin
+      - name: Verify isolated trade-history review browser workflow
+        run: npm run test:e2e:trade-review
       - name: Build containers
         run: docker compose -p spm-e2e-ci build
       - name: Smoke test containers

@@ -136,3 +136,23 @@ sheet before its password, JSON and reason are filled, at three viewport widths.
 The ignored `.local/screenshots/` files are not automatic failure artifacts. Do not
 capture filled private forms. This fixture does not test provider traffic, a
 container, NAS, TLS or external ownership.
+
+## Separate unverified trade-history review fixture
+
+```sh
+npm run build
+npm run test:e2e:trade-review
+```
+
+This separate private temporary application exercises actual review, withdrawal,
+password confirmation and a committed-but-lost response followed by unchanged-key,
+zero-write replay. It also verifies withdrawal after retained-origin recovery
+changes the evidence. The fixture adds new synthetic legacy facts without changing
+existing audits or guards, and checks financial and historical FX preservation.
+It uses the same pinned reporter, restricted failure stages and private cleanup,
+with no deployment volume, provider traffic or worker.
+
+Optional `SPM_E2E_SAFE_SCREENSHOT=1` captures only the empty synthetic review sheet
+at three widths under ignored `.local/screenshots/`; it is not a failure artifact.
+Never capture filled private forms. This is not a container, NAS, TLS or external
+ownership test.
