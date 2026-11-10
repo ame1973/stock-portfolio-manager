@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import Connection, RowMapping, text
 
-from spm_api import trade_audit
+from spm_api import trade_audit, trade_history_review
 from spm_api.action_service import action_row, as_action
 from spm_api.audit import canonical, digest, stamp
 from spm_api.decimal_types import INT64_MAX
@@ -25,6 +25,9 @@ from spm_api.transfer_service import as_security
 
 TradeHistoryAuditScope = Literal[
     "NO_RETIRED_TRADES", "RETIRED_TRADE_HISTORY_UNVERIFIED", "RETIRED_TRADE_HASHES_MATCHED"
+]
+TradeCreationAuditScope = Literal[
+    "NO_RECORDED_CREATION_GAP_REVIEW", "CREATION_GAP_REVIEWED_UNVERIFIED"
 ]
 
 
@@ -44,6 +47,7 @@ class RecordedEligibilityBook:
     as_of: date
     rule: EligibilityRule
     trade_history_audit_scope: TradeHistoryAuditScope
+    trade_creation_audit_scope: TradeCreationAuditScope
     accounts: tuple[AccountEligibility, ...] = field(repr=False)
 
 
@@ -349,7 +353,7 @@ def _accounts(con: Connection, owner: str, portfolio: str) -> list[str]:
 
 def _fact_scope(
     con: Connection, owner: str, portfolio: str, security: str, accounts: set[str]
-) -> tuple[bool, bool]:
+) -> tuple[bool, bool, bool]:
     # ponytail: scan relevant retained roots; add indexed checkpoints if measured histories grow.
     params = {"portfolio": portfolio, "security": security}
     trades = (
@@ -384,6 +388,19 @@ def _fact_scope(
             raise ValueError("Inconsistent trade scope")
         _day(row["trade_date"])
     unverified_trades = _chains(con, trades, "TRADE", owner)
+    reviewed_creation_gap = False
+    for row in trades:
+        has_review = con.execute(
+            text("SELECT 1 FROM trade_history_reviews WHERE trade_id=:id LIMIT 1"),
+            {"id": row["id"]},
+        ).first()
+        if has_review is None:
+            continue
+        reviews = trade_history_review.history(con, UUID(owner), UUID(row["id"]))
+        if not reviews:
+            raise ValueError("Missing trade review history")
+        if any(review.gap == "MISSING_CREATION_AUDIT" for review in reviews):
+            reviewed_creation_gap = True
 
     transfers = (
         con.execute(
@@ -429,7 +446,11 @@ def _fact_scope(
             raise ValueError("Inconsistent transfer scope")
         _day(row["transfer_date"])
     _chains(con, transfers, "TRANSFER", owner)
-    return any(row["status"] in {"SUPERSEDED", "VOID"} for row in trades), unverified_trades
+    return (
+        any(row["status"] in {"SUPERSEDED", "VOID"} for row in trades),
+        unverified_trades,
+        reviewed_creation_gap,
+    )
 
 
 def _actions(con: Connection, security: str) -> None:
@@ -533,7 +554,7 @@ def get(
             raise ValueError("Invalid portfolio data revision")
         account_ids = _accounts(con, str(owner_id), str(portfolio_id))
         account_set = set(account_ids)
-        retired_trades, unverified_trades = _fact_scope(
+        retired_trades, unverified_trades, reviewed_creation_gap = _fact_scope(
             con, str(owner_id), str(portfolio_id), str(security_id), account_set
         )
         _actions(con, str(security_id))
@@ -569,6 +590,11 @@ def get(
             if unverified_trades
             else "RETIRED_TRADE_HASHES_MATCHED"
         )
+        creation_scope: TradeCreationAuditScope = (
+            "CREATION_GAP_REVIEWED_UNVERIFIED"
+            if reviewed_creation_gap
+            else "NO_RECORDED_CREATION_GAP_REVIEW"
+        )
         return RecordedEligibilityBook(
             owner_id,
             portfolio_id,
@@ -578,6 +604,7 @@ def get(
             as_of,
             rule,
             trade_scope,
+            creation_scope,
             accounts,
         )
     except (ValueError, TypeError, KeyError, OverflowError):

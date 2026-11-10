@@ -206,6 +206,18 @@ signature, authenticated external evidence, verified market ownership, complete
 history or a financial-use grant. All account results still carry
 `history_completeness=UNVERIFIED`.
 
+Independently, the reader validates the complete recorded review history for every
+relevant physical trade, including all retained revisions of a root that moved to
+another security or portfolio. It reports `CREATION_GAP_REVIEWED_UNVERIFIED` when
+any audited review recorded a missing creation audit, even after withdrawal, an
+unverified correction or a subsequently appearing matching audit. A later match
+does not establish when the evidence originally existed. If no such review is
+recorded, `NO_RECORDED_CREATION_GAP_REVIEW` describes only the retained review
+history, not proof that creation evidence or ownership was complete. A currently
+missing creation audit still makes this reader fail closed; inconsistent review
+history also fails closed even if another gap was already found. The creation-gap
+scope and retired-origin scope are separate, so neither hides the other.
+
 The reader performs no writes, provider requests or credential-file reads. It
 is not an entitlement projection, event/receipt API or UI. Before any economic
 use, a writer must revalidate current owner, facts, action scope and the audit
@@ -803,10 +815,12 @@ old audits and cash entries remain unchanged. It does not exercise a worker,
 provider, deployment volume, container, NAS, TLS or external ownership; private
 diagnostics follow the pinned browser policy.
 
-`uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
+`uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py tests/test_eligibility_trade_review_scope.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent
-retained claims and concurrent WAL read snapshots. These are internal recorded
-share checks, not authenticated event, entitlement or receipt endpoints.
+retained claims, concurrent WAL read snapshots, withdrawn/changed creation-gap
+reviews, untrusted review audits and retained roots moved across securities. These
+are internal recorded share checks, not authenticated event, entitlement or receipt
+endpoints.
 
 `uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`
 checks migration preservation and rollback, source and candidate scope, publication
