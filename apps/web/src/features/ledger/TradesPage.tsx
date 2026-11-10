@@ -17,6 +17,9 @@ import { reason } from "./inputs";
 import { TradeForm, type Trade } from "./TradeForm";
 import { TradeOriginPanel, TradeOriginRecoveryForm, type TradeOrigin } from "./TradeOrigin";
 import { TradeHistoryReviewForm, TradeHistoryReviewPanel, type ReviewIntent } from "./TradeHistoryReview";
+import { TradeCorrectionScopePanel } from "./TradeCorrectionScope";
+import { CorrectionScopeSummary, UnverifiedVoidForm } from "./TradeCorrection";
+import type { CorrectionOperation, CorrectionScope } from "./trade-correction-validation";
 import { useAccount, useSecurity } from "./data";
 import { AccountName, SecurityName } from "./ReferenceName";
 
@@ -104,6 +107,23 @@ function ReviewEditor({ intent, onCancel, onSaved }: {
   </EditorSheet>;
 }
 
+type CorrectionIntent = { operation: CorrectionOperation; record: Trade; scope: CorrectionScope };
+
+function CorrectionEditor({ intent, onCancel, onSaved }: {
+  intent: CorrectionIntent; onCancel: () => void; onSaved: (trade: Trade) => void;
+}) {
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [correctionBusy, setCorrectionBusy] = useState(false);
+  const title = intent.operation === "REVISE" ? "未驗證更正交易" : "未驗證作廢交易";
+  return <EditorSheet title={title} onClose={onCancel}>
+    <div className="mb-6 grid gap-5"><CorrectionScopeSummary scope={intent.scope} />
+      <PasswordForm disabled={correctionBusy} onPendingChange={setPasswordBusy} /></div>
+    {intent.operation === "REVISE"
+      ? <TradeForm record={intent.record} unverifiedScope={intent.scope} disabled={passwordBusy} onPendingChange={setCorrectionBusy} onCancel={onCancel} onSaved={onSaved} />
+      : <UnverifiedVoidForm record={intent.record} scope={intent.scope} disabled={passwordBusy} onPendingChange={setCorrectionBusy} onCancel={onCancel} onSaved={onSaved} />}
+  </EditorSheet>;
+}
+
 const initialFilters = { portfolio_id: "", account_id: "", security_id: "", from_date: "", to_date: "", root_id: "", include_history: false };
 
 export function TradesPage() {
@@ -114,8 +134,9 @@ export function TradesPage() {
   const [voiding, setVoiding] = useState<Trade | null>(null);
   const [recovery, setRecovery] = useState<TradeOrigin | null>(null);
   const [review, setReview] = useState<ReviewIntent | null>(null);
+  const [correction, setCorrection] = useState<CorrectionIntent | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const editing = editor !== null || voiding !== null || recovery !== null || review !== null;
+  const editing = editor !== null || voiding !== null || recovery !== null || review !== null || correction !== null;
   const result = useQuery({ queryKey: ["ledger", "trades", filters, page.q, page.cursor], queryFn: async ({ signal }) =>
     checked(await api.GET("/api/v1/trades", { params: { query: {
       q: page.q, cursor: page.cursor, limit: 25, include_history: filters.include_history,
@@ -135,6 +156,10 @@ export function TradesPage() {
     if (review) void cache.invalidateQueries({ queryKey: ["ledger", "trade-history-review", review.trade_id] });
     setReview(null);
   }
+  function closeCorrection() {
+    if (correction) void cache.invalidateQueries({ queryKey: ["ledger", "trade-correction-scope", correction.record.id] });
+    setCorrection(null);
+  }
   return <div className="grid gap-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="max-w-2xl"><h1 className="text-2xl font-semibold">交易紀錄</h1><p className="mt-2 text-sm leading-7 text-secondary">逐帳戶記錄買賣與歷史交收。更正建立新版本，不覆寫原值；缺少 FX 不會被當作零，也不會以現價補填。</p></div>
@@ -151,6 +176,9 @@ export function TradesPage() {
       onSaved={() => { setRecovery(null); setNotice("已留存與資料庫稽核相符的交易來源；這不是完整持倉或股息實收證明。"); refresh(); }} />}
     {review && <ReviewEditor intent={review} onCancel={closeReview} onSaved={withdrawn => {
       setReview(null); setNotice(withdrawn ? "已撤回未驗證審核；先前決定與審計仍保留，交易和股息沒有改變。" : "已記錄未驗證審核；這不是持倉或股息證明，也不會解除交易更正或作廢限制。"); refresh();
+    }} />}
+    {correction && <CorrectionEditor intent={correction} onCancel={closeCorrection} onSaved={trade => {
+      setCorrection(null); setNotice(trade.status === "VOID" ? "已作廢未驗證交易並保留原始紀錄與審計；這不是持倉或股息資格證明。" : "已建立未驗證交易修訂；原始紀錄與審計仍保留，這不是持倉或股息資格證明。"); refresh();
     }} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="cursor-pointer font-medium">篩選交易</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -175,6 +203,9 @@ export function TradesPage() {
     ]}>{record => <TradeDetails record={record}>
       <TradeOriginPanel tradeId={record.id} disabled={editing} onRecover={origin => { setNotice(null); setRecovery(origin); }} />
       <TradeHistoryReviewPanel tradeId={record.id} disabled={editing} onReview={intent => { setNotice(null); setReview(intent); }} />
+      <TradeCorrectionScopePanel record={record} disabled={editing} onSelect={(operation, scope) => {
+        setNotice(null); setCorrection({ operation, record: { ...record }, scope: { trade_version: scope.trade_version, reviews: scope.reviews.map(pin => ({ ...pin })) } });
+      }} />
       <div className="flex flex-wrap gap-3">
         {editable(record) && <><Button variant="outline" disabled={editing} onClick={() => { setNotice(null); setEditor(record); }}>更正交易</Button>
           <Button variant="outline" disabled={editing} onClick={() => { setNotice(null); setVoiding(record); }}>作廢交易</Button></>}

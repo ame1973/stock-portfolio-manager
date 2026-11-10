@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +9,7 @@ import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { useFormAction } from "../settings/data";
 import { date, fx, money, note, optional, price, quantity, reason, signedMoney } from "./inputs";
 import { useSecurity } from "./data";
+import { checkedCorrection, validCorrectionScope, type CorrectionScope } from "./trade-correction-validation";
 
 export type Trade = components["schemas"]["TradeRecord"];
 const tradeSchema = z.object({
@@ -16,48 +18,78 @@ const tradeSchema = z.object({
   quantity, price, fee: money, tax: money, fx_rate_hkd: optional(fx),
   fx_source: z.string().trim().min(1, "請說明匯率來源。").max(100),
   actual_settlement: optional(signedMoney), actual_hkd: optional(signedMoney), override_reason: note, note,
-  reason: z.string().max(1000),
+  reason: z.string().max(1000), acknowledged: z.boolean().optional(),
 }).superRefine((value, context) => {
   if ((value.actual_settlement !== "" || value.actual_hkd !== "") && value.override_reason.trim().length < 10) context.addIssue({ code: "custom", path: ["override_reason"], message: "實際交收覆寫需要至少 10 個字元的依據。" });
 });
 
-export function TradeForm({ record, onSaved, onCancel }: {
+export function TradeForm({ record, onSaved, onCancel, unverifiedScope, disabled = false, onPendingChange }: {
   record?: Trade; onSaved: (record: Trade) => void; onCancel: () => void;
+  unverifiedScope?: CorrectionScope; disabled?: boolean; onPendingChange?: (pending: boolean) => void;
 }) {
   const action = useFormAction(onSaved);
+  const submitted = useRef<string | null>(null);
   const schema = tradeSchema.superRefine((value, context) => {
     if (record && !reason.safeParse(value.reason).success) context.addIssue({ code: "custom", path: ["reason"], message: "更正需要至少 10 個字元的具體依據。" });
+    if (unverifiedScope && value.reason.includes("\0")) context.addIssue({ code: "custom", path: ["reason"], message: "依據不能包含 NUL 字元。" });
+    if (unverifiedScope && !value.acknowledged) context.addIssue({ code: "custom", path: ["acknowledged"], message: "請先確認這次未驗證更正的範圍。" });
   });
   const { register, control, setValue, handleSubmit, formState: { errors, isSubmitting } } = useForm<z.infer<typeof tradeSchema>>({
     resolver: zodResolver(schema), defaultValues: {
       portfolio_id: record?.portfolio_id ?? "", account_id: record?.account_id ?? "", security_id: record?.security_id ?? "",
       side: record?.side ?? "BUY", trade_date: record?.trade_date ?? "", executed_at_utc: record?.executed_at_utc ?? "",
       quantity: record?.quantity ?? "", price: record?.price ?? "", fee: record?.fee ?? "0", tax: record?.tax ?? "0",
-      fx_rate_hkd: record?.fx_rate_hkd ?? "", fx_source: record?.fx_source ?? "MANUAL",
+      fx_rate_hkd: record?.fx_rate_hkd ?? "", fx_source: record?.fx_source?.startsWith("MANUAL:") ? record.fx_source.slice("MANUAL:".length) : record?.fx_source ?? "MANUAL",
       actual_settlement: record?.settlement_override ? record.settlement : "",
       actual_hkd: record?.hkd_override ? record.booked_hkd ?? "" : "", override_reason: record?.override_reason ?? "",
-      note: record?.note ?? "", reason: "",
+      note: record?.note ?? "", reason: "", acknowledged: false,
     },
   });
   const [portfolioId, accountId, securityId] = useWatch({ control, name: ["portfolio_id", "account_id", "security_id"] });
   const security = useSecurity(securityId);
   const clearAccount = () => setValue("account_id", "");
-  return <FormFrame title={record ? "更正交易" : "新增交易"} error={action.error} pending={isSubmitting} onChange={action.changed} onCancel={onCancel}
-    onSubmit={handleSubmit(values => action.run(async key => {
-      if (!security.data || security.data.id !== values.security_id) throw new Error("證券幣別尚未確認；請等候載入或重試，不會猜測結算幣別。");
-      const header = await mutationHeaders(key);
-      const body = {
-        portfolio_id: values.portfolio_id, account_id: values.account_id, security_id: values.security_id,
-        side: values.side, trade_date: values.trade_date, executed_at_utc: values.executed_at_utc || null,
-        quantity: values.quantity, price: values.price, fee: values.fee, tax: values.tax,
-        currency: security.data.quote_currency, fx_rate_hkd: security.data.quote_currency === "USD" ? values.fx_rate_hkd || null : null,
-        fx_source: values.fx_source, actual_settlement: values.actual_settlement || null, actual_hkd: values.actual_hkd || null,
-        override_reason: values.override_reason, note: values.note,
-      } satisfies components["schemas"]["TradeCreate"];
-      return record
-        ? checked(await api.PATCH("/api/v1/trades/{id}", { params: { path: { id: record.id }, header: { ...header, "If-Match": `"${record.version}"` } }, body: { ...body, reason: values.reason.trim() } }))
-        : checked(await api.POST("/api/v1/trades", { params: { header }, body }));
-    }))}>
+  return <FormFrame title={unverifiedScope ? "未驗證更正交易" : record ? "更正交易" : "新增交易"} error={action.error} pending={isSubmitting || disabled}
+    submitLabel={unverifiedScope ? "確認未驗證更正" : "儲存"} pendingLabel={disabled ? "等候密碼確認…" : "正在儲存…"}
+    onChange={unverifiedScope ? undefined : action.changed} onCancel={onCancel}
+    onSubmit={event => {
+      if (disabled) { event.preventDefault(); return; }
+      onPendingChange?.(true);
+      void handleSubmit(values => {
+        if (!security.data || security.data.id !== values.security_id) return action.run(async () => {
+          throw new Error("證券幣別尚未確認；請等候載入或重試，不會猜測結算幣別。");
+        });
+        const body = {
+          portfolio_id: values.portfolio_id, account_id: values.account_id, security_id: values.security_id,
+          side: values.side, trade_date: values.trade_date, executed_at_utc: values.executed_at_utc || null,
+          quantity: values.quantity, price: values.price, fee: values.fee, tax: values.tax,
+          currency: security.data.quote_currency, fx_rate_hkd: security.data.quote_currency === "USD" ? values.fx_rate_hkd || null : null,
+          fx_source: values.fx_source, actual_settlement: values.actual_settlement || null, actual_hkd: values.actual_hkd || null,
+          override_reason: values.override_reason, note: values.note,
+        } satisfies components["schemas"]["TradeCreate"];
+        const revision = { ...body, reason: values.reason.trim() };
+        if (unverifiedScope) {
+          const intent = JSON.stringify({ scope: unverifiedScope, revision });
+          if (submitted.current !== null && submitted.current !== intent) action.changed();
+          submitted.current = intent;
+        }
+        return action.run(async key => {
+          if (unverifiedScope && (!record || !validCorrectionScope(record, unverifiedScope))) {
+            throw new Error("固定的交易或審核範圍不符；請取消並重新核對。");
+          }
+          const header = await mutationHeaders(key);
+          if (unverifiedScope && record) {
+            const result = checked(await api.POST("/api/v1/trades/{id}/unverified-corrections/revise", {
+              params: { path: { id: record.id }, header: { ...header, "If-Match": `"${unverifiedScope.trade_version}"` } },
+              body: { confirmation: "UNVERIFIED_TRADE_CORRECTION_ONLY", reviews: unverifiedScope.reviews, revision },
+            }));
+            return checkedCorrection(result, record, "REVISE");
+          }
+          return record
+            ? checked(await api.PATCH("/api/v1/trades/{id}", { params: { path: { id: record.id }, header: { ...header, "If-Match": `"${record.version}"` } }, body: revision }))
+            : checked(await api.POST("/api/v1/trades", { params: { header }, body }));
+        });
+      })(event).finally(() => onPendingChange?.(false));
+    }}>
     <ReferenceSelect kind="portfolios" label="投資組合" value={portfolioId} registration={{ ...register("portfolio_id"), onChange: event => {
       void register("portfolio_id").onChange(event); clearAccount();
     } }} error={errors.portfolio_id?.message} clearSelection={() => { setValue("portfolio_id", ""); clearAccount(); }} />
@@ -88,6 +120,11 @@ export function TradeForm({ record, onSaved, onCancel }: {
       </div>
     </div>
     {record && <><Field label="交易更正依據" {...register("reason")} maxLength={1000} error={errors.reason?.message} /><p className="text-sm leading-7 text-secondary">會建立新修訂及精確沖銷，保留原始股數、金額與 FX。舊版本或超額賣出不會覆蓋現有紀錄。</p></>}
+    {unverifiedScope && <>
+      <p className="text-sm leading-7 text-secondary sm:col-span-2">回應未確認時請保持視窗，以相同內容和操作識別碼重試；關閉後請先核對歷史，不要假定未曾儲存。</p>
+      <div className="grid gap-2 sm:col-span-2"><label className="flex min-h-11 items-start gap-3 text-sm leading-7"><input type="checkbox" className="mt-2 shrink-0" {...register("acknowledged")} />我明白這次更正使用未驗證的交易歷史；它不證明所有權、完整持倉或股息資格。</label>
+        {errors.acknowledged && <p role="alert" className="text-sm text-danger">{errors.acknowledged.message}</p>}</div>
+    </>}
     <p className="text-sm leading-7 text-secondary sm:col-span-2">此表單只記錄已核對的財務事實，不會向券商下單，也不會自動補足現金或換匯。交收與入帳結果以伺服器回應為準。</p>
   </FormFrame>;
 }

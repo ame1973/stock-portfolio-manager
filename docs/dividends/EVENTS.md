@@ -617,7 +617,7 @@ history. Withdrawn reviews, omitted or extra gaps, stale physical or review
 versions, and creation evidence appearing after review cannot authorize a new
 correction. A root with more than 100 required pins cannot currently be corrected
 through these endpoints; do not omit pins or alter the database to work around the
-limit. The browser does not yet provide a correction editor or root-wide scope view.
+limit. The browser workspace below uses the same complete-scope read and API.
 
 The server rechecks the session, CSRF, password-confirmation age, complete root,
 reviews and economic replay in the same writer transaction. Financial facts,
@@ -661,6 +661,39 @@ and key; if it was closed, inspect the decision history before making another
 choice. Passwords, reasons and request bodies are not saved in browser storage. A
 review is not ownership, complete holdings, income or permission to revise or void
 a trade, and it does not post cash or dividends.
+
+## Unverified trade correction in the browser
+
+On `/transactions`, expand **Unverified correction scope** for a current trade.
+The browser fetches the entire supported root scope on each opening, shows each
+physical trade and exact review revision, and does not offer either operation if
+any gap is unreviewed, withdrawn or has changed evidence. Reloading or reopening
+rechecks the server; stale cached scope cannot be selected while a refresh is in
+flight. An empty scope or a matching hash is not proof that history is complete.
+For an unreviewed gap, inspect the relevant physical trade in the revision chain
+and use its separate history-review workflow first.
+
+When every gap is currently acknowledged, choose **Unverified revise trade** or
+**Unverified void trade**. The editor displays and freezes all observed trade and
+review versions, asks separately for a recent password confirmation, a specific
+reason and explicit acceptance of the unverified scope. A revision reuses the full
+trade form and preserves decimal input strings; a void retains the original facts
+and reverses existing settlement at the original FX. Ordinary PATCH/DELETE stay
+fenced. The server independently rechecks every version and the economic replay;
+a changed review, evidence or trade does not get silently adopted. More than 100
+scope entries is reported as unsupported, never partially submitted.
+
+During either the password or correction request the editor cannot be closed and
+the other operation is disabled. If a response is uncertain, keep the editor open
+and retry the unchanged submitted values: the original version, pins and idempotency
+key remain in memory, including across password confirmation. The reason is trimmed;
+changing submitted financial terms or reason creates a new intent. Closing the
+editor discards its unsaved input and key, so first inspect the trade and audit
+history rather than assuming that a lost response meant no write. The UI checks the
+response's unverified labels, physical identities and financial string shapes
+before reporting success. Passwords and form inputs are not stored in browser
+storage or query/mutation caches. A successful operation does not establish
+ownership, income or dividend eligibility.
 
 ## Required future protected writer and projection work
 
@@ -761,12 +794,14 @@ withdrawal, recent password confirmation, a committed-but-lost response and its
 unchanged-key zero-write replay, and withdrawal after retained-origin recovery
 changes the evidence. Real HTTP also reads the complete root scope before and after
 review and withdrawal, with no writes. Before the correction exercise, it checks
-that reviews leave existing financial facts and historical FX unchanged. It then
-uses real HTTP to revise and void a new synthetic draft, checks that withdrawal blocks new use but
-not the original replay, and verifies old audits and cash entries remain unchanged.
-This last part exercises the API, not a correction UI. It does not exercise a
-worker, provider, deployment volume, container, NAS, TLS or external ownership;
-private diagnostics follow the pinned browser policy.
+that reviews leave existing financial facts and historical FX unchanged. Real
+Chromium then uses the correction forms to revise and void a new synthetic draft,
+including keyboard reopening/refetch, responsive and dark/reduced-motion checks,
+password confirmation, a committed-but-lost response and unchanged-key replay.
+It checks that withdrawal blocks new use but not the original replay, and verifies
+old audits and cash entries remain unchanged. It does not exercise a worker,
+provider, deployment volume, container, NAS, TLS or external ownership; private
+diagnostics follow the pinned browser policy.
 
 `uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent

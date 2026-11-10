@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
 import { test } from "../private-test";
@@ -216,32 +216,87 @@ test("isolated actual trade review preserves unverified decisions and uncertain 
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
   expect(await page.evaluate(() => caches.keys())).toEqual([]);
 
-  // Exercise the separate API against the actual isolated server; no correction UI exists yet.
+  // Exercise both correction forms on the actual isolated application and synthetic data.
   stage("CORRECTION_REACK");
+  currentPanel = await panel(page, "2997-01-02");
+  const scopeSummary = currentPanel.getByText("未驗證更正範圍", { exact: true });
+  await scopeSummary.focus(); await page.keyboard.press("Enter");
+  await expect(currentPanel.getByText(/此交易先前的審核已撤回/)).toBeVisible();
+  await scopeSummary.click(); await expect(scopeSummary.locator("..")).not.toHaveAttribute("open");
   const reack = await page.request.post(`/api/v1/trades/${auditless.id}/history-review`, {
     headers: await headers(page, 1),
     data: { decision: "ACKNOWLEDGE_UNVERIFIED", expected_revision: "2", expected_gap: "MISSING_CREATION_AUDIT", reason },
   });
   expect(reack.status()).toBe(200);
-  const correctionHeaders = await headers(page, 1);
-  const correction = {
-    confirmation: "UNVERIFIED_TRADE_CORRECTION_ONLY",
-    reviews: [{ trade_id: auditless.id, trade_version: 1, review_revision: "3", gap: "MISSING_CREATION_AUDIT" }],
-    revision: { portfolio_id: portfolio.id, account_id: account.id, security_id: security.id, side: "BUY", trade_date: "2997-01-02", quantity: "11", price: "10", currency: "USD", reason },
-  };
   const beforeCorrection = database();
   stage("CORRECTION_REVISE");
-  const revised = await page.request.post(`/api/v1/trades/${auditless.id}/unverified-corrections/revise`, { headers: correctionHeaders, data: correction });
+  currentPanel = await panel(page, "2997-01-02");
+  await scopeSummary.focus(); await page.keyboard.press("Enter");
+  await currentPanel.getByRole("button", { name: "未驗證更正交易", exact: true }).click();
+  sheet = page.getByRole("dialog", { name: "未驗證更正交易" });
+  await expect(sheet.getByRole("button", { name: "關閉編輯" })).toBeFocused();
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const label of ["目前密碼", "交易股數", "交易更正依據"]) {
+      const box = await sheet.getByLabel(label).boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44); expect(box!.height).toBeLessThanOrEqual(56);
+    }
+  }
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 360, height: 900 });
+  await reauthenticate(sheet, password);
+  await expect(sheet.getByText(/報價及結算幣別：USD/)).toBeVisible();
+  await sheet.getByLabel("交易股數").fill("11");
+  await sheet.getByLabel("交易更正依據").fill(reason);
+  await sheet.getByRole("button", { name: "確認未驗證更正", exact: true }).click();
+  await expect(sheet.getByText(/請先確認這次未驗證更正/)).toBeVisible();
+  await sheet.getByLabel(/我明白這次更正使用未驗證/).check();
+  let correctionWire = ""; let correctionKey = ""; let correctionStatus = 0;
+  let releaseCorrection!: () => void; let committedCorrection!: () => void;
+  const correctionHeld = new Promise<void>(resolve => { releaseCorrection = resolve; });
+  const correctionSaved = new Promise<void>(resolve => { committedCorrection = resolve; });
+  await page.route(`**/api/v1/trades/${auditless.id}/unverified-corrections/revise`, async route => {
+    if (route.request().method() !== "POST") { await route.continue(); return; }
+    correctionWire = route.request().postData()!; correctionKey = route.request().headers()["idempotency-key"]!;
+    const response = await route.fetch(); correctionStatus = response.status(); committedCorrection();
+    await correctionHeld; await route.abort("failed");
+  });
+  let afterCorrection: Tables;
+  try {
+    await sheet.getByRole("button", { name: "確認未驗證更正", exact: true }).click(); await correctionSaved;
+    stage("CORRECTION_HELD"); expect(correctionStatus).toBe(200);
+    expect(JSON.parse(correctionWire)).toMatchObject({ confirmation: "UNVERIFIED_TRADE_CORRECTION_ONLY",
+      reviews: [{ trade_id: auditless.id, trade_version: 1, review_revision: "3", gap: "MISSING_CREATION_AUDIT" }],
+      revision: { quantity: "11", reason, fx_rate_hkd: null } });
+    await expect(sheet.getByLabel("目前密碼")).toBeDisabled();
+    await page.keyboard.press("Escape"); await sheet.getByRole("button", { name: "關閉編輯" }).click();
+    await expect(sheet).toBeVisible(); await expect(sheet.getByLabel("交易股數")).toHaveValue("11");
+    afterCorrection = database();
+  } finally { releaseCorrection(); }
+  stage("CORRECTION_LOST");
+  await expect(sheet.getByRole("alert")).toContainText("網絡連線中斷");
+  await page.unroute(`**/api/v1/trades/${auditless.id}/unverified-corrections/revise`);
+  await reauthenticate(sheet, password);
+  const beforeCorrectionReplay = database();
+  const correctionResponse = page.waitForResponse(response => response.url().endsWith(`/trades/${auditless.id}/unverified-corrections/revise`) && response.request().method() === "POST");
+  await sheet.getByRole("button", { name: "確認未驗證更正", exact: true }).click();
+  const revised = await correctionResponse;
   expect(revised.status()).toBe(200); expect(revised.headers()["cache-control"]).toBe("no-store");
   expect(revised.headers().etag).toBeUndefined();
+  expect(revised.request().headers()["idempotency-key"]).toBe(correctionKey); expect(revised.request().postData()).toBe(correctionWire);
   const revisedResult = await revised.json() as { authorization_id: string; trade: RecordId & { root_id: string; status: string }; scope: string; history_completeness: string };
   expect(revisedResult).toMatchObject({ scope: "UNVERIFIED_TRADE_CORRECTION_ONLY", history_completeness: "UNVERIFIED", trade: { root_id: auditless.id, status: "DRAFT_SCHEDULED" } });
-  expect(revisedResult.authorization_id).toBeTruthy();
-  const afterCorrection = database();
-  expect(afterCorrection.cash_ledger_entries).toEqual(beforeCorrection.cash_ledger_entries);
-  expect(afterCorrection.audit_events!.slice(0, beforeCorrection.audit_events!.length)).toEqual(beforeCorrection.audit_events);
-  expect(afterCorrection.trade_correction_authorizations).toHaveLength(1);
-  expect(afterCorrection.jobs).toEqual([]); expect(afterCorrection.upstream_attempts).toEqual([]);
+  expect(revisedResult.authorization_id).toBeTruthy(); await expect(sheet).toHaveCount(0);
+  expect(database()).toEqual(beforeCorrectionReplay);
+  expect(afterCorrection!.cash_ledger_entries).toEqual(beforeCorrection.cash_ledger_entries);
+  expect(afterCorrection!.audit_events!.slice(0, beforeCorrection.audit_events!.length)).toEqual(beforeCorrection.audit_events);
+  expect(afterCorrection!.trade_correction_authorizations).toHaveLength(1);
+  expect(afterCorrection!.jobs).toEqual([]); expect(afterCorrection!.upstream_attempts).toEqual([]);
+  const correctionHeaders = { ...await headers(page, 1), "Idempotency-Key": correctionKey };
+  const correction = JSON.parse(correctionWire) as { confirmation: string; reviews: { trade_id: string; trade_version: number; review_revision: string; gap: string }[] };
 
   stage("CORRECTION_WITHDRAW");
   const withdrawCorrectionReview = await page.request.post(`/api/v1/trades/${auditless.id}/history-review`, {
@@ -270,11 +325,34 @@ test("isolated actual trade review preserves unverified decisions and uncertain 
   });
   expect(renewed.status()).toBe(200);
   voidBody.reviews[0]!.review_revision = "5";
-  const voidHeaders = await headers(page, 1);
-  const voided = await page.request.post(`/api/v1/trades/${revisedResult.trade.id}/unverified-corrections/void`, { headers: voidHeaders, data: voidBody });
+  const revisedPanel = page.getByRole("article", { name: "2997-01-02 買入 11.00000000" });
+  await expect(revisedPanel).toBeVisible();
+  await revisedPanel.getByText("未驗證更正範圍", { exact: true }).click();
+  await revisedPanel.getByRole("button", { name: "未驗證作廢交易", exact: true }).click();
+  sheet = page.getByRole("dialog", { name: "未驗證作廢交易" });
+  await expect(sheet.getByRole("button", { name: "關閉編輯" })).toBeFocused();
+  if (process.env.SPM_E2E_CORRECTION_SAFE_SCREENSHOT === "1") {
+    const inputs = sheet.locator('input:not([type="checkbox"]), textarea');
+    await expect(inputs).toHaveCount(2);
+    for (const input of await inputs.all()) await expect(input).toHaveValue("");
+    await expect(sheet.getByLabel(/我明白這次作廢使用未驗證/)).not.toBeChecked();
+    await sheet.getByLabel("未驗證作廢依據").scrollIntoViewIfNeeded();
+    await mkdir(".local/screenshots", { recursive: true });
+    const directory = await mkdtemp(".local/screenshots/unverified-void-");
+    await sheet.screenshot({ path: join(directory, "empty-360.png") });
+  }
+  await reauthenticate(sheet, password);
+  await sheet.getByLabel("未驗證作廢依據").fill(reason);
+  await sheet.getByLabel(/我明白這次作廢使用未驗證/).check();
+  const voidResponse = page.waitForResponse(response => response.url().endsWith(`/trades/${revisedResult.trade.id}/unverified-corrections/void`) && response.request().method() === "POST");
+  await sheet.getByRole("button", { name: "確認未驗證作廢", exact: true }).click();
+  const voided = await voidResponse;
   expect(voided.status()).toBe(200); expect(voided.headers()["cache-control"]).toBe("no-store");
+  expect(JSON.parse(voided.request().postData()!)).toEqual(voidBody);
+  const voidHeaders = { ...await headers(page, 1), "Idempotency-Key": voided.request().headers()["idempotency-key"]! };
   const voidResult = await voided.json() as { trade: { status: string }; history_completeness: string };
   expect(voidResult).toMatchObject({ trade: { status: "VOID" }, history_completeness: "UNVERIFIED" });
+  await expect(sheet).toHaveCount(0);
   const afterVoid = database();
   expect(afterVoid.cash_ledger_entries).toEqual(initial.cash_ledger_entries);
   expect(afterVoid.audit_events!.slice(0, initial.audit_events!.length)).toEqual(initial.audit_events);

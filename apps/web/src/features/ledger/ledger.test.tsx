@@ -126,6 +126,16 @@ describe("trade forms preserve exact facts and intent", () => {
     expect(saved).not.toHaveBeenCalled();
   });
 
+  it("retains a manual FX source label without duplicating its stored prefix", async () => {
+    reads(); const patch = vi.spyOn(api, "PATCH").mockResolvedValue(reply(trade));
+    renderUI(<TradeForm record={{ ...trade, fx_source: "MANUAL:Synthetic broker statement" }} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    await screen.findByText(/報價及結算幣別：USD/);
+    fireEvent.change(screen.getByLabelText("交易更正依據"), { target: { value: "Correct the synthetic broker record" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存" }));
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(options(patch).body.fx_source).toBe("Synthetic broker statement");
+  });
+
   it("retains missing USD FX as null and reports server oversell without a success callback", async () => {
     reads();
     const post = vi.spyOn(api, "POST").mockResolvedValueOnce(rejected("MISSING_FX", 422)).mockResolvedValueOnce(rejected("INSUFFICIENT_SHARES"));
