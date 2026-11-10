@@ -314,14 +314,14 @@ def history(con: Connection, owner: UUID, identifier: UUID) -> tuple[Review, ...
 
 
 def _correction_gaps(
-    con: Connection, owner: UUID, identifier: UUID
+    con: Connection, owner: UUID, identifier: UUID, *, historical: bool = False
 ) -> tuple[tuple[RowMapping, bool], ...]:
     """Inspect the retained root, preserving missing and later-changed evidence separately."""
     try:
         selected = trade_audit._trade(con, owner, identifier)
         if selected is None:
             raise TradeReviewError("TRADE_REVIEW_NOT_FOUND")
-        if selected["status"] in ("SUPERSEDED", "VOID"):
+        if not historical and selected["status"] in ("SUPERSEDED", "VOID"):
             raise TradeReviewError("TRADE_REVIEW_CHANGED")
         root = selected["root_id"]
         # ponytail: scan retained root history; add indexed checkpoints if measured histories grow.
@@ -335,8 +335,8 @@ def _correction_gaps(
                 raise ValueError("Invalid trade-root owner")
             trades.append(trade)
         trades.sort(key=lambda item: item["revision"])
-        if not trades or trades[-1]["id"] != str(identifier):
-            raise ValueError("Invalid current trade")
+        if not trades or (not historical and trades[-1]["id"] != str(identifier)):
+            raise ValueError("Invalid selected trade")
         gaps = []
         for index, trade in enumerate(trades):
             previous = trades[index - 1] if index else None

@@ -13,7 +13,7 @@ from alembic import command
 from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from spm_api import trade_history_review, trade_service
+from spm_api import trade_audit, trade_history_review, trade_service
 from spm_api.audit import audit, canonical, digest, stamp
 from spm_api.cli import migrate
 from spm_api.config import Settings
@@ -41,6 +41,7 @@ def authorization_values(
     operation: Literal["REVISE", "VOID"] = "REVISE",
     *,
     two_gaps: bool = False,
+    remember_result: bool = True,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Create only new synthetic facts and audits; the returned SQL record is not a grant."""
     root = synthetic_legacy_draft(engine, book, unrelated_audit=False)
@@ -109,6 +110,8 @@ def authorization_values(
             after=after,
             reason=REASON,
         )
+        if operation == "REVISE" and remember_result:
+            trade_audit.remember_created(con, UUID(owner), UUID(result), UUID(request))
         audit(
             con,
             owner,

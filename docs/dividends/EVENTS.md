@@ -421,6 +421,20 @@ alone is **not** a correction authorization or eligibility grant. Future writers
 must recheck the entire scope and append the fact, correlated audit, idempotency
 and invalidation atomically.
 
+## Internal historical correction-authorization reader
+
+The private `trade_correction_authorization` reader validates an owned record's
+canonical scope and audit fingerprint, exact review decisions, root revision
+chain and all available trade origins. It checks the target's actual retirement
+fingerprint against its reviewed snapshot or retained origin, and the resulting
+revision's creation and later retirement audits. Missing historical origins stay
+unverified; malformed or contradictory retained history fails closed. A valid
+historical record remains readable after a later withdrawal or a matching audit
+appears, but neither event reauthorizes a new correction. The retained intent
+hash binds the audit record but cannot by itself reconstruct or authenticate the
+original request. The reader does not authenticate HTTP, establish ownership or
+income, or grant current use; no production writer consumes it yet.
+
 ## Internal unverified trade-history review controller
 
 The private `trade_history_review` controller can append, read and withdraw an
