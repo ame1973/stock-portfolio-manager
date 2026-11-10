@@ -23,9 +23,9 @@ with sqlite3.connect(f"file:{root / 'data' / 'portfolio.sqlite3'}?mode=ro", uri=
     db.execute('PRAGMA query_only=ON')
     assert db.execute('PRAGMA integrity_check').fetchone() == ('ok',)
     assert db.execute('PRAGMA foreign_key_check').fetchall() == []
-    assert db.execute('SELECT version_num FROM alembic_version').fetchone() == ('0017_trade_audit_origins',)
+    assert db.execute('SELECT version_num FROM alembic_version').fetchone() == ('0018_trade_history_reviews',)
     tables = [r[0] for r in db.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'alembic_version' ORDER BY name")]
-    assert len(tables) == 56
+    assert len(tables) == 57
     print(json.dumps({name: [json.dumps(row, separators=(',', ':')) for row in db.execute('SELECT * FROM "' + name.replace('"', '""') + '" ORDER BY rowid')] for name in tables}))
 `], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })) as Tables;
 }
@@ -209,7 +209,7 @@ test("isolated actual trade-origin UI preserves integer digits and uncertain ret
   await expect(nextSheet).toHaveCount(0);
   stage("FINAL");
   const final = database();
-  for (const name of ["trades", "cash_ledger_entries", "ledger_sequences", "dividend_entitlements", "dividend_receipts", "jobs", "upstream_attempts"]) expect(final[name]).toEqual(initial[name]);
+  for (const name of ["trades", "cash_ledger_entries", "ledger_sequences", "trade_history_reviews", "dividend_entitlements", "dividend_receipts", "jobs", "upstream_attempts"]) expect(final[name]).toEqual(initial[name]);
   expect(final.audit_events!.slice(0, initial.audit_events!.length)).toEqual(initial.audit_events);
   expect(final.trade_audit_origins).toHaveLength(initial.trade_audit_origins!.length + 2);
   expect(JSON.stringify(final)).not.toContain(password); expect(JSON.stringify(final)).not.toContain(bootstrap);

@@ -216,8 +216,8 @@ may need indexed batching if measured portfolio histories grow.
 ## Inert trade-audit origin storage
 
 Migration `0017_trade_audit_origins` adds one initially empty append-only table
-without changing existing trade rows, cash, receipts or audit events. It brings
-current schema to 56 business tables. A separate table matters because historical
+without changing existing trade rows, cash, receipts or audit events. It brought
+that schema revision to 56 business tables. A separate table matters because historical
 trade retirement audits hash the entire old trade row; adding a trade column
 would change the set of values needed to reconstruct those existing fingerprints.
 No origin is automatically backfilled or recovered by this migration. The trade
@@ -373,6 +373,29 @@ external ownership statement, complete holdings history, entitlement or receipt.
 If the original response or creation audit is missing, do not invent one; the
 separate explicit unverified-review workflow remains unfinished.
 
+## Inert unverified trade-history review storage
+
+Migration `0018_trade_history_reviews` adds an initially empty append-only review
+decision table, bringing the current schema to 57 business tables. It does not
+backfill a review, change existing financial facts or modify old audits. A
+physical trade can retain consecutive `ACKNOWLEDGE_UNVERIFIED` and `WITHDRAW`
+decisions, with an explicit missing-creation-audit or missing-retired-origin gap,
+the status/version/update time observed at the decision, a claimed snapshot hash
+and a correlated owner/request audit. A later decision must refer to the preceding
+revision; a withdrawal preserves that preceding gap. Later matched-origin recovery
+can coexist with the history and an old acknowledgment can then be withdrawn.
+
+Database guards check active ownership, account/broker/portfolio and ledger-sequence
+scope, the observed current physical state, decision alternation, gap conditions,
+audit metadata and bounded identity/time/hash shapes. Updates, deletions and
+replacement writes are refused. They do **not** authenticate a session, validate
+the canonical snapshot or audit fingerprint, establish a complete trade chain, or
+prove that a user saw or accepted a gap. Even a valid-shaped false snapshot hash
+can pass SQL. No protected review API, review controller, current-use grant or
+financial writer consumes this table yet: a bare SQL row does not unblock a trade
+correction or cause an eligibility projection. Missing or corrupt evidence remains
+unresolved, and a review is never a recreated creation audit or proof of ownership.
+
 ## Required future protected writer and projection work
 
 These constraints are defense in depth, not authentication, authorization,
@@ -433,6 +456,13 @@ sequence digits. Synthetic financial facts, historical FX and existing audits
 remain unchanged. This is not a container, NAS, TLS, live-provider or external
 ownership test; the private fixture suppresses diagnostics and removes its own
 temporary tree after shutdown.
+
+`uv run pytest tests/test_trade_history_review_migration.py` checks synthetic
+upgrade preservation, append-only acknowledgment/withdrawal history, owner and
+physical-version fences, missing-evidence classification, replacement attempts,
+concurrent decisions, downgrade refusal and inert SQL rows. The test also shows
+that SQL can retain a false but well-shaped snapshot hash, and that such a row
+cannot unblock the current trade writer. It is not authentication or a review API.
 
 `uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent

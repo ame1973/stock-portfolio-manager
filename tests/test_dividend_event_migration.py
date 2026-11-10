@@ -403,7 +403,7 @@ def reverse_receipt(con: Any, values: dict[str, Any], *, owner: UUID = OWNER) ->
 
 def test_schema_adds_empty_managed_provenance_without_adopting_events(engine: Engine) -> None:
     with unit_of_work(engine) as con:
-        assert schema_head() == "0017_trade_audit_origins"
+        assert schema_head() == "0018_trade_history_reviews"
         assert con.exec_driver_sql("SELECT count(*) FROM dividend_event_controls").scalar_one() == 0
         assert (
             con.exec_driver_sql("SELECT count(*) FROM dividend_revision_decisions").scalar_one()
@@ -414,7 +414,7 @@ def test_schema_adds_empty_managed_provenance_without_adopting_events(engine: En
                 "SELECT count(*) FROM sqlite_schema WHERE type='table' "
                 "AND name NOT LIKE 'sqlite_%' AND name<>'alembic_version'"
             ).scalar_one()
-            == 56
+            == 57
         )
         plan = con.exec_driver_sql(
             "EXPLAIN QUERY PLAN SELECT account_id FROM dividend_receipts "

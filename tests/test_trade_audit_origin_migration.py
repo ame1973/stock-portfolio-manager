@@ -12,13 +12,15 @@ from alembic import command
 from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from spm_api.audit import audit, canonical, digest
+from spm_api.audit import audit, canonical, digest, stamp
 from spm_api.config import Settings
 from spm_api.db import migration_config, schema_head, unit_of_work
+from spm_api.ledger_service import allocate_sequence
 from spm_api.trade_service import as_trade
 from tests.helpers import create, database_snapshot, version_headers
 from tests.provider_evidence_helpers import insert
 from tests.test_action_opening_migration import schema
+from tests.test_dividend_basis_migration import SECURITY
 from tests.test_dividend_event_migration import old_engine as old_engine
 from tests.test_schedule_migration import upgrade_to
 from tests.test_trades import book as book
@@ -125,7 +127,7 @@ def test_upgrade_preserves_legacy_facts_schema_receipts_and_fx(previous_engine: 
     assert after["audit_events"][: len(before["audit_events"])] == before["audit_events"]
     assert all(row in schema(previous_engine) for row in definitions)
     with unit_of_work(previous_engine) as con:
-        assert schema_head() == HEAD
+        assert schema_head() == "0018_trade_history_reviews"
         assert con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == HEAD
         assert con.exec_driver_sql(
             "SELECT count(*) FROM audit_events WHERE action=?", (ACTION,)
@@ -136,19 +138,76 @@ def test_upgrade_preserves_legacy_facts_schema_receipts_and_fx(previous_engine: 
     assert database_snapshot(previous_engine) == after
 
 
-async def test_downgrade_refuses_to_remove_retained_origin(
-    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
-) -> None:
-    trade = await create(client, "trades", payload(book))
-    with unit_of_work(engine, write=True) as con:
-        insert(con, TABLE, origin_values(con, book["owner"]["id"], trade["id"]))
-    before, definitions = database_snapshot(engine), schema(engine)
-    with engine.connect() as con:
+def test_downgrade_refuses_to_remove_retained_origin(previous_engine: Engine) -> None:
+    # Exercise the historical revision directly, not the later head's downgrade guard.
+    upgrade_to(previous_engine, HEAD)
+    owner, portfolio, broker, account, trade_id = (str(uuid4()) for _ in range(5))
+    at = stamp()
+    with previous_engine.begin() as con:
+        con.exec_driver_sql(
+            "INSERT INTO owners(id,password_hash,password_changed_at,created_at) "
+            "VALUES (?,'synthetic',?,?)",
+            (owner, at, at),
+        )
+        insert(
+            con,
+            "portfolios",
+            {"id": portfolio, "owner_id": owner, "name": "Synthetic", "created_at": at},
+        )
+        insert(con, "brokers", {"id": broker, "owner_id": owner, "name": "Synthetic"})
+        insert(
+            con,
+            "accounts",
+            {
+                "id": account,
+                "portfolio_id": portfolio,
+                "broker_id": broker,
+                "name": "Synthetic",
+                "default_currency": "USD",
+                "created_at": at,
+            },
+        )
+        sequence = allocate_sequence(con, "TRADE", trade_id)
+        insert(
+            con,
+            "trades",
+            {
+                "id": trade_id,
+                "root_id": trade_id,
+                "created_sequence": sequence,
+                "portfolio_id": portfolio,
+                "account_id": account,
+                "security_id": str(SECURITY),
+                "side": "BUY",
+                "trade_date": "2999-01-02",
+                "quantity_e8": 1000000000,
+                "price_e8": 1000000000,
+                "currency": "USD",
+                "gross_micro": 100000000,
+                "settlement_micro": 100000000,
+                "status": "DRAFT_SCHEDULED",
+                "created_at": at,
+                "updated_at": at,
+            },
+        )
+        trade = con.exec_driver_sql("SELECT * FROM trades WHERE id=?", (trade_id,)).mappings().one()
+        audit(
+            con,
+            owner,
+            "trade",
+            trade_id,
+            "CREATE",
+            request_id=str(uuid4()),
+            after=as_trade(trade).model_dump(mode="json"),
+        )
+        insert(con, TABLE, origin_values(con, owner, trade_id))
+    before, definitions = database_snapshot(previous_engine), schema(previous_engine)
+    with previous_engine.connect() as con:
         config = migration_config()
         config.attributes["connection"] = con
         with pytest.raises(RuntimeError, match="validated"):
             command.downgrade(config, PREVIOUS)
-    assert database_snapshot(engine) == before and schema(engine) == definitions
+    assert database_snapshot(previous_engine) == before and schema(previous_engine) == definitions
 
 
 @pytest.mark.parametrize("failure", ["late-ddl", "second-owner-audit"])

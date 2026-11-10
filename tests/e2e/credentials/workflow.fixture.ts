@@ -21,9 +21,9 @@ with sqlite3.connect(f"file:{Path(os.environ['DATA_DIR']) / 'portfolio.sqlite3'}
     db.execute('PRAGMA query_only=ON')
     assert db.execute('PRAGMA integrity_check').fetchone() == ('ok',)
     assert db.execute('PRAGMA foreign_key_check').fetchall() == []
-    assert db.execute('SELECT version_num FROM alembic_version').fetchone() == ('0017_trade_audit_origins',)
+    assert db.execute('SELECT version_num FROM alembic_version').fetchone() == ('0018_trade_history_reviews',)
     tables = [r[0] for r in db.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'alembic_version' ORDER BY name")]
-    assert len(tables) == 56
+    assert len(tables) == 57
     print(json.dumps({name: db.execute('SELECT * FROM "' + name.replace('"', '""') + '" ORDER BY rowid').fetchall() for name in tables}))
 `], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })) as Record<string, unknown[][]>;
 }
@@ -85,7 +85,7 @@ test("isolated actual credential UI keeps import, rotation, clear and historical
   const replay = await page.request.post("/api/v1/provider-profiles/eodhd/credential", { headers: { Origin: process.env.SPM_E2E_BASE_URL!, "X-CSRF-Token": importHeaders["x-csrf-token"]!, "Idempotency-Key": importHeaders["idempotency-key"]!, "If-Match": importHeaders["if-match"]! }, data: importBody });
   expect(replay.status()).toBe(200); expect(await replay.json()).toEqual(original); expect(await readProfile(page)).toEqual(current); expect(database()).toEqual(beforeReplay);
   const after = database();
-  for (const name of ["trades", "trade_audit_origins", "cash_ledger_entries", "expenses", "dividend_events", "dividend_event_controls", "dividend_event_revisions", "dividend_revision_decisions", "dividend_evidence_links", "dividend_candidate_revisions", "dividend_basis_assertions", "dividend_entitlements", "dividend_receipts", "provider_fetch_contexts", "provider_runs", "provider_status", "job_checkpoints", "provider_budgets", "upstream_attempts", "upstream_outcomes", "jobs"]) { expect(Object.hasOwn(before, name)).toBe(true); expect(after[name]).toEqual(before[name]); }
+  for (const name of ["trades", "trade_audit_origins", "trade_history_reviews", "cash_ledger_entries", "expenses", "dividend_events", "dividend_event_controls", "dividend_event_revisions", "dividend_revision_decisions", "dividend_evidence_links", "dividend_candidate_revisions", "dividend_basis_assertions", "dividend_entitlements", "dividend_receipts", "provider_fetch_contexts", "provider_runs", "provider_status", "job_checkpoints", "provider_budgets", "upstream_attempts", "upstream_outcomes", "jobs"]) { expect(Object.hasOwn(before, name)).toBe(true); expect(after[name]).toEqual(before[name]); }
   expect(after.provider_profile_revisions).toHaveLength(5);
   for (const value of [password, bootstrap, firstKey, secondKey]) expect(JSON.stringify(after)).not.toContain(value);
   const files = await readdir(join(root, "managed")); const keys = files.filter(name => name.endsWith(".key")); expect(keys).toHaveLength(2);
