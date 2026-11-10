@@ -730,6 +730,239 @@ async def test_later_creation_audit_changes_status_without_authenticating_its_ti
     assert database_snapshot(engine) == before
 
 
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+@pytest.mark.parametrize("withdrawal", ["none", "before", "after"])
+async def test_later_matching_creation_audit_never_grants_a_reviewed_trade_change(
+    client: httpx.AsyncClient,
+    engine: Engine,
+    book: dict[str, Any],
+    method: str,
+    withdrawal: str,
+) -> None:
+    trade = synthetic_legacy_draft(engine, book, unrelated_audit=False)
+    headers = version_headers(client, 1, key="synthetic-original-review")
+    acknowledged = await client.post(path(trade), json=body(), headers=headers)
+    assert acknowledged.status_code == 200
+    if withdrawal == "before":
+        result = await client.post(
+            path(trade), json=body("WITHDRAW", "1"), headers=version_headers(client, 1)
+        )
+        assert result.status_code == 200
+    with unit_of_work(engine, write=True) as con:
+        row = con.exec_driver_sql("SELECT * FROM trades WHERE id=?", (trade,)).mappings().one()
+        audit(
+            con,
+            book["owner"]["id"],
+            "trade",
+            trade,
+            "CREATE",
+            request_id=str(uuid4()),
+            after=as_trade(row).model_dump(mode="json"),
+        )
+    if withdrawal == "after":
+        result = await client.post(
+            path(trade), json=body("WITHDRAW", "1"), headers=version_headers(client, 1)
+        )
+        assert result.status_code == 200
+    before = database_snapshot(engine)
+    change = (
+        payload(
+            book,
+            trade_date="2999-01-02",
+            fx_rate_hkd=None,
+            quantity="11",
+            reason="Correct this synthetic reviewed trade",
+        )
+        if method == "PATCH"
+        else {"reason": "Void this synthetic reviewed trade"}
+    )
+    response = await client.request(
+        method, f"/api/v1/trades/{trade}", json=change, headers=version_headers(client, 1)
+    )
+    assert response.status_code == 409 and response.json()["code"] == "NEEDS_REVIEW"
+    safe(response)
+    assert trade not in response.text
+    assert database_snapshot(engine) == before
+    replay = await client.post(path(trade), json=body(), headers=headers)
+    assert replay.status_code == 200 and replay.json() == acknowledged.json()
+    assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+@pytest.mark.parametrize("corrupt_successor_review", [False, True])
+async def test_reviewed_missing_creation_also_fences_an_existing_successor(
+    client: httpx.AsyncClient,
+    engine: Engine,
+    book: dict[str, Any],
+    method: str,
+    corrupt_successor_review: bool,
+) -> None:
+    original_id = synthetic_legacy_draft(engine, book, unrelated_audit=False)
+    acknowledged = await client.post(
+        path(original_id), json=body(), headers=version_headers(client, 1)
+    )
+    assert acknowledged.status_code == 200
+    successor_id = str(uuid4())
+    with unit_of_work(engine, write=True) as con:
+        original = (
+            con.exec_driver_sql("SELECT * FROM trades WHERE id=?", (original_id,)).mappings().one()
+        )
+        audit(
+            con,
+            book["owner"]["id"],
+            "trade",
+            original_id,
+            "CREATE",
+            request_id=str(uuid4()),
+            after=as_trade(original).model_dump(mode="json"),
+        )
+        trade_service._retire(con, original, "SUPERSEDED")
+        at = stamp()
+        insert(
+            con,
+            "trades",
+            {
+                **dict(original),
+                "id": successor_id,
+                "revision": 2,
+                "supersedes_id": original_id,
+                "created_at": at,
+                "updated_at": at,
+            },
+        )
+        successor = (
+            con.exec_driver_sql("SELECT * FROM trades WHERE id=?", (successor_id,)).mappings().one()
+        )
+        if corrupt_successor_review:
+            fake = review_values(con, book["owner"]["id"], successor_id)
+            insert(con, "trade_history_reviews", fake)
+        request_id = str(uuid4())
+        audit(
+            con,
+            book["owner"]["id"],
+            "trade",
+            successor_id,
+            "REVISE",
+            request_id=request_id,
+            before=dict(original),
+            after=as_trade(successor).model_dump(mode="json"),
+            reason=REASON,
+        )
+        trade_audit.remember_created(
+            con, UUID(book["owner"]["id"]), UUID(successor_id), UUID(request_id)
+        )
+    before = database_snapshot(engine)
+    change = (
+        payload(
+            book,
+            trade_date="2999-01-02",
+            fx_rate_hkd=None,
+            quantity="11",
+            reason="Correct this synthetic reviewed root",
+        )
+        if method == "PATCH"
+        else {"reason": "Void this synthetic reviewed root"}
+    )
+    response = await client.request(
+        method, f"/api/v1/trades/{successor_id}", json=change, headers=version_headers(client, 1)
+    )
+    expected = (
+        (503, "TRADE_AUDIT_UNAVAILABLE") if corrupt_successor_review else (409, "NEEDS_REVIEW")
+    )
+    assert (response.status_code, response.json()["code"]) == expected
+    safe(response)
+    assert database_snapshot(engine) == before
+    assert (await client.get(path(original_id))).status_code == 200
+    assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+async def test_invalid_review_history_fails_closed_before_a_trade_change(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any], method: str
+) -> None:
+    trade = synthetic_legacy_draft(engine, book, unrelated_audit=False)
+    with unit_of_work(engine, write=True) as con:
+        fake = review_values(con, book["owner"]["id"], trade)
+        insert(con, "trade_history_reviews", fake)
+    before = database_snapshot(engine)
+    change = (
+        payload(
+            book,
+            trade_date="2999-01-02",
+            fx_rate_hkd=None,
+            reason="Correct this synthetic reviewed trade",
+        )
+        if method == "PATCH"
+        else {"reason": "Void this synthetic reviewed trade"}
+    )
+    response = await client.request(
+        method, f"/api/v1/trades/{trade}", json=change, headers=version_headers(client, 1)
+    )
+    assert response.status_code == 503 and response.json()["code"] == "TRADE_AUDIT_UNAVAILABLE"
+    safe(response)
+    assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+async def test_reviewed_gap_in_an_unrelated_root_does_not_block_a_trade_change(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any], method: str
+) -> None:
+    reviewed = synthetic_legacy_draft(engine, book, unrelated_audit=False)
+    acknowledged = await client.post(
+        path(reviewed), json=body(), headers=version_headers(client, 1)
+    )
+    assert acknowledged.status_code == 200
+    trade_body = payload(book, trade_date="2999-01-02", fx_rate_hkd=None)
+    target = await create(client, "trades", trade_body)
+    reviews = database_snapshot(engine)["trade_history_reviews"]
+    change = (
+        {**trade_body, "quantity": "11", "reason": "Correct this unrelated synthetic trade"}
+        if method == "PATCH"
+        else {"reason": "Void this unrelated synthetic trade"}
+    )
+    response = await client.request(
+        method, f"/api/v1/trades/{target['id']}", json=change, headers=version_headers(client, 1)
+    )
+    assert response.status_code == 200
+    assert database_snapshot(engine)["trade_history_reviews"] == reviews
+    assert (await client.get(path(reviewed))).json()["state"] == "ACKNOWLEDGED_UNVERIFIED"
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+async def test_retired_origin_gap_alone_does_not_claim_or_block_a_current_trade(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any], method: str
+) -> None:
+    retired, _ = retired_draft(engine, book, has_creation_audit=True)
+    acknowledged = await client.post(
+        path(retired),
+        json=body(gap="MISSING_RETIRED_ORIGIN"),
+        headers=version_headers(client, 2),
+    )
+    assert acknowledged.status_code == 200
+    with unit_of_work(engine) as con:
+        successor = con.exec_driver_sql(
+            "SELECT id FROM trades WHERE supersedes_id=?", (retired,)
+        ).scalar_one()
+    change = (
+        payload(
+            book,
+            trade_date="2999-01-02",
+            fx_rate_hkd=None,
+            quantity="12",
+            reason="Correct this synthetic current trade",
+        )
+        if method == "PATCH"
+        else {"reason": "Void this synthetic current trade"}
+    )
+    response = await client.request(
+        method, f"/api/v1/trades/{successor}", json=change, headers=version_headers(client, 1)
+    )
+    assert response.status_code == 200
+    status = await client.get(path(retired))
+    assert status.status_code == 200 and status.json()["history_completeness"] == "UNVERIFIED"
+    assert status.json()["current_gap"] == "MISSING_RETIRED_ORIGIN"
+
+
 async def test_review_history_paginates_the_real_immutable_revision_order(
     client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
 ) -> None:

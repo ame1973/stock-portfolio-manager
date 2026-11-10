@@ -591,7 +591,7 @@ async def test_later_matched_origin_can_be_recovered_and_old_review_withdrawn(
 
 
 @pytest.mark.parametrize("method", ["PATCH", "DELETE"])
-async def test_inert_sql_review_does_not_unblock_trade_writes(
+async def test_unattested_sql_review_fails_closed_for_trade_writes(
     client: httpx.AsyncClient, engine: Engine, book: dict[str, Any], method: str
 ) -> None:
     trade_id = synthetic_legacy_draft(engine, book, unrelated_audit=False)
@@ -606,7 +606,7 @@ async def test_inert_sql_review_does_not_unblock_trade_writes(
     response = await client.request(
         method, f"/api/v1/trades/{trade_id}", json=body, headers=version_headers(client, 1)
     )
-    assert response.status_code == 409 and response.json()["code"] == "NEEDS_REVIEW"
+    assert response.status_code == 503 and response.json()["code"] == "TRADE_AUDIT_UNAVAILABLE"
     assert database_snapshot(engine) == before
 
 

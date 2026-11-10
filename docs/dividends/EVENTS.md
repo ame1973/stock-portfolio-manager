@@ -243,10 +243,10 @@ captures the original and financial changes atomically before retiring a
 still-current trade. An older current trade with no original creation/revision
 audit returns 409 `NEEDS_REVIEW`; an inconsistent audit or stored origin returns
 503 `TRADE_AUDIT_UNAVAILABLE`. These failures do not change the fact, cash,
-origin, audit, idempotency or invalidation. An explicit review workflow for a
-current trade with a missing creation audit remains unfinished, so the operator
-cannot yet resolve that blocked correction in the app. Recovery of an
-already-retired trade needs retained original response evidence, immutable field
+origin, audit, idempotency or invalidation. The separate unverified review
+workflow records an acknowledgment or withdrawal but cannot yet authorize that
+blocked correction. Recovery of an already-retired trade needs retained original
+response evidence, immutable field
 mirrors and an exact match to the old audit digest, with a separately audited
 authorized workflow. An expired or missing response is not evidence: leave the
 history unverified and require explicit review rather than inventing a timestamp
@@ -478,11 +478,14 @@ ETag for the combined trade/review state; use the status's `trade_version` or th
 trade endpoint's ETag for the next physical `If-Match`. The response omits owner,
 audit/request IDs, raw trade snapshot and snapshot hash. Neither this API nor a
 bare SQL row unblocks trade PATCH/DELETE, establishes verified ownership, creates
-an entitlement or posts a receipt. The separate writer/eligibility integration
-remains unfinished. **Known limitation:** if a missing creation audit is later
-inserted with matching contents, the current trade writer can accept a correction
-or void without proving when that audit was created, including after withdrawal.
-Do not rely on this path until the writer's review-history fence is installed.
+an entitlement or posts a receipt. Before correcting or voiding a trade, the
+writer validates all review histories attached to the same stable trade root. If
+any recorded decision reported a missing creation audit, it returns 409
+`NEEDS_REVIEW` even after withdrawal, a matching later audit or a successor
+revision; malformed review history returns 503 `TRADE_AUDIT_UNAVAILABLE`. This
+fence does not prove when an audit was created, resolve the historical gap, grant
+eligibility or install an unverified correction workflow. The separate
+writer/eligibility integration remains unfinished.
 
 ## Trade-history review in the browser
 

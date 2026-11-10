@@ -7,8 +7,9 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Connection, RowMapping, text
+from sqlalchemy.exc import SQLAlchemyError
 
-from spm_api import trade_audit
+from spm_api import trade_audit, trade_history_review
 from spm_api.audit import audit, now, stamp
 from spm_api.decimal_types import to_scaled
 from spm_api.errors import ApiError, Success
@@ -64,6 +65,31 @@ def _capture_trade_origin(con: Connection, auth: Auth, row: RowMapping, request_
     if row["status"] in {"SUPERSEDED", "VOID"}:
         raise ApiError(409, "INACTIVE_FACT", "Use the current trade revision")
     identifier = row["id"]
+    try:
+        reviewed_ids = con.execute(
+            text("""
+            SELECT DISTINCT t.id FROM trades t
+            JOIN trade_history_reviews r ON r.trade_id=t.id
+            WHERE t.root_id=:root
+        """),
+            {"root": row["root_id"]},
+        ).scalars()
+        missing_creation = False
+        for reviewed_id in reviewed_ids:
+            reviews = trade_history_review.history(con, auth.owner.id, UUID(reviewed_id))
+            if not reviews:
+                raise ValueError("Invalid reviewed trade history")
+            missing_creation |= any(item.gap == "MISSING_CREATION_AUDIT" for item in reviews)
+    except (ValueError, SQLAlchemyError):
+        raise ApiError(
+            503, "TRADE_AUDIT_UNAVAILABLE", "Trade audit history is unavailable"
+        ) from None
+    if missing_creation:
+        raise ApiError(
+            409,
+            "NEEDS_REVIEW",
+            "A previously missing trade audit requires review before correction",
+        )
     origin = con.execute(
         text("SELECT 1 FROM trade_audit_origins WHERE trade_id=:id"), {"id": identifier}
     ).first()
