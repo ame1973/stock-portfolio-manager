@@ -198,3 +198,60 @@ class TradeHistoryReviewStatus(Model):
     latest: TradeHistoryReviewRecord | None
     scope: Literal["UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY"] = "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY"
     history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
+
+
+CorrectionReviewOrdinal = Annotated[
+    str,
+    StringConstraints(strict=True, pattern=r"^[1-9][0-9]{0,18}$"),
+    AfterValidator(_review_ordinal),
+]
+
+
+class TradeCorrectionReviewPin(Model):
+    trade_id: UUID
+    trade_version: Annotated[int, Field(strict=True, ge=1, le=2)]
+    review_revision: CorrectionReviewOrdinal
+    gap: Literal["MISSING_CREATION_AUDIT"]
+
+
+class TradeUnverifiedCorrectionScope(Model):
+    confirmation: Literal["UNVERIFIED_TRADE_CORRECTION_ONLY"]
+    reviews: Annotated[tuple[TradeCorrectionReviewPin, ...], Field(min_length=1, max_length=100)]
+
+    @field_validator("reviews")
+    @classmethod
+    def distinct_trades(
+        cls, value: tuple[TradeCorrectionReviewPin, ...]
+    ) -> tuple[TradeCorrectionReviewPin, ...]:
+        if len({item.trade_id for item in value}) != len(value):
+            raise ValueError("Correction review trades must be distinct")
+        return value
+
+
+class TradeUnverifiedRevisionWrite(TradeUnverifiedCorrectionScope):
+    revision: TradeRevision = Field(repr=False)
+
+    @field_validator("revision")
+    @classmethod
+    def no_nul_reason(cls, value: TradeRevision) -> TradeRevision:
+        if "\0" in value.reason:
+            raise ValueError("The correction reason cannot contain NUL")
+        return value
+
+
+class TradeUnverifiedVoidWrite(TradeUnverifiedCorrectionScope):
+    reason: ChangeReason = Field(repr=False)
+
+    @field_validator("reason")
+    @classmethod
+    def no_nul_reason(cls, value: str) -> str:
+        if "\0" in value:
+            raise ValueError("The correction reason cannot contain NUL")
+        return value
+
+
+class TradeUnverifiedCorrectionRecord(Model):
+    authorization_id: UUID
+    trade: TradeRecord = Field(repr=False)
+    scope: Literal["UNVERIFIED_TRADE_CORRECTION_ONLY"]
+    history_completeness: Literal["UNVERIFIED"]

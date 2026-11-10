@@ -39,11 +39,11 @@ try {
   if (result.code !== 0 || result.signal || !result.output.includes("1 passed, 0 failed")) throw new Error("PRIVATE_BROWSER_FAILED");
   console.log(tradeOrigin
     ? "PASS isolated trade-origin browser fixture: actual recovery, exact wire integers, reauthentication and replay"
-    : tradeReview ? "PASS isolated trade-review browser fixture: actual review, withdrawal, changed evidence, reauthentication and replay"
+    : tradeReview ? "PASS isolated trade-review browser fixture: actual review, correction API revise/void, reauthentication and replay"
       : "PASS isolated credential browser fixture: actual onboarding, reauthentication, import, rotation, clear, replay, exact private files and zero provider work");
 } catch {
   // Only fixed stage labels are allowed; subprocess diagnostics and payloads remain private.
-  const stages = new Set(["SETUP", "MASTER", "SEED", "NAVIGATE", "OPEN", "RESIZE", "FILL", "PASSWORD", "PASSWORD_HELD", "COMMIT", "COMMIT_HELD", "LOST", "REAUTH", "REPLAY", "COMPARE", "SECOND", "REVIEW_ACK", "REVIEW_WITHDRAW", "CHANGED_EVIDENCE", "FINAL"]);
+  const stages = new Set(["SETUP", "MASTER", "SEED", "NAVIGATE", "OPEN", "RESIZE", "FILL", "PASSWORD", "PASSWORD_HELD", "COMMIT", "COMMIT_HELD", "LOST", "REAUTH", "REPLAY", "COMPARE", "SECOND", "REVIEW_ACK", "REVIEW_WITHDRAW", "CHANGED_EVIDENCE", "FINAL", "CORRECTION_REACK", "CORRECTION_REVISE", "CORRECTION_WITHDRAW", "CORRECTION_VOID"]);
   const stage = tradeOrigin || tradeReview ? await readFile(join(root, "stage"), "utf8").catch(() => "") : "";
   console.error(`FAIL isolated browser fixture${stages.has(stage) ? ` at ${stage}` : ""} (private diagnostics suppressed)`); process.exitCode = 1;
 } finally {

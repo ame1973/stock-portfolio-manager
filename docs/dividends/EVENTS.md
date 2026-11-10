@@ -344,7 +344,8 @@ version and normalized body returns the original response with no new writes,
 even after a later successor correction. Replay also revalidates its cached
 metadata and original intent against the retained audited origin. Both operations
 are private and `no-store`. An absent original creation audit needs the separate
-explicit unverified review API below; that review does not yet unblock correction.
+explicit unverified review API below; review alone does not unblock ordinary
+PATCH/DELETE or authorize the separate correction operation.
 
 ## Browser recovery workspace
 
@@ -415,11 +416,10 @@ record remains historical evidence after later withdrawal.
 
 SQL cannot authenticate a user, prove that an audit was created in the original
 transaction, validate the canonical intent or audit digest, or verify all economic
-scope. A valid-shaped but unrelated audit hash can pass the table guards. An
-internal writer consumes this storage, but no HTTP endpoint does; inserting a row
-alone is **not** a correction authorization or eligibility grant. Callers must
-recheck the entire scope and append the fact, correlated audit, idempotency and
-invalidation atomically.
+scope. A valid-shaped but unrelated audit hash can pass the table guards. A
+protected API uses the internal writer below, but inserting a row alone is **not**
+a correction authorization or eligibility grant. Callers must recheck the entire
+scope and append the fact, correlated audit, idempotency and invalidation atomically.
 
 ## Internal historical correction-authorization reader
 
@@ -455,11 +455,10 @@ withdrawal; changing the intent conflicts. A separate historical replay helper
 rechecks the original authorization and result without making a new grant.
 
 These functions do **not** authenticate a session, check CSRF or reauthentication,
-or write an HTTP idempotency receipt. A protected caller must recheck those in the
-same outer transaction and serialize the response before commit. Normal trade
-PATCH/DELETE remain fenced and no endpoint exposes this internal writer yet.
-Neither a successful correction nor its audit proves ownership or authorizes an
-eligibility projection.
+or write an HTTP idempotency receipt. The separate protected API below supplies
+those checks in the same outer transaction and serializes the response before
+commit. Normal trade PATCH/DELETE remain fenced. Neither a successful correction
+nor its audit proves ownership or authorizes an eligibility projection.
 
 ## Internal unverified trade-history review controller
 
@@ -487,11 +486,11 @@ matches. It does not treat a later audit as proof it existed at creation.
 These helpers do not authenticate an HTTP session or establish ownership history
 or complete economic scope. The correction-scope checker also validates the
 retained trade root, without granting a correction. The protected API and browser
-workspace below authenticate review decisions; the internal correction writer
-uses them, but protected trade-writer and eligibility integrations remain
-unfinished. A financial caller must consult review history even when an audit
-later appears, and revalidate the complete relevant scope in its own transaction.
-No provider or private-file access is performed.
+workspace below authenticate review decisions; a separate protected correction API
+uses the internal writer. Independent eligibility integration remains unfinished.
+A financial caller must consult review history even when an audit later appears,
+and revalidate the complete relevant scope in its own transaction. No provider or
+private-file access is performed.
 
 ## Protected unverified trade-history review API
 
@@ -552,13 +551,79 @@ any recorded decision reported a missing creation audit, it returns 409
 `NEEDS_REVIEW` even after withdrawal, a matching later audit or a successor
 revision; malformed review history returns 503 `TRADE_AUDIT_UNAVAILABLE`. This
 fence does not prove when an audit was created, resolve the historical gap, grant
-eligibility or expose an unverified correction workflow over HTTP. The protected
-writer/eligibility integration remains unfinished. An internal scope checker
-revalidates all missing-creation reviews against exact physical and review
-versions in a writer transaction; it rejects withdrawn decisions, extra or omitted
-trades and later matching audits. It does not authenticate the caller, record an
-authorization or change a financial fact by itself. The internal writer uses it;
-no HTTP route consumes it yet.
+eligibility. A separate protected correction API below requires a distinct
+explicit confirmation and exact current scope; a review by itself is not that
+confirmation. The internal scope checker revalidates all missing-creation reviews
+against exact physical and review versions in a writer transaction; it rejects
+withdrawn decisions, extra or omitted trades and later matching audits. It does
+not authenticate the caller, record an authorization or change a financial fact
+by itself.
+
+## Protected unverified trade-correction API
+
+`POST /api/v1/trades/{id}/unverified-corrections/revise` and
+`POST /api/v1/trades/{id}/unverified-corrections/void` are separate from normal
+PATCH/DELETE. Both require the current session, matching Origin, CSRF token,
+idempotency key, recent password confirmation and a quoted physical trade version
+in `If-Match`. Their bodies must contain the explicit confirmation
+`UNVERIFIED_TRADE_CORRECTION_ONLY` and 1–100 distinct `reviews` pins. Each pin
+names a physical `trade_id`, its currently observed `trade_version`, a positive
+canonical decimal-string `review_revision` and `gap=MISSING_CREATION_AUDIT`.
+These are the reviews for **every** missing-creation gap in the stable root,
+including retired ancestors; they are not merely the current trade's review.
+
+For example, a void of one reviewed synthetic draft uses:
+
+```json
+{
+  "confirmation": "UNVERIFIED_TRADE_CORRECTION_ONLY",
+  "reviews": [
+    {
+      "trade_id": "00000000-0000-4000-8000-000000000001",
+      "trade_version": 1,
+      "review_revision": "1",
+      "gap": "MISSING_CREATION_AUDIT"
+    }
+  ],
+  "reason": "Synthetic example: void an explicitly unverified trade"
+}
+```
+
+A revision uses the same confirmation and pins, with `revision` containing the
+complete normal trade-create payload plus its reason. Decimal inputs remain
+strings. To assemble the scope, page through the owned root's trade history using
+`GET /api/v1/trades?root_id=...&include_history=true` and inspect each physical
+trade's review status and decision history. A current acknowledged gap is not
+proof of complete history. Withdrawn reviews, omitted or extra gaps, stale physical
+or review versions, and creation evidence appearing after review cannot authorize
+a new correction. A root with more than 100 required pins cannot currently be
+corrected through these endpoints; do not omit pins or alter the database to work
+around the limit. The browser does not yet provide a correction editor or a
+root-wide scope view.
+
+The server rechecks the session, CSRF, password-confirmation age, complete root,
+reviews and economic replay in the same writer transaction. Financial facts,
+exact old-FX reversals, trade and authorization audits, invalidations and the
+serialized idempotency response commit together. An oversell fails without writes.
+The response contains the authorization ID and resulting trade, and explicitly
+requires `scope=UNVERIFIED_TRADE_CORRECTION_ONLY` and
+`history_completeness=UNVERIFIED`. It has no ETag. Responses are private and
+`no-store`; do not include passwords or provider keys in reasons or notes. The
+trade's `created_sequence` is a JSON integer that can exceed JavaScript's safe
+integer range. If retaining the original response for later audit-origin recovery,
+preserve the exact raw JSON digits rather than parsing and reserializing it through
+JavaScript `Number`.
+
+An unchanged retry with the same key returns the original response without new
+writes, even after a later withdrawal or valid subsequent correction. The server
+reauthenticates and compares the cached response with the original audited intent,
+pins and exact financial result. Reordering the same pins does not change intent;
+a different input or physical version requires a new key. A cached response with
+missing or inconsistent unverified labels fails closed. Such historical replay
+is not a new grant. Physical/review version conflicts return 412; changed or
+incomplete current scope returns 409; inconsistent stored evidence or cached
+responses return 503; foreign trades return 404. Neither a successful correction
+nor an audit proves ownership, income or current dividend eligibility.
 
 ## Trade-history review in the browser
 
@@ -658,17 +723,26 @@ existing audit events. It does not exercise a protected review endpoint or grant
 explicit gap fencing, two versions, authentication/CSRF/reauthentication,
 concurrency, exact revision strings, pagination, corrupt audits, cached-intent
 validation and atomic rollback. It also checks that an acknowledged audit gap does
-not yet unblock either trade correction or void. These are isolated synthetic
+not unblock ordinary trade PATCH or DELETE. These are isolated synthetic
 HTTP/SQLite tests, not proof of external ownership or eligibility.
+
+`uv run pytest tests/test_trade_unverified_correction_api.py` exercises explicit
+confirmation, exact root pins, protected revision and void, original-FX reversal,
+reauthentication, writer-time security and review races, cached-response validation,
+concurrent retries and full rollback. It uses isolated temporary synthetic data;
+it does not establish a dividend eligibility grant or external ownership.
 
 `npm run build && npm run test:e2e:trade-review` runs the actual application and
 Chromium against an exclusive temporary database. It checks reasoned review and
 withdrawal, recent password confirmation, a committed-but-lost response and its
 unchanged-key zero-write replay, and withdrawal after retained-origin recovery
-changes the evidence. It adds only new synthetic legacy facts and checks that
-existing audits, financial facts and historical FX remain unchanged. It does not
-exercise a worker, provider, deployment volume, container, NAS, TLS or external
-ownership; private diagnostics follow the pinned browser policy.
+changes the evidence. Before the correction exercise, it checks that reviews leave
+existing financial facts and historical FX unchanged. It then uses real HTTP to
+revise and void a new synthetic draft, checks that withdrawal blocks new use but
+not the original replay, and verifies old audits and cash entries remain unchanged.
+This last part exercises the API, not a correction UI. It does not exercise a
+worker, provider, deployment volume, container, NAS, TLS or external ownership;
+private diagnostics follow the pinned browser policy.
 
 `uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent

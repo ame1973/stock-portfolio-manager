@@ -1194,6 +1194,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/trades/{id}/unverified-corrections/revise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revise Unverified Trade */
+        post: operations["revise_unverified_trade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trades/{id}/unverified-corrections/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Unverified Trade */
+        post: operations["void_unverified_trade"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4102,6 +4136,23 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** TradeCorrectionReviewPin */
+        TradeCorrectionReviewPin: {
+            /**
+             * Gap
+             * @constant
+             */
+            gap: "MISSING_CREATION_AUDIT";
+            /** Review Revision */
+            review_revision: string;
+            /**
+             * Trade Id
+             * Format: uuid
+             */
+            trade_id: string;
+            /** Trade Version */
+            trade_version: number;
+        };
         /** TradeCreate */
         TradeCreate: {
             /**
@@ -4435,6 +4486,48 @@ export interface components {
              * Format: date
              */
             trade_date: string;
+        };
+        /** TradeUnverifiedCorrectionRecord */
+        TradeUnverifiedCorrectionRecord: {
+            /**
+             * Authorization Id
+             * Format: uuid
+             */
+            authorization_id: string;
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "UNVERIFIED_TRADE_CORRECTION_ONLY";
+            trade: components["schemas"]["TradeRecord"];
+        };
+        /** TradeUnverifiedRevisionWrite */
+        TradeUnverifiedRevisionWrite: {
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "UNVERIFIED_TRADE_CORRECTION_ONLY";
+            /** Reviews */
+            reviews: components["schemas"]["TradeCorrectionReviewPin"][];
+            revision: components["schemas"]["TradeRevision"];
+        };
+        /** TradeUnverifiedVoidWrite */
+        TradeUnverifiedVoidWrite: {
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "UNVERIFIED_TRADE_CORRECTION_ONLY";
+            /** Reason */
+            reason: string;
+            /** Reviews */
+            reviews: components["schemas"]["TradeCorrectionReviewPin"][];
         };
         /** VoidFinancial */
         VoidFinancial: {
@@ -13561,6 +13654,192 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_TradeHistoryReviewRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revise_unverified_trade: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradeUnverifiedRevisionWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradeUnverifiedCorrectionRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    void_unverified_trade: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradeUnverifiedVoidWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradeUnverifiedCorrectionRecord"];
                 };
             };
             /** @description Unauthorized */

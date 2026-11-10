@@ -8,11 +8,12 @@ from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from pydantic_core import PydanticSerializationError
 from sqlalchemy import Connection, RowMapping, text
 
-from spm_api import trade_audit, trade_history_review
+from spm_api import trade_audit, trade_history_review, trade_unverified_correction
 from spm_api import trade_service as service
 from spm_api.db import unit_of_work
 from spm_api.decimal_types import INT64_MAX, IsoDate
 from spm_api.errors import ApiError, Error, Success
+from spm_api.finance import FinanceError
 from spm_api.master_service import owned_account, owned_portfolio, security_row
 from spm_api.mutations import check_version, mutate
 from spm_api.pagination import Page, PageDep, paginate, validate_date_page
@@ -26,6 +27,9 @@ from spm_api.trade_models import (
     TradeHistoryReviewWrite,
     TradeRecord,
     TradeRevision,
+    TradeUnverifiedCorrectionRecord,
+    TradeUnverifiedRevisionWrite,
+    TradeUnverifiedVoidWrite,
     VoidTrade,
 )
 
@@ -130,6 +134,8 @@ def _review_failure(error: trade_history_review.TradeReviewError) -> ApiError:
         "TRADE_REVIEW_CHANGED",
         "TRADE_REVIEW_DECISION_CONFLICT",
         "TRADE_REVIEW_NOT_REQUIRED",
+        "TRADE_REVIEW_REQUIRED",
+        "TRADE_REVIEW_SCOPE_CHANGED",
         "TRADE_REVIEW_TIME_CONFLICT",
     }:
         return ApiError(409, code, "The trade review decision could not be accepted")
@@ -448,6 +454,134 @@ def save_trade_history_review(
     except (ValueError, PydanticSerializationError):
         raise _review_unavailable() from None
     return result
+
+
+def _correction_unavailable() -> ApiError:
+    return ApiError(
+        503, "TRADE_CORRECTION_UNAVAILABLE", "The trade correction cannot be read safely"
+    )
+
+
+def _correction_record(
+    result: trade_unverified_correction.CorrectionResult,
+) -> TradeUnverifiedCorrectionRecord:
+    return TradeUnverifiedCorrectionRecord(
+        authorization_id=result.authorization.id,
+        trade=result.trade,
+        scope="UNVERIFIED_TRADE_CORRECTION_ONLY",
+        history_completeness="UNVERIFIED",
+    )
+
+
+def _unverified_correction(
+    id: UUID,
+    body: TradeUnverifiedRevisionWrite | TradeUnverifiedVoidWrite,
+    request: Request,
+    headers: WriteDep,
+    version: int,
+) -> TradeUnverifiedCorrectionRecord:
+    pins = tuple(
+        trade_history_review.CorrectionReviewPin(
+            item.trade_id, item.trade_version, int(item.review_revision)
+        )
+        for item in body.reviews
+    )
+    operation: Literal["REVISE", "VOID"] = (
+        "REVISE" if isinstance(body, TradeUnverifiedRevisionWrite) else "VOID"
+    )
+    change = body.revision if isinstance(body, TradeUnverifiedRevisionWrite) else body.reason
+
+    def write(con: Connection, auth: Auth) -> TradeUnverifiedCorrectionRecord:
+        if isinstance(change, TradeRevision):
+            result = trade_unverified_correction.revise(
+                con,
+                auth,
+                id,
+                version=version,
+                body=change,
+                pins=pins,
+                request_id=UUID(request.state.request_id),
+            )
+        else:
+            result = trade_unverified_correction.void(
+                con,
+                auth,
+                id,
+                version=version,
+                reason=change,
+                pins=pins,
+                request_id=UUID(request.state.request_id),
+            )
+        return _correction_record(result)
+
+    def validate_replay(
+        con: Connection, auth: Auth, cached: TradeUnverifiedCorrectionRecord
+    ) -> None:
+        try:
+            result = trade_unverified_correction.replay(
+                con,
+                auth,
+                cached.authorization_id,
+                id,
+                version=version,
+                operation=operation,
+                change=change,
+                pins=pins,
+            )
+            if _correction_record(result) != cached:
+                raise _correction_unavailable()
+        except (ValueError, ApiError, PydanticSerializationError):
+            raise _correction_unavailable() from None
+
+    payload = body.model_dump(mode="json")
+    payload["reviews"].sort(key=lambda item: item["trade_id"])
+    try:
+        return mutate(
+            request,
+            headers,
+            {"version": version, **payload},
+            TradeUnverifiedCorrectionRecord,
+            write,
+            reauth=True,
+            validate_replay=validate_replay,
+        )
+    except FinanceError:
+        raise
+    except trade_history_review.TradeReviewError as error:
+        raise _review_failure(error) from None
+    except trade_unverified_correction.UnverifiedCorrectionError as error:
+        code = str(error)
+        if code == "INVALID_TRADE_CORRECTION_SCOPE":
+            raise ApiError(422, code, "The trade correction request is invalid") from None
+        if code == "TRADE_CORRECTION_CONFLICT":
+            raise ApiError(
+                409, code, "The trade correction conflicts with an earlier request"
+            ) from None
+        raise _correction_unavailable() from None
+    except (ValueError, PydanticSerializationError):
+        raise _correction_unavailable() from None
+
+
+@router.post("/trades/{id}/unverified-corrections/revise", operation_id="revise_unverified_trade")
+def revise_unverified_trade(
+    id: UUID,
+    body: TradeUnverifiedRevisionWrite,
+    request: Request,
+    headers: WriteDep,
+    version: PhysicalTradeVersion,
+) -> TradeUnverifiedCorrectionRecord:
+    return _unverified_correction(id, body, request, headers, version)
+
+
+@router.post("/trades/{id}/unverified-corrections/void", operation_id="void_unverified_trade")
+def void_unverified_trade(
+    id: UUID,
+    body: TradeUnverifiedVoidWrite,
+    request: Request,
+    headers: WriteDep,
+    version: PhysicalTradeVersion,
+) -> TradeUnverifiedCorrectionRecord:
+    return _unverified_correction(id, body, request, headers, version)
 
 
 @router.patch("/trades/{id}", operation_id="revise_trade")

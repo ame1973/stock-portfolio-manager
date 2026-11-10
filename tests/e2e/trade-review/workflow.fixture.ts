@@ -206,4 +206,70 @@ test("isolated actual trade review preserves unverified decisions and uncertain 
   expect(JSON.stringify(final)).not.toContain(password); expect(JSON.stringify(final)).not.toContain(bootstrap);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
   expect(await page.evaluate(() => caches.keys())).toEqual([]);
+
+  // Exercise the separate API against the actual isolated server; no correction UI exists yet.
+  stage("CORRECTION_REACK");
+  const reack = await page.request.post(`/api/v1/trades/${auditless.id}/history-review`, {
+    headers: await headers(page, 1),
+    data: { decision: "ACKNOWLEDGE_UNVERIFIED", expected_revision: "2", expected_gap: "MISSING_CREATION_AUDIT", reason },
+  });
+  expect(reack.status()).toBe(200);
+  const correctionHeaders = await headers(page, 1);
+  const correction = {
+    confirmation: "UNVERIFIED_TRADE_CORRECTION_ONLY",
+    reviews: [{ trade_id: auditless.id, trade_version: 1, review_revision: "3", gap: "MISSING_CREATION_AUDIT" }],
+    revision: { portfolio_id: portfolio.id, account_id: account.id, security_id: security.id, side: "BUY", trade_date: "2997-01-02", quantity: "11", price: "10", currency: "USD", reason },
+  };
+  const beforeCorrection = database();
+  stage("CORRECTION_REVISE");
+  const revised = await page.request.post(`/api/v1/trades/${auditless.id}/unverified-corrections/revise`, { headers: correctionHeaders, data: correction });
+  expect(revised.status()).toBe(200); expect(revised.headers()["cache-control"]).toBe("no-store");
+  expect(revised.headers().etag).toBeUndefined();
+  const revisedResult = await revised.json() as { authorization_id: string; trade: RecordId & { root_id: string; status: string }; scope: string; history_completeness: string };
+  expect(revisedResult).toMatchObject({ scope: "UNVERIFIED_TRADE_CORRECTION_ONLY", history_completeness: "UNVERIFIED", trade: { root_id: auditless.id, status: "DRAFT_SCHEDULED" } });
+  expect(revisedResult.authorization_id).toBeTruthy();
+  const afterCorrection = database();
+  expect(afterCorrection.cash_ledger_entries).toEqual(beforeCorrection.cash_ledger_entries);
+  expect(afterCorrection.audit_events!.slice(0, beforeCorrection.audit_events!.length)).toEqual(beforeCorrection.audit_events);
+  expect(afterCorrection.trade_correction_authorizations).toHaveLength(1);
+  expect(afterCorrection.jobs).toEqual([]); expect(afterCorrection.upstream_attempts).toEqual([]);
+
+  stage("CORRECTION_WITHDRAW");
+  const withdrawCorrectionReview = await page.request.post(`/api/v1/trades/${auditless.id}/history-review`, {
+    headers: await headers(page, 2),
+    data: { decision: "WITHDRAW", expected_revision: "3", expected_gap: "MISSING_CREATION_AUDIT", reason: withdrawal },
+  });
+  expect(withdrawCorrectionReview.status()).toBe(200);
+  const afterWithdrawal = database();
+  const replayCorrection = await page.request.post(`/api/v1/trades/${auditless.id}/unverified-corrections/revise`, { headers: correctionHeaders, data: correction });
+  expect(replayCorrection.status()).toBe(200); expect(await replayCorrection.json()).toEqual(revisedResult);
+  expect(database()).toEqual(afterWithdrawal);
+  const voidBody = { confirmation: correction.confirmation, reviews: [{ ...correction.reviews[0]!, trade_version: 2 }], reason };
+  const deniedVoid = await page.request.post(`/api/v1/trades/${revisedResult.trade.id}/unverified-corrections/void`, { headers: await headers(page, 1), data: voidBody });
+  expect(deniedVoid.status()).toBe(409); expect((await deniedVoid.json() as { code: string }).code).toBe("TRADE_REVIEW_REQUIRED");
+  expect(database()).toEqual(afterWithdrawal);
+
+  stage("CORRECTION_VOID");
+  const renewed = await page.request.post(`/api/v1/trades/${auditless.id}/history-review`, {
+    headers: await headers(page, 2),
+    data: { decision: "ACKNOWLEDGE_UNVERIFIED", expected_revision: "4", expected_gap: "MISSING_CREATION_AUDIT", reason },
+  });
+  expect(renewed.status()).toBe(200);
+  voidBody.reviews[0]!.review_revision = "5";
+  const voidHeaders = await headers(page, 1);
+  const voided = await page.request.post(`/api/v1/trades/${revisedResult.trade.id}/unverified-corrections/void`, { headers: voidHeaders, data: voidBody });
+  expect(voided.status()).toBe(200); expect(voided.headers()["cache-control"]).toBe("no-store");
+  const voidResult = await voided.json() as { trade: { status: string }; history_completeness: string };
+  expect(voidResult).toMatchObject({ trade: { status: "VOID" }, history_completeness: "UNVERIFIED" });
+  const afterVoid = database();
+  expect(afterVoid.cash_ledger_entries).toEqual(initial.cash_ledger_entries);
+  expect(afterVoid.audit_events!.slice(0, initial.audit_events!.length)).toEqual(initial.audit_events);
+  expect(afterVoid.trade_correction_authorizations).toHaveLength(2);
+  expect(afterVoid.jobs).toEqual([]); expect(afterVoid.upstream_attempts).toEqual([]);
+  expect(JSON.stringify(afterVoid)).not.toContain(password); expect(JSON.stringify(afterVoid)).not.toContain(bootstrap);
+  const replayVoid = await page.request.post(`/api/v1/trades/${revisedResult.trade.id}/unverified-corrections/void`, { headers: voidHeaders, data: voidBody });
+  expect(replayVoid.status()).toBe(200); expect(await replayVoid.json()).toEqual(voidResult);
+  expect(database()).toEqual(afterVoid);
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  expect(await page.evaluate(() => caches.keys())).toEqual([]);
 });

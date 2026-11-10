@@ -7483,6 +7483,40 @@
         "title": "TradeAuditRecovery",
         "type": "object"
       },
+      "TradeCorrectionReviewPin": {
+        "additionalProperties": false,
+        "properties": {
+          "gap": {
+            "const": "MISSING_CREATION_AUDIT",
+            "title": "Gap",
+            "type": "string"
+          },
+          "review_revision": {
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "title": "Review Revision",
+            "type": "string"
+          },
+          "trade_id": {
+            "format": "uuid",
+            "title": "Trade Id",
+            "type": "string"
+          },
+          "trade_version": {
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Trade Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trade_id",
+          "trade_version",
+          "review_revision",
+          "gap"
+        ],
+        "title": "TradeCorrectionReviewPin",
+        "type": "object"
+      },
       "TradeCreate": {
         "additionalProperties": false,
         "properties": {
@@ -8243,6 +8277,98 @@
           "reason"
         ],
         "title": "TradeRevision",
+        "type": "object"
+      },
+      "TradeUnverifiedCorrectionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "authorization_id": {
+            "format": "uuid",
+            "title": "Authorization Id",
+            "type": "string"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "scope": {
+            "const": "UNVERIFIED_TRADE_CORRECTION_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "trade": {
+            "$ref": "#/components/schemas/TradeRecord"
+          }
+        },
+        "required": [
+          "authorization_id",
+          "trade",
+          "scope",
+          "history_completeness"
+        ],
+        "title": "TradeUnverifiedCorrectionRecord",
+        "type": "object"
+      },
+      "TradeUnverifiedRevisionWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "const": "UNVERIFIED_TRADE_CORRECTION_ONLY",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/TradeCorrectionReviewPin"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Reviews",
+            "type": "array"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/TradeRevision"
+          }
+        },
+        "required": [
+          "confirmation",
+          "reviews",
+          "revision"
+        ],
+        "title": "TradeUnverifiedRevisionWrite",
+        "type": "object"
+      },
+      "TradeUnverifiedVoidWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "const": "UNVERIFIED_TRADE_CORRECTION_ONLY",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/TradeCorrectionReviewPin"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Reviews",
+            "type": "array"
+          }
+        },
+        "required": [
+          "confirmation",
+          "reviews",
+          "reason"
+        ],
+        "title": "TradeUnverifiedVoidWrite",
         "type": "object"
       },
       "VoidFinancial": {
@@ -22959,6 +23085,306 @@
           }
         ],
         "summary": "Trade History Review Revisions",
+        "tags": [
+          "Trades"
+        ]
+      }
+    },
+    "/api/v1/trades/{id}/unverified-corrections/revise": {
+      "post": {
+        "operationId": "revise_unverified_trade",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
+              "title": "If-Match",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradeUnverifiedRevisionWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeUnverifiedCorrectionRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Revise Unverified Trade",
+        "tags": [
+          "Trades"
+        ]
+      }
+    },
+    "/api/v1/trades/{id}/unverified-corrections/void": {
+      "post": {
+        "operationId": "void_unverified_trade",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
+              "title": "If-Match",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradeUnverifiedVoidWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeUnverifiedCorrectionRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Void Unverified Trade",
         "tags": [
           "Trades"
         ]

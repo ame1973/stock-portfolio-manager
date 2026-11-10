@@ -48,6 +48,11 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
         ("/api/v1/trades/{id}/history-review", "get"): "get_trade_history_review",
         ("/api/v1/trades/{id}/history-review", "post"): "save_trade_history_review",
         ("/api/v1/trades/{id}/history-review/revisions", "get"): "list_trade_history_reviews",
+        (
+            "/api/v1/trades/{id}/unverified-corrections/revise",
+            "post",
+        ): "revise_unverified_trade",
+        ("/api/v1/trades/{id}/unverified-corrections/void", "post"): "void_unverified_trade",
         ("/api/v1/dividends/candidates", "get"): "list_dividend_candidates",
         ("/api/v1/dividends/candidates", "post"): "create_dividend_candidate",
         ("/api/v1/dividends/candidates/{id}", "get"): "get_dividend_candidate",
@@ -130,6 +135,34 @@ def test_authentication_and_write_security_are_declared_in_the_contract() -> Non
             }
             for name in ("X-CSRF-Token", "Idempotency-Key"):
                 assert headers[name]["required"] is True
+
+
+def test_unverified_trade_correction_contract_requires_scope_and_labels() -> None:
+    spec = create_app().openapi()
+    for action in ("revise", "void"):
+        operation = spec["paths"][f"/api/v1/trades/{{id}}/unverified-corrections/{action}"]["post"]
+        headers = {item["name"]: item for item in operation["parameters"] if item["in"] == "header"}
+        assert headers["If-Match"]["required"] is True
+        assert headers["If-Match"]["schema"]["pattern"] == r'^"[1-9][0-9]{0,18}"$'
+    schemas = spec["components"]["schemas"]
+    for name, change in (
+        ("TradeUnverifiedRevisionWrite", "revision"),
+        ("TradeUnverifiedVoidWrite", "reason"),
+    ):
+        schema = schemas[name]
+        assert set(schema["required"]) == {"confirmation", "reviews", change}
+        assert schema["properties"]["confirmation"]["const"] == "UNVERIFIED_TRADE_CORRECTION_ONLY"
+        assert schema["properties"]["reviews"]["minItems"] == 1
+        assert schema["properties"]["reviews"]["maxItems"] == 100
+        assert schema["additionalProperties"] is False
+    pin = schemas["TradeCorrectionReviewPin"]["properties"]
+    assert pin["review_revision"]["type"] == "string"
+    assert pin["review_revision"]["pattern"] == r"^[1-9][0-9]{0,18}$"
+    assert pin["gap"]["const"] == "MISSING_CREATION_AUDIT"
+    record = schemas["TradeUnverifiedCorrectionRecord"]
+    assert set(record["required"]) == {"authorization_id", "trade", "scope", "history_completeness"}
+    assert record["properties"]["scope"]["const"] == "UNVERIFIED_TRADE_CORRECTION_ONLY"
+    assert record["properties"]["history_completeness"]["const"] == "UNVERIFIED"
 
 
 def test_compose_trusts_only_the_reserved_gateway_ip() -> None:
