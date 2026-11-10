@@ -43,6 +43,15 @@ class Review:
     history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
 
 
+@dataclass(frozen=True, slots=True)
+class CorrectionReviewPin:
+    """One physical trade and review revision observed for a proposed correction."""
+
+    trade_id: UUID = field(repr=False)
+    trade_version: int
+    review_revision: int
+
+
 def _writer(con: Connection) -> None:
     if not con.in_transaction() or not con.get_execution_options().get("writer"):
         raise TradeReviewError("TRADE_REVIEW_WRITE_REQUIRED")
@@ -304,12 +313,16 @@ def history(con: Connection, owner: UUID, identifier: UUID) -> tuple[Review, ...
         raise TradeReviewError("TRADE_REVIEW_UNAVAILABLE") from None
 
 
-def correction_requires_review(con: Connection, owner: UUID, identifier: UUID) -> bool:
-    """Check the retained trade root; this does not grant a correction or verify ownership."""
+def _correction_gaps(
+    con: Connection, owner: UUID, identifier: UUID
+) -> tuple[tuple[RowMapping, bool], ...]:
+    """Inspect the retained root, preserving missing and later-changed evidence separately."""
     try:
         selected = trade_audit._trade(con, owner, identifier)
         if selected is None:
-            raise ValueError("Missing trade")
+            raise TradeReviewError("TRADE_REVIEW_NOT_FOUND")
+        if selected["status"] in ("SUPERSEDED", "VOID"):
+            raise TradeReviewError("TRADE_REVIEW_CHANGED")
         root = selected["root_id"]
         # ponytail: scan retained root history; add indexed checkpoints if measured histories grow.
         identifiers = con.execute(
@@ -324,7 +337,7 @@ def correction_requires_review(con: Connection, owner: UUID, identifier: UUID) -
         trades.sort(key=lambda item: item["revision"])
         if not trades or trades[-1]["id"] != str(identifier):
             raise ValueError("Invalid current trade")
-        requires_review = False
+        gaps = []
         for index, trade in enumerate(trades):
             previous = trades[index - 1] if index else None
             latest = index == len(trades) - 1
@@ -350,9 +363,9 @@ def correction_requires_review(con: Connection, owner: UUID, identifier: UUID) -
             reviews = history(con, owner, trade_audit._identity(trade["id"]))
             if reviews is None:
                 raise ValueError("Invalid reviewed trade")
-            requires_review |= creation is None or any(
-                item.gap == "MISSING_CREATION_AUDIT" for item in reviews
-            )
+            missing = creation is None
+            if missing or any(item.gap == "MISSING_CREATION_AUDIT" for item in reviews):
+                gaps.append((trade, missing))
             if trade["status"] in ("SUPERSEDED", "VOID"):
                 _retired_structure(con, owner, trade)
                 successor_creation = (
@@ -360,11 +373,57 @@ def correction_requires_review(con: Connection, owner: UUID, identifier: UUID) -
                 )
                 if origin is not None and (latest or successor_creation is not None):
                     trade_audit._retirement(con, owner, trade, origin.before_sha256)
-        return requires_review
+        return tuple(gaps)
     except TradeReviewError:
         raise
     except (ValueError, TypeError, KeyError, OverflowError, SQLAlchemyError):
         raise TradeReviewError("TRADE_REVIEW_UNAVAILABLE") from None
+
+
+def correction_requires_review(con: Connection, owner: UUID, identifier: UUID) -> bool:
+    """Check the retained trade root; this does not grant a correction or verify ownership."""
+    return bool(_correction_gaps(con, owner, identifier))
+
+
+def require_correction_reviews(
+    con: Connection, owner: UUID, identifier: UUID, pins: tuple[CorrectionReviewPin, ...]
+) -> tuple[Review, ...]:
+    """Recheck exact scope in a writer; caller must authenticate, audit and commit consequences."""
+    _writer(con)
+    if (
+        not isinstance(owner, UUID)
+        or not isinstance(identifier, UUID)
+        or not isinstance(pins, tuple)
+        or any(
+            not isinstance(pin, CorrectionReviewPin)
+            or not isinstance(pin.trade_id, UUID)
+            or type(pin.trade_version) is not int
+            or pin.trade_version not in (1, 2)
+            or type(pin.review_revision) is not int
+            or not 1 <= pin.review_revision <= INT64_MAX
+            for pin in pins
+        )
+        or len({pin.trade_id for pin in pins}) != len(pins)
+    ):
+        raise TradeReviewError("INVALID_TRADE_REVIEW_SCOPE")
+    gaps = _correction_gaps(con, owner, identifier)
+    if not gaps:
+        raise TradeReviewError("TRADE_REVIEW_NOT_REQUIRED")
+    if any(not missing for _, missing in gaps):
+        raise TradeReviewError("TRADE_REVIEW_CHANGED")
+    expected = {trade_audit._identity(trade["id"]) for trade, _ in gaps}
+    supplied = {pin.trade_id: pin for pin in pins}
+    if set(supplied) != expected:
+        raise TradeReviewError("TRADE_REVIEW_SCOPE_CHANGED")
+    result = []
+    for trade, _ in gaps:
+        trade_id = trade_audit._identity(trade["id"])
+        pin = supplied[trade_id]
+        current = require_current(con, owner, trade_id, trade_version=pin.trade_version)
+        if current.revision != pin.review_revision:
+            raise TradeReviewError("TRADE_REVIEW_VERSION_CONFLICT")
+        result.append(current)
+    return tuple(result)
 
 
 def save(

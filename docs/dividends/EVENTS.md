@@ -489,7 +489,11 @@ any recorded decision reported a missing creation audit, it returns 409
 revision; malformed review history returns 503 `TRADE_AUDIT_UNAVAILABLE`. This
 fence does not prove when an audit was created, resolve the historical gap, grant
 eligibility or install an unverified correction workflow. The separate
-writer/eligibility integration remains unfinished.
+writer/eligibility integration remains unfinished. An internal scope checker can
+revalidate all missing-creation reviews against exact physical and review
+versions in a writer transaction; it rejects withdrawn decisions, extra or omitted
+trades and later matching audits. It does not authenticate the caller, record an
+authorization or change a financial fact, and no HTTP route consumes it.
 
 ## Trade-history review in the browser
 
