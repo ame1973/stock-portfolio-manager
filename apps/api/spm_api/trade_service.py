@@ -124,6 +124,11 @@ def _prepare(con: Connection, auth: Auth, body: TradeCreate) -> dict[str, Any]:
                 "Execution time does not match the market-local trade date",
             )
     scheduled = body.trade_date > now().astimezone(zone).date().isoformat()
+    return _prepared_values(body, scheduled=scheduled)
+
+
+def _prepared_values(body: TradeCreate, *, scheduled: bool) -> dict[str, Any]:
+    """Compute exact trade terms without consulting the clock or current account state."""
     native = native_settlement(
         body.side,
         Decimal(body.quantity),
@@ -158,8 +163,8 @@ def _prepare(con: Connection, auth: Auth, body: TradeCreate) -> dict[str, Any]:
     fee, tax = to_scaled(body.fee, 6), to_scaled(body.tax, 6)
     delta = money_integer(native.rounding_delta_local)
     return {
-        "portfolio_id": portfolio,
-        "account_id": account_id,
+        "portfolio_id": str(body.portfolio_id),
+        "account_id": str(body.account_id),
         "security_id": str(body.security_id),
         "side": body.side,
         "trade_date": body.trade_date,
@@ -291,22 +296,23 @@ def create_trade(con: Connection, auth: Auth, body: TradeCreate, request_id: str
     return result
 
 
-def revise_trade(
-    con: Connection, auth: Auth, identifier: str, version: int, body: TradeRevision, request_id: str
+def _revise_prepared(
+    con: Connection,
+    auth: Auth,
+    before: RowMapping,
+    values: dict[str, Any],
+    reason: str,
+    request_id: str,
 ) -> TradeRecord:
-    before = owned_trade(con, str(auth.owner.id), identifier)
-    check_version(before["version"], version)
-    values = _prepare(con, auth, body)
-    _capture_trade_origin(con, auth, before, request_id)
     _retire(con, before, "SUPERSEDED")
-    cash_entries = _reverse_settlement(con, before, body.reason)
+    cash_entries = _reverse_settlement(con, before, reason)
     revised = str(uuid4())
     values.update(
         id=revised,
         root_id=before["root_id"],
         created_sequence=before["created_sequence"],
         revision=before["revision"] + 1,
-        supersedes_id=identifier,
+        supersedes_id=before["id"],
         created_at=stamp(),
         updated_at=stamp(),
     )
@@ -326,10 +332,40 @@ def revise_trade(
         request_id=request_id,
         before=dict(before),
         after=result.model_dump(mode="json"),
-        reason=body.reason,
+        reason=reason,
     )
     _remember_trade_origin(con, auth, revised, request_id)
     return result
+
+
+def revise_trade(
+    con: Connection, auth: Auth, identifier: str, version: int, body: TradeRevision, request_id: str
+) -> TradeRecord:
+    before = owned_trade(con, str(auth.owner.id), identifier)
+    check_version(before["version"], version)
+    values = _prepare(con, auth, body)
+    _capture_trade_origin(con, auth, before, request_id)
+    return _revise_prepared(con, auth, before, values, body.reason, request_id)
+
+
+def _void_prepared(
+    con: Connection, auth: Auth, before: RowMapping, reason: str, request_id: str
+) -> Success:
+    _retire(con, before, "VOID")
+    cash_entries = _reverse_settlement(con, before, reason)
+    _finalize(con, auth, [before], cash_entries, request_id)
+    audit(
+        con,
+        str(auth.owner.id),
+        "trade",
+        before["id"],
+        "VOID",
+        request_id=request_id,
+        before=dict(before),
+        after={"status": "VOID", "version": before["version"] + 1},
+        reason=reason,
+    )
+    return Success(message="Trade voided; original facts and cash reversal retained")
 
 
 def void_trade(
@@ -338,18 +374,4 @@ def void_trade(
     before = owned_trade(con, str(auth.owner.id), identifier)
     check_version(before["version"], version)
     _capture_trade_origin(con, auth, before, request_id)
-    _retire(con, before, "VOID")
-    cash_entries = _reverse_settlement(con, before, reason)
-    _finalize(con, auth, [before], cash_entries, request_id)
-    audit(
-        con,
-        str(auth.owner.id),
-        "trade",
-        identifier,
-        "VOID",
-        request_id=request_id,
-        before=dict(before),
-        after={"status": "VOID", "version": version + 1},
-        reason=reason,
-    )
-    return Success(message="Trade voided; original facts and cash reversal retained")
+    return _void_prepared(con, auth, before, reason, request_id)

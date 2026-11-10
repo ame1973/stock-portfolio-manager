@@ -42,6 +42,7 @@ def authorization_values(
     *,
     two_gaps: bool = False,
     remember_result: bool = True,
+    result_changes: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Create only new synthetic facts and audits; the returned SQL record is not a grant."""
     root = synthetic_legacy_draft(engine, book, unrelated_audit=False)
@@ -91,6 +92,7 @@ def authorization_values(
                     "supersedes_id": target,
                     "created_at": at,
                     "updated_at": at,
+                    **(result_changes or {}),
                 },
             )
             successor = (

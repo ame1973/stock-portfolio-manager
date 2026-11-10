@@ -385,15 +385,11 @@ def correction_requires_review(con: Connection, owner: UUID, identifier: UUID) -
     return bool(_correction_gaps(con, owner, identifier))
 
 
-def require_correction_reviews(
-    con: Connection, owner: UUID, identifier: UUID, pins: tuple[CorrectionReviewPin, ...]
-) -> tuple[Review, ...]:
-    """Recheck exact scope in a writer; caller must authenticate, audit and commit consequences."""
-    _writer(con)
+def _checked_pins(
+    pins: tuple[CorrectionReviewPin, ...],
+) -> dict[UUID, CorrectionReviewPin]:
     if (
-        not isinstance(owner, UUID)
-        or not isinstance(identifier, UUID)
-        or not isinstance(pins, tuple)
+        not isinstance(pins, tuple)
         or any(
             not isinstance(pin, CorrectionReviewPin)
             or not isinstance(pin.trade_id, UUID)
@@ -406,13 +402,23 @@ def require_correction_reviews(
         or len({pin.trade_id for pin in pins}) != len(pins)
     ):
         raise TradeReviewError("INVALID_TRADE_REVIEW_SCOPE")
+    return {pin.trade_id: pin for pin in pins}
+
+
+def require_correction_reviews(
+    con: Connection, owner: UUID, identifier: UUID, pins: tuple[CorrectionReviewPin, ...]
+) -> tuple[Review, ...]:
+    """Recheck exact scope in a writer; caller must authenticate, audit and commit consequences."""
+    _writer(con)
+    if not isinstance(owner, UUID) or not isinstance(identifier, UUID):
+        raise TradeReviewError("INVALID_TRADE_REVIEW_SCOPE")
+    supplied = _checked_pins(pins)
     gaps = _correction_gaps(con, owner, identifier)
     if not gaps:
         raise TradeReviewError("TRADE_REVIEW_NOT_REQUIRED")
     if any(not missing for _, missing in gaps):
         raise TradeReviewError("TRADE_REVIEW_CHANGED")
     expected = {trade_audit._identity(trade["id"]) for trade, _ in gaps}
-    supplied = {pin.trade_id: pin for pin in pins}
     if set(supplied) != expected:
         raise TradeReviewError("TRADE_REVIEW_SCOPE_CHANGED")
     result = []

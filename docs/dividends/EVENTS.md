@@ -415,11 +415,11 @@ record remains historical evidence after later withdrawal.
 
 SQL cannot authenticate a user, prove that an audit was created in the original
 transaction, validate the canonical intent or audit digest, or verify all economic
-scope. A valid-shaped but unrelated audit hash can pass the table guards. No
-production writer or HTTP endpoint consumes this storage yet, and inserting a row
-alone is **not** a correction authorization or eligibility grant. Future writers
-must recheck the entire scope and append the fact, correlated audit, idempotency
-and invalidation atomically.
+scope. A valid-shaped but unrelated audit hash can pass the table guards. An
+internal writer consumes this storage, but no HTTP endpoint does; inserting a row
+alone is **not** a correction authorization or eligibility grant. Callers must
+recheck the entire scope and append the fact, correlated audit, idempotency and
+invalidation atomically.
 
 ## Internal historical correction-authorization reader
 
@@ -433,7 +433,33 @@ historical record remains readable after a later withdrawal or a matching audit
 appears, but neither event reauthorizes a new correction. The retained intent
 hash binds the audit record but cannot by itself reconstruct or authenticate the
 original request. The reader does not authenticate HTTP, establish ownership or
-income, or grant current use; no production writer consumes it yet.
+income, or grant current use. The internal writer below uses it to verify its
+newly recorded authorization and historical replay.
+
+## Internal unverified trade-correction writer
+
+The private `trade_unverified_correction` writer accepts an explicit revision or
+void, a reason and exact physical/review pins for every missing-creation gap in the
+owned root. It rechecks the complete current scope inside the writer transaction;
+withdrawn decisions, changed evidence and stale or incomplete pins do not grant a
+new correction. It never invents the target's missing creation audit or original
+state. If the target itself has a matching creation audit but an ancestor has a
+gap, its verified original is captured before retirement as usual.
+
+The ordinary financial replay and exact settlement reversal run before the writer
+appends a canonical authorization audit and immutable scope record. A nested
+savepoint rolls back facts, cash, audit, origins and invalidations even if a caller
+catches an error. Repeating the same internal request ID and normalized intent
+returns the validated original result without writes, including after a later
+withdrawal; changing the intent conflicts. A separate historical replay helper
+rechecks the original authorization and result without making a new grant.
+
+These functions do **not** authenticate a session, check CSRF or reauthentication,
+or write an HTTP idempotency receipt. A protected caller must recheck those in the
+same outer transaction and serialize the response before commit. Normal trade
+PATCH/DELETE remain fenced and no endpoint exposes this internal writer yet.
+Neither a successful correction nor its audit proves ownership or authorizes an
+eligibility projection.
 
 ## Internal unverified trade-history review controller
 
@@ -461,10 +487,11 @@ matches. It does not treat a later audit as proof it existed at creation.
 These helpers do not authenticate an HTTP session or establish ownership history
 or complete economic scope. The correction-scope checker also validates the
 retained trade root, without granting a correction. The protected API and browser
-workspace below authenticate review decisions; no trade-writer grant or eligibility
-integration consumes them yet. A future financial writer must consult the review
-history even when an audit later appears, and must revalidate the complete relevant
-scope in its own transaction. No provider or private-file access is performed.
+workspace below authenticate review decisions; the internal correction writer
+uses them, but protected trade-writer and eligibility integrations remain
+unfinished. A financial caller must consult review history even when an audit
+later appears, and revalidate the complete relevant scope in its own transaction.
+No provider or private-file access is performed.
 
 ## Protected unverified trade-history review API
 
@@ -525,12 +552,13 @@ any recorded decision reported a missing creation audit, it returns 409
 `NEEDS_REVIEW` even after withdrawal, a matching later audit or a successor
 revision; malformed review history returns 503 `TRADE_AUDIT_UNAVAILABLE`. This
 fence does not prove when an audit was created, resolve the historical gap, grant
-eligibility or install an unverified correction workflow. The separate
-writer/eligibility integration remains unfinished. An internal scope checker can
-revalidate all missing-creation reviews against exact physical and review
+eligibility or expose an unverified correction workflow over HTTP. The protected
+writer/eligibility integration remains unfinished. An internal scope checker
+revalidates all missing-creation reviews against exact physical and review
 versions in a writer transaction; it rejects withdrawn decisions, extra or omitted
 trades and later matching audits. It does not authenticate the caller, record an
-authorization or change a financial fact, and no HTTP route consumes it.
+authorization or change a financial fact by itself. The internal writer uses it;
+no HTTP route consumes it yet.
 
 ## Trade-history review in the browser
 
