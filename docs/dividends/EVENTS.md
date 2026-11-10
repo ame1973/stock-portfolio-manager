@@ -391,10 +391,39 @@ audit metadata and bounded identity/time/hash shapes. Updates, deletions and
 replacement writes are refused. They do **not** authenticate a session, validate
 the canonical snapshot or audit fingerprint, establish a complete trade chain, or
 prove that a user saw or accepted a gap. Even a valid-shaped false snapshot hash
-can pass SQL. No protected review API, review controller, current-use grant or
-financial writer consumes this table yet: a bare SQL row does not unblock a trade
-correction or cause an eligibility projection. Missing or corrupt evidence remains
-unresolved, and a review is never a recreated creation audit or proof of ownership.
+can pass SQL. A bare SQL row does not unblock a trade correction or cause an
+eligibility projection. Missing or corrupt evidence remains unresolved, and a
+review is never a recreated creation audit or proof of ownership.
+
+## Internal unverified trade-history review controller
+
+The private `trade_history_review` controller can append, read and withdraw an
+explicit review in a caller-owned transaction. It validates the active owner,
+physical trade and ledger scope, the complete review decision sequence, and each
+correlated audit's canonical before/after fingerprint and reason. It checks the
+actual observed trade snapshot rather than trusting a valid-shaped stored hash. If
+a trade reviewed while current was later retired, it reconstructs only the
+observed status, version and timestamp and checks the actual successor or void
+before fingerprint. A later creation audit must match that reconstructed original
+response; a review made after retirement cannot invent the original timestamp.
+Matching fingerprints describe database consistency, not authenticated external
+evidence or proof of when an audit was created.
+
+`save` records the decision and its audit and invalidates every owned portfolio in
+the trade root from its earliest trade date in one writer transaction. A savepoint
+rolls back partial changes even when the caller catches a failure. A completed
+internal request replays its original decision without writes after later valid
+changes. `require_current` rechecks the current physical version and the latest
+acknowledged gap; if a missing creation audit or origin later appears, the old
+acknowledgment is no longer a current-use review, even when the later record
+matches. It does not treat a later audit as proof it existed at creation.
+
+These helpers do not authenticate an HTTP session or validate the entire trade
+root, ownership history or economic scope. No protected review API, review UI,
+trade-writer grant or eligibility integration consumes them yet. A future financial
+writer must consult the review history even when an audit later appears, and must
+revalidate the complete relevant scope in its own transaction. No provider or
+private-file access is performed.
 
 ## Required future protected writer and projection work
 
@@ -463,6 +492,13 @@ physical-version fences, missing-evidence classification, replacement attempts,
 concurrent decisions, downgrade refusal and inert SQL rows. The test also shows
 that SQL can retain a false but well-shaped snapshot hash, and that such a row
 cannot unblock the current trade writer. It is not authentication or a review API.
+
+`uv run pytest tests/test_trade_history_review_service.py` exercises audited
+acknowledgment and withdrawal, exact snapshots, later conflicting or matching
+audits, actual retirement links, origin recovery, replay, competing decisions,
+owner/version fences and savepoint rollback. It uses newly created synthetic
+records in verified temporary databases and does not remove audit guards or alter
+existing audit events. It does not exercise a protected review endpoint or grant.
 
 `uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent

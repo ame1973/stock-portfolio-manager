@@ -280,7 +280,14 @@ def _retirement(con: Connection, owner: UUID, trade: RowMapping, before_hash: st
         raise ValueError("Trade is not retired")
 
 
-def _invalidate_root(con: Connection, owner: UUID, trade: RowMapping) -> None:
+def _invalidate_root(
+    con: Connection,
+    owner: UUID,
+    trade: RowMapping,
+    reason: Literal["TRADE_AUDIT_ORIGIN_RECOVERED", "TRADE_HISTORY_REVIEW_CHANGED"] = (
+        "TRADE_AUDIT_ORIGIN_RECOVERED"
+    ),
+) -> None:
     rows = (
         con.execute(
             text("""
@@ -310,7 +317,7 @@ def _invalidate_root(con: Connection, owner: UUID, trade: RowMapping) -> None:
     if not portfolios:
         raise ValueError("Missing trade-root scope")
     for portfolio in sorted(portfolios):
-        invalidate_portfolio(con, portfolio, trade["id"], "TRADE_AUDIT_ORIGIN_RECOVERED", min(days))
+        invalidate_portfolio(con, portfolio, trade["id"], reason, min(days))
 
 
 def _validate(
