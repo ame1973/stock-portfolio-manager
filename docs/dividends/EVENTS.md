@@ -225,6 +225,37 @@ limitation in the same transaction as the financial changes; an earlier read or
 `data_revision` alone does not authorize adoption. Root-history and audit scans
 may need indexed batching if measured portfolio histories grow.
 
+## Pure projection-version selection
+
+The internal `dividend_projection.select_current` accepts an explicitly supplied
+current event revision and account for each requested scope, plus all supplied
+immutable projection versions for those scopes. It requires one contiguous
+per-event/account projection chain starting at 1, matching predecessor IDs,
+nondecreasing event revision numbers and globally consistent physical revision
+identities. It selects exactly one latest projection per scope, including repeated
+rebuilds of the same event revision. Duplicate or foreign identities, broken chains,
+missing scopes and stale selected revisions fail rather than being silently summed,
+omitted or treated as zero. It validates every supplied chain before reporting a
+missing or stale scope, so either cannot hide corruption in a different account.
+
+`EXPECTED` carries a shape-checked `Accrual` with internally consistent rounded
+components and explicit quality; `NO_POSITION`, `NEEDS_REVIEW` and `CANCELLED`
+carry no invented amount. Missing HKD is not zero, and a negative expected net must
+remain under review. Selection retains the original rounded amount, rounding delta
+and HKD value; it does not rederive historical FX or independently verify the
+calculation. The existing `reconcile` function can then use a separately authorized
+current expected accrual and aggregate active receipts by stable event/account,
+including receipts attached to older revisions. A receipt without a current matching
+accrual or a cross-currency difference requires review, not a guessed conversion.
+
+This is a pure selection primitive over caller-supplied records, not a database
+reader, historical audit, authenticated grant, persisted projection or receipt
+workflow. The caller must establish a complete account scope, verify the entire
+stored event/ledger and current eligibility in the same writer transaction, and
+apply ex-date recognition rules: an upcoming projection is not accrued income.
+No current source or event writer calls this selector yet; the existing event
+revision fence remains in place until atomic rebuilding and reconciliation exist.
+
 ## Inert trade-audit origin storage
 
 Migration `0017_trade_audit_origins` adds one initially empty append-only table
@@ -821,6 +852,11 @@ retained claims, concurrent WAL read snapshots, withdrawn/changed creation-gap
 reviews, untrusted review audits and retained roots moved across securities. These
 are internal recorded share checks, not authenticated event, entitlement or receipt
 endpoints.
+
+`uv run pytest tests/test_dividend_projection_selection.py tests/test_dividend_math.py tests/test_finance_goldens.py`
+checks pure current-version selection, exact rounding, independent event/account
+identities, cross-revision partial receipts and rejection of missing or corrupt
+projection chains. These cases do not exercise a persistent projection writer.
 
 `uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`
 checks migration preservation and rollback, source and candidate scope, publication
