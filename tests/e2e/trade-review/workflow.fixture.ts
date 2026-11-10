@@ -92,6 +92,12 @@ test("isolated actual trade review preserves unverified decisions and uncertain 
   expect(initial.trades!.some(row => row.includes("7800000000000"))).toBe(true);
   expect(initial.cash_ledger_entries!.some(row => row.includes("7700000000000"))).toBe(true);
   expect(initial.trade_history_reviews).toEqual([]); expect(initial.jobs).toEqual([]); expect(initial.upstream_attempts).toEqual([]);
+  const initialScope = await page.request.get(`/api/v1/trades/${auditless.id}/unverified-corrections/scope`);
+  expect(initialScope.status()).toBe(200); expect(initialScope.headers()["cache-control"]).toBe("no-store");
+  expect(initialScope.headers().etag).toBeUndefined();
+  expect(await initialScope.json()).toMatchObject({ trade_id: auditless.id, root_id: auditless.id, trade_version: 1, history_completeness: "UNVERIFIED",
+    gaps: [{ trade_id: auditless.id, trade_version: 1, review_revision: "0", current_gap: "MISSING_CREATION_AUDIT", state: "NOT_REVIEWED" }] });
+  expect(database()).toEqual(initial);
 
   stage("NAVIGATE");
   await page.setViewportSize({ width: 360, height: 900 });
@@ -143,6 +149,9 @@ test("isolated actual trade review preserves unverified decisions and uncertain 
     const current = await page.request.get(`/api/v1/trades/${auditless.id}/history-review`);
     expect(current.status()).toBe(200); expect(current.headers()["cache-control"]).toBe("no-store");
     expect(await current.json()).toMatchObject({ state: "ACKNOWLEDGED_UNVERIFIED", history_completeness: "UNVERIFIED" });
+    const reviewedScope = await page.request.get(`/api/v1/trades/${auditless.id}/unverified-corrections/scope`);
+    expect(reviewedScope.status()).toBe(200);
+    expect(await reviewedScope.json()).toMatchObject({ gaps: [{ trade_id: auditless.id, review_revision: "1", state: "ACKNOWLEDGED_UNVERIFIED" }] });
     afterCommit = database();
   } finally { release(); }
   stage("LOST");
@@ -241,6 +250,11 @@ test("isolated actual trade review preserves unverified decisions and uncertain 
   });
   expect(withdrawCorrectionReview.status()).toBe(200);
   const afterWithdrawal = database();
+  const withdrawnScope = await page.request.get(`/api/v1/trades/${revisedResult.trade.id}/unverified-corrections/scope`);
+  expect(withdrawnScope.status()).toBe(200);
+  expect(await withdrawnScope.json()).toMatchObject({ trade_id: revisedResult.trade.id, root_id: auditless.id,
+    gaps: [{ trade_id: auditless.id, trade_version: 2, review_revision: "4", state: "WITHDRAWN" }] });
+  expect(database()).toEqual(afterWithdrawal);
   const replayCorrection = await page.request.post(`/api/v1/trades/${auditless.id}/unverified-corrections/revise`, { headers: correctionHeaders, data: correction });
   expect(replayCorrection.status()).toBe(200); expect(await replayCorrection.json()).toEqual(revisedResult);
   expect(database()).toEqual(afterWithdrawal);

@@ -148,6 +148,9 @@ ReviewOrdinal = Annotated[
 ]
 TradeReviewGap = Literal["MISSING_CREATION_AUDIT", "MISSING_RETIRED_ORIGIN"]
 TradeReviewDecision = Literal["ACKNOWLEDGE_UNVERIFIED", "WITHDRAW"]
+TradeReviewState = Literal[
+    "NOT_REQUIRED", "NOT_REVIEWED", "ACKNOWLEDGED_UNVERIFIED", "WITHDRAWN", "EVIDENCE_CHANGED"
+]
 TradePhysicalStatus = Literal["ACTIVE", "DRAFT_SCHEDULED", "PENDING_FX", "SUPERSEDED", "VOID"]
 
 
@@ -192,9 +195,7 @@ class TradeHistoryReviewStatus(Model):
     trade_status: TradePhysicalStatus
     review_revision: ReviewOrdinal
     current_gap: TradeReviewGap | None
-    state: Literal[
-        "NOT_REQUIRED", "NOT_REVIEWED", "ACKNOWLEDGED_UNVERIFIED", "WITHDRAWN", "EVIDENCE_CHANGED"
-    ]
+    state: TradeReviewState
     latest: TradeHistoryReviewRecord | None
     scope: Literal["UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY"] = "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY"
     history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
@@ -214,9 +215,15 @@ class TradeCorrectionReviewPin(Model):
     gap: Literal["MISSING_CREATION_AUDIT"]
 
 
+MAX_TRADE_CORRECTION_REVIEWS = 100
+
+
 class TradeUnverifiedCorrectionScope(Model):
     confirmation: Literal["UNVERIFIED_TRADE_CORRECTION_ONLY"]
-    reviews: Annotated[tuple[TradeCorrectionReviewPin, ...], Field(min_length=1, max_length=100)]
+    reviews: Annotated[
+        tuple[TradeCorrectionReviewPin, ...],
+        Field(min_length=1, max_length=MAX_TRADE_CORRECTION_REVIEWS),
+    ]
 
     @field_validator("reviews")
     @classmethod
@@ -253,5 +260,25 @@ class TradeUnverifiedVoidWrite(TradeUnverifiedCorrectionScope):
 class TradeUnverifiedCorrectionRecord(Model):
     authorization_id: UUID
     trade: TradeRecord = Field(repr=False)
+    scope: Literal["UNVERIFIED_TRADE_CORRECTION_ONLY"]
+    history_completeness: Literal["UNVERIFIED"]
+
+
+class TradeCorrectionScopeGap(Model):
+    trade_id: UUID
+    trade_version: Annotated[int, Field(strict=True, ge=1, le=2)]
+    review_revision: ReviewOrdinal
+    current_gap: TradeReviewGap | None
+    state: Literal["NOT_REVIEWED", "ACKNOWLEDGED_UNVERIFIED", "WITHDRAWN", "EVIDENCE_CHANGED"]
+
+
+class TradeCorrectionScopeStatus(Model):
+    trade_id: UUID
+    root_id: UUID
+    trade_version: Annotated[int, Field(strict=True, ge=1, le=2)]
+    trade_status: TradePhysicalStatus
+    gaps: Annotated[
+        tuple[TradeCorrectionScopeGap, ...], Field(max_length=MAX_TRADE_CORRECTION_REVIEWS)
+    ]
     scope: Literal["UNVERIFIED_TRADE_CORRECTION_ONLY"]
     history_completeness: Literal["UNVERIFIED"]

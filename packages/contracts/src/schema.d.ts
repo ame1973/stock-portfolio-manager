@@ -1211,6 +1211,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/trades/{id}/unverified-corrections/scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unverified Trade Correction Scope
+         * @description Describe the current root gaps without granting a correction or eligibility.
+         */
+        get: operations["get_unverified_trade_correction_scope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/trades/{id}/unverified-corrections/void": {
         parameters: {
             query?: never;
@@ -4150,6 +4170,57 @@ export interface components {
              * Format: uuid
              */
             trade_id: string;
+            /** Trade Version */
+            trade_version: number;
+        };
+        /** TradeCorrectionScopeGap */
+        TradeCorrectionScopeGap: {
+            /** Current Gap */
+            current_gap: ("MISSING_CREATION_AUDIT" | "MISSING_RETIRED_ORIGIN") | null;
+            /** Review Revision */
+            review_revision: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "NOT_REVIEWED" | "ACKNOWLEDGED_UNVERIFIED" | "WITHDRAWN" | "EVIDENCE_CHANGED";
+            /**
+             * Trade Id
+             * Format: uuid
+             */
+            trade_id: string;
+            /** Trade Version */
+            trade_version: number;
+        };
+        /** TradeCorrectionScopeStatus */
+        TradeCorrectionScopeStatus: {
+            /** Gaps */
+            gaps: components["schemas"]["TradeCorrectionScopeGap"][];
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Root Id
+             * Format: uuid
+             */
+            root_id: string;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "UNVERIFIED_TRADE_CORRECTION_ONLY";
+            /**
+             * Trade Id
+             * Format: uuid
+             */
+            trade_id: string;
+            /**
+             * Trade Status
+             * @enum {string}
+             */
+            trade_status: "ACTIVE" | "DRAFT_SCHEDULED" | "PENDING_FX" | "SUPERSEDED" | "VOID";
             /** Trade Version */
             trade_version: number;
         };
@@ -13747,6 +13818,91 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradeUnverifiedCorrectionRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_unverified_trade_correction_scope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradeCorrectionScopeStatus"];
                 };
             };
             /** @description Unauthorized */

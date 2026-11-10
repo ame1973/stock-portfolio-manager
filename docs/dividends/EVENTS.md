@@ -561,6 +561,25 @@ by itself.
 
 ## Protected unverified trade-correction API
 
+`GET /api/v1/trades/{id}/unverified-corrections/scope` reads the current owned
+physical trade and its complete retained root in one consistent transaction. It
+returns the target and root IDs, physical version/status, and each relevant
+missing-creation history in revision order. Each entry includes the physical
+trade/version, exact decimal-string review revision, current evidence gap and one
+of `NOT_REVIEWED`, `ACKNOWLEDGED_UNVERIFIED`, `WITHDRAWN` or `EVIDENCE_CHANGED`.
+An original missing-creation gap remains `EVIDENCE_CHANGED` if a creation audit
+later appears, even if the owner subsequently withdrew the old decision or
+reviewed a different retired-origin gap. A zero revision means no decision was
+recorded. The response deliberately omits reasons, amounts and audit hashes.
+
+An empty list means this correction-scope check found no missing-creation gap;
+it does **not** establish complete history, ownership or eligibility. The result
+is an observed snapshot, not a grant: the write still rechecks the entire root.
+The endpoint returns 409 for an inactive target or more than 100 scope entries,
+without silently returning a partial list. Malformed history fails closed with 503;
+foreign trades return 404. The response has no ETag, is private and `no-store`,
+and explicitly labels its scope and history `UNVERIFIED`.
+
 `POST /api/v1/trades/{id}/unverified-corrections/revise` and
 `POST /api/v1/trades/{id}/unverified-corrections/void` are separate from normal
 PATCH/DELETE. Both require the current session, matching Origin, CSRF token,
@@ -591,15 +610,14 @@ For example, a void of one reviewed synthetic draft uses:
 
 A revision uses the same confirmation and pins, with `revision` containing the
 complete normal trade-create payload plus its reason. Decimal inputs remain
-strings. To assemble the scope, page through the owned root's trade history using
-`GET /api/v1/trades?root_id=...&include_history=true` and inspect each physical
-trade's review status and decision history. A current acknowledged gap is not
-proof of complete history. Withdrawn reviews, omitted or extra gaps, stale physical
-or review versions, and creation evidence appearing after review cannot authorize
-a new correction. A root with more than 100 required pins cannot currently be
-corrected through these endpoints; do not omit pins or alter the database to work
-around the limit. The browser does not yet provide a correction editor or a
-root-wide scope view.
+strings. Assemble pins from the complete scope response and inspect individual
+review history when necessary. Every pin must still correspond to an acknowledged
+current missing-creation gap. A current acknowledgment is not proof of complete
+history. Withdrawn reviews, omitted or extra gaps, stale physical or review
+versions, and creation evidence appearing after review cannot authorize a new
+correction. A root with more than 100 required pins cannot currently be corrected
+through these endpoints; do not omit pins or alter the database to work around the
+limit. The browser does not yet provide a correction editor or root-wide scope view.
 
 The server rechecks the session, CSRF, password-confirmation age, complete root,
 reviews and economic replay in the same writer transaction. Financial facts,
@@ -726,6 +744,11 @@ validation and atomic rollback. It also checks that an acknowledged audit gap do
 not unblock ordinary trade PATCH or DELETE. These are isolated synthetic
 HTTP/SQLite tests, not proof of external ownership or eligibility.
 
+`uv run pytest tests/test_trade_correction_scope_api.py` exercises complete
+root ordering, absence and withdrawal, changed or conflicting later evidence,
+100/101-entry boundaries, foreign owners and a concurrent withdrawal during a
+WAL read snapshot. The endpoint never changes financial facts or grants a write.
+
 `uv run pytest tests/test_trade_unverified_correction_api.py` exercises explicit
 confirmation, exact root pins, protected revision and void, original-FX reversal,
 reauthentication, writer-time security and review races, cached-response validation,
@@ -736,9 +759,10 @@ it does not establish a dividend eligibility grant or external ownership.
 Chromium against an exclusive temporary database. It checks reasoned review and
 withdrawal, recent password confirmation, a committed-but-lost response and its
 unchanged-key zero-write replay, and withdrawal after retained-origin recovery
-changes the evidence. Before the correction exercise, it checks that reviews leave
-existing financial facts and historical FX unchanged. It then uses real HTTP to
-revise and void a new synthetic draft, checks that withdrawal blocks new use but
+changes the evidence. Real HTTP also reads the complete root scope before and after
+review and withdrawal, with no writes. Before the correction exercise, it checks
+that reviews leave existing financial facts and historical FX unchanged. It then
+uses real HTTP to revise and void a new synthetic draft, checks that withdrawal blocks new use but
 not the original replay, and verifies old audits and cash entries remain unchanged.
 This last part exercises the API, not a correction UI. It does not exercise a
 worker, provider, deployment volume, container, NAS, TLS or external ownership;

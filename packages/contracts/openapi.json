@@ -7517,6 +7517,122 @@
         "title": "TradeCorrectionReviewPin",
         "type": "object"
       },
+      "TradeCorrectionScopeGap": {
+        "additionalProperties": false,
+        "properties": {
+          "current_gap": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MISSING_CREATION_AUDIT",
+                  "MISSING_RETIRED_ORIGIN"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Gap"
+          },
+          "review_revision": {
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Review Revision",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "NOT_REVIEWED",
+              "ACKNOWLEDGED_UNVERIFIED",
+              "WITHDRAWN",
+              "EVIDENCE_CHANGED"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "trade_id": {
+            "format": "uuid",
+            "title": "Trade Id",
+            "type": "string"
+          },
+          "trade_version": {
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Trade Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trade_id",
+          "trade_version",
+          "review_revision",
+          "current_gap",
+          "state"
+        ],
+        "title": "TradeCorrectionScopeGap",
+        "type": "object"
+      },
+      "TradeCorrectionScopeStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/TradeCorrectionScopeGap"
+            },
+            "maxItems": 100,
+            "title": "Gaps",
+            "type": "array"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "root_id": {
+            "format": "uuid",
+            "title": "Root Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "UNVERIFIED_TRADE_CORRECTION_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "trade_id": {
+            "format": "uuid",
+            "title": "Trade Id",
+            "type": "string"
+          },
+          "trade_status": {
+            "enum": [
+              "ACTIVE",
+              "DRAFT_SCHEDULED",
+              "PENDING_FX",
+              "SUPERSEDED",
+              "VOID"
+            ],
+            "title": "Trade Status",
+            "type": "string"
+          },
+          "trade_version": {
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Trade Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trade_id",
+          "root_id",
+          "trade_version",
+          "trade_status",
+          "gaps",
+          "scope",
+          "history_completeness"
+        ],
+        "title": "TradeCorrectionScopeStatus",
+        "type": "object"
+      },
       "TradeCreate": {
         "additionalProperties": false,
         "properties": {
@@ -23235,6 +23351,115 @@
           }
         ],
         "summary": "Revise Unverified Trade",
+        "tags": [
+          "Trades"
+        ]
+      }
+    },
+    "/api/v1/trades/{id}/unverified-corrections/scope": {
+      "get": {
+        "description": "Describe the current root gaps without granting a correction or eligibility.",
+        "operationId": "get_unverified_trade_correction_scope",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeCorrectionScopeStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Unverified Trade Correction Scope",
         "tags": [
           "Trades"
         ]

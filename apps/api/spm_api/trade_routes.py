@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from pydantic_core import PydanticSerializationError
 from sqlalchemy import Connection, RowMapping, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from spm_api import trade_audit, trade_history_review, trade_unverified_correction
 from spm_api import trade_service as service
@@ -19,13 +20,17 @@ from spm_api.mutations import check_version, mutate
 from spm_api.pagination import Page, PageDep, paginate, validate_date_page
 from spm_api.security import Auth, AuthDep, VersionDep, WriteDep, matching_version
 from spm_api.trade_models import (
+    MAX_TRADE_CORRECTION_REVIEWS,
     TradeAuditOriginRecord,
     TradeAuditRecovery,
+    TradeCorrectionScopeGap,
+    TradeCorrectionScopeStatus,
     TradeCreate,
     TradeHistoryReviewRecord,
     TradeHistoryReviewStatus,
     TradeHistoryReviewWrite,
     TradeRecord,
+    TradeReviewState,
     TradeRevision,
     TradeUnverifiedCorrectionRecord,
     TradeUnverifiedRevisionWrite,
@@ -119,6 +124,16 @@ def _current_review_gap(
         if str(error) == "TRADE_REVIEW_NOT_REQUIRED":
             return None
         raise
+
+
+def _review_state(
+    gap: trade_history_review.Gap | None, latest: trade_history_review.Review | None
+) -> TradeReviewState:
+    if latest is None:
+        return "NOT_REQUIRED" if gap is None else "NOT_REVIEWED"
+    if latest.decision == "WITHDRAW":
+        return "WITHDRAWN"
+    return "ACKNOWLEDGED_UNVERIFIED" if gap == latest.gap else "EVIDENCE_CHANGED"
 
 
 def _review_failure(error: trade_history_review.TradeReviewError) -> ApiError:
@@ -319,26 +334,13 @@ def trade_history_review_status(
         try:
             gap = _current_review_gap(con, auth.owner.id, row)
             latest = reviews[-1] if reviews else None
-            state: Literal[
-                "NOT_REQUIRED",
-                "NOT_REVIEWED",
-                "ACKNOWLEDGED_UNVERIFIED",
-                "WITHDRAWN",
-                "EVIDENCE_CHANGED",
-            ]
-            if latest is None:
-                state = "NOT_REQUIRED" if gap is None else "NOT_REVIEWED"
-            elif latest.decision == "WITHDRAW":
-                state = "WITHDRAWN"
-            else:
-                state = "ACKNOWLEDGED_UNVERIFIED" if gap == latest.gap else "EVIDENCE_CHANGED"
             result = TradeHistoryReviewStatus(
                 trade_id=id,
                 trade_version=row["version"],
                 trade_status=row["status"],
                 review_revision=str(len(reviews)),
                 current_gap=gap,
-                state=state,
+                state=_review_state(gap, latest),
                 latest=_review_record(latest) if latest else None,
             )
         except (ValueError, TypeError, KeyError, OverflowError):
@@ -454,6 +456,61 @@ def save_trade_history_review(
     except (ValueError, PydanticSerializationError):
         raise _review_unavailable() from None
     return result
+
+
+@router.get(
+    "/trades/{id}/unverified-corrections/scope",
+    operation_id="get_unverified_trade_correction_scope",
+)
+def unverified_trade_correction_scope(
+    id: UUID, request: Request, auth: AuthDep
+) -> TradeCorrectionScopeStatus:
+    """Describe the current root gaps without granting a correction or eligibility."""
+    with unit_of_work(request.app.state.engine) as con:
+        selected = service.owned_trade(con, str(auth.owner.id), str(id))
+        try:
+            gaps = trade_history_review._correction_gaps(con, auth.owner.id, id)
+            if len(gaps) > MAX_TRADE_CORRECTION_REVIEWS:
+                raise ApiError(
+                    409,
+                    "TRADE_CORRECTION_SCOPE_TOO_LARGE",
+                    "The trade correction scope exceeds the supported review limit",
+                )
+            records = []
+            for trade, missing in gaps:
+                trade_id = UUID(trade["id"])
+                reviews = trade_history_review.history(con, auth.owner.id, trade_id)
+                if reviews is None:
+                    raise ValueError("Missing reviewed trade")
+                current = _current_review_gap(con, auth.owner.id, trade)
+                if missing and current != "MISSING_CREATION_AUDIT":
+                    raise ValueError("Inconsistent missing creation audit")
+                latest = reviews[-1] if reviews else None
+                state = _review_state(current, latest) if missing else "EVIDENCE_CHANGED"
+                if state == "NOT_REQUIRED":
+                    raise ValueError("Inconsistent correction review")
+                records.append(
+                    TradeCorrectionScopeGap(
+                        trade_id=trade_id,
+                        trade_version=trade["version"],
+                        review_revision=str(len(reviews)),
+                        current_gap=current,
+                        state=state,
+                    )
+                )
+            return TradeCorrectionScopeStatus(
+                trade_id=id,
+                root_id=selected["root_id"],
+                trade_version=selected["version"],
+                trade_status=selected["status"],
+                gaps=tuple(records),
+                scope="UNVERIFIED_TRADE_CORRECTION_ONLY",
+                history_completeness="UNVERIFIED",
+            )
+        except trade_history_review.TradeReviewError as error:
+            raise _review_failure(error) from None
+        except (ValueError, TypeError, KeyError, OverflowError, SQLAlchemyError):
+            raise _review_unavailable() from None
 
 
 def _correction_unavailable() -> ApiError:

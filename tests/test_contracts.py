@@ -49,6 +49,10 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
         ("/api/v1/trades/{id}/history-review", "post"): "save_trade_history_review",
         ("/api/v1/trades/{id}/history-review/revisions", "get"): "list_trade_history_reviews",
         (
+            "/api/v1/trades/{id}/unverified-corrections/scope",
+            "get",
+        ): "get_unverified_trade_correction_scope",
+        (
             "/api/v1/trades/{id}/unverified-corrections/revise",
             "post",
         ): "revise_unverified_trade",
@@ -163,6 +167,34 @@ def test_unverified_trade_correction_contract_requires_scope_and_labels() -> Non
     assert set(record["required"]) == {"authorization_id", "trade", "scope", "history_completeness"}
     assert record["properties"]["scope"]["const"] == "UNVERIFIED_TRADE_CORRECTION_ONLY"
     assert record["properties"]["history_completeness"]["const"] == "UNVERIFIED"
+    scope = schemas["TradeCorrectionScopeStatus"]
+    assert set(scope["required"]) == {
+        "trade_id",
+        "root_id",
+        "trade_version",
+        "trade_status",
+        "gaps",
+        "scope",
+        "history_completeness",
+    }
+    assert scope["properties"]["gaps"]["maxItems"] == 100
+    assert scope["properties"]["scope"]["const"] == "UNVERIFIED_TRADE_CORRECTION_ONLY"
+    assert scope["properties"]["history_completeness"]["const"] == "UNVERIFIED"
+    gap = schemas["TradeCorrectionScopeGap"]
+    assert set(gap["required"]) == {
+        "trade_id",
+        "trade_version",
+        "review_revision",
+        "current_gap",
+        "state",
+    }
+    assert gap["properties"]["review_revision"]["type"] == "string"
+    assert set(gap["properties"]["state"]["enum"]) == {
+        "NOT_REVIEWED",
+        "ACKNOWLEDGED_UNVERIFIED",
+        "WITHDRAWN",
+        "EVIDENCE_CHANGED",
+    }
 
 
 def test_compose_trusts_only_the_reserved_gateway_ip() -> None:
