@@ -1159,6 +1159,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/trades/{id}/history-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trade History Review Status */
+        get: operations["get_trade_history_review"];
+        put?: never;
+        /** Save Trade History Review */
+        post: operations["save_trade_history_review"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trades/{id}/history-review/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trade History Review Revisions */
+        get: operations["list_trade_history_reviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2888,6 +2923,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[TradeHistoryReviewRecord] */
+        Page_TradeHistoryReviewRecord_: {
+            /** Items */
+            items: components["schemas"]["TradeHistoryReviewRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[TradeRecord] */
         Page_TradeRecord_: {
             /** Items */
@@ -4129,6 +4171,108 @@ export interface components {
              * Format: date
              */
             trade_date: string;
+        };
+        /** TradeHistoryReviewRecord */
+        TradeHistoryReviewRecord: {
+            /** Created At */
+            created_at: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "ACKNOWLEDGE_UNVERIFIED" | "WITHDRAW";
+            /**
+             * Gap
+             * @enum {string}
+             */
+            gap: "MISSING_CREATION_AUDIT" | "MISSING_RETIRED_ORIGIN";
+            /**
+             * History Completeness
+             * @default UNVERIFIED
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Observed Trade Status
+             * @enum {string}
+             */
+            observed_trade_status: "ACTIVE" | "DRAFT_SCHEDULED" | "PENDING_FX" | "SUPERSEDED" | "VOID";
+            /** Observed Trade Version */
+            observed_trade_version: number;
+            /** Reason */
+            reason: string;
+            /** Revision */
+            revision: string;
+            /**
+             * Scope
+             * @default UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY
+             * @constant
+             */
+            scope: "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY";
+            /**
+             * Trade Id
+             * Format: uuid
+             */
+            trade_id: string;
+        };
+        /** TradeHistoryReviewStatus */
+        TradeHistoryReviewStatus: {
+            /** Current Gap */
+            current_gap: ("MISSING_CREATION_AUDIT" | "MISSING_RETIRED_ORIGIN") | null;
+            /**
+             * History Completeness
+             * @default UNVERIFIED
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            latest: components["schemas"]["TradeHistoryReviewRecord"] | null;
+            /** Review Revision */
+            review_revision: string;
+            /**
+             * Scope
+             * @default UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY
+             * @constant
+             */
+            scope: "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "NOT_REQUIRED" | "NOT_REVIEWED" | "ACKNOWLEDGED_UNVERIFIED" | "WITHDRAWN" | "EVIDENCE_CHANGED";
+            /**
+             * Trade Id
+             * Format: uuid
+             */
+            trade_id: string;
+            /**
+             * Trade Status
+             * @enum {string}
+             */
+            trade_status: "ACTIVE" | "DRAFT_SCHEDULED" | "PENDING_FX" | "SUPERSEDED" | "VOID";
+            /** Trade Version */
+            trade_version: number;
+        };
+        /** TradeHistoryReviewWrite */
+        TradeHistoryReviewWrite: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "ACKNOWLEDGE_UNVERIFIED" | "WITHDRAW";
+            /**
+             * Expected Gap
+             * @enum {string}
+             */
+            expected_gap: "MISSING_CREATION_AUDIT" | "MISSING_RETIRED_ORIGIN";
+            /** Expected Revision */
+            expected_revision: string;
+            /** Reason */
+            reason: string;
         };
         /** TradeRecord */
         TradeRecord: {
@@ -13150,6 +13294,273 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradeAuditOriginRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_trade_history_review: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradeHistoryReviewStatus"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    save_trade_history_review: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradeHistoryReviewWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradeHistoryReviewRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_trade_history_reviews: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TradeHistoryReviewRecord_"];
                 };
             };
             /** @description Unauthorized */

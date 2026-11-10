@@ -6,7 +6,15 @@ from uuid import UUID
 
 from pydantic import AfterValidator, Field, StringConstraints, field_validator, model_validator
 
-from spm_api.decimal_types import FxRate, IsoDate, Money, NonNegativeMoney, PositiveQuantity, Price
+from spm_api.decimal_types import (
+    INT64_MAX,
+    FxRate,
+    IsoDate,
+    Money,
+    NonNegativeMoney,
+    PositiveQuantity,
+    Price,
+)
 from spm_api.errors import Model
 from spm_api.master_models import ChangeReason, Currency, Note
 
@@ -123,4 +131,70 @@ class TradeAuditOriginRecord(Model):
     origin: Literal["MISSING", "AT_CREATION", "BEFORE_RETIRE", "RETAINED_RESPONSE"]
     captured_at: str | None
     scope: Literal["DATABASE_AUDIT_ORIGIN_ONLY"] = "DATABASE_AUDIT_ORIGIN_ONLY"
+    history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
+
+
+def _review_ordinal(value: str) -> str:
+    number = int(value)
+    if str(number) != value or number > INT64_MAX:
+        raise ValueError("The review revision is invalid")
+    return value
+
+
+ReviewOrdinal = Annotated[
+    str,
+    StringConstraints(strict=True, pattern=r"^(0|[1-9][0-9]{0,18})$"),
+    AfterValidator(_review_ordinal),
+]
+TradeReviewGap = Literal["MISSING_CREATION_AUDIT", "MISSING_RETIRED_ORIGIN"]
+TradeReviewDecision = Literal["ACKNOWLEDGE_UNVERIFIED", "WITHDRAW"]
+TradePhysicalStatus = Literal["ACTIVE", "DRAFT_SCHEDULED", "PENDING_FX", "SUPERSEDED", "VOID"]
+
+
+class TradeHistoryReviewWrite(Model):
+    decision: TradeReviewDecision
+    expected_revision: ReviewOrdinal
+    expected_gap: TradeReviewGap
+    reason: ChangeReason
+
+    @field_validator("expected_revision")
+    @classmethod
+    def revision_can_advance(cls, value: str) -> str:
+        if int(value) == INT64_MAX:
+            raise ValueError("The review revision cannot advance")
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def no_nul_reason(cls, value: str) -> str:
+        if "\0" in value:
+            raise ValueError("The review reason cannot contain NUL")
+        return value
+
+
+class TradeHistoryReviewRecord(Model):
+    id: UUID
+    trade_id: UUID
+    revision: ReviewOrdinal
+    decision: TradeReviewDecision
+    gap: TradeReviewGap
+    observed_trade_status: TradePhysicalStatus
+    observed_trade_version: int
+    created_at: str
+    reason: str
+    scope: Literal["UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY"] = "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY"
+    history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
+
+
+class TradeHistoryReviewStatus(Model):
+    trade_id: UUID
+    trade_version: int
+    trade_status: TradePhysicalStatus
+    review_revision: ReviewOrdinal
+    current_gap: TradeReviewGap | None
+    state: Literal[
+        "NOT_REQUIRED", "NOT_REVIEWED", "ACKNOWLEDGED_UNVERIFIED", "WITHDRAWN", "EVIDENCE_CHANGED"
+    ]
+    latest: TradeHistoryReviewRecord | None
+    scope: Literal["UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY"] = "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY"
     history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"

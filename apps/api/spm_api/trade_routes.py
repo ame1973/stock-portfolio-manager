@@ -1,13 +1,14 @@
 """Private trade endpoints; all financial mutations share one short guarded UoW."""
 
-from typing import Annotated
-from uuid import UUID
+import re
+from typing import Annotated, Literal
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from pydantic_core import PydanticSerializationError
 from sqlalchemy import Connection, RowMapping, text
 
-from spm_api import trade_audit
+from spm_api import trade_audit, trade_history_review
 from spm_api import trade_service as service
 from spm_api.db import unit_of_work
 from spm_api.decimal_types import INT64_MAX, IsoDate
@@ -20,6 +21,9 @@ from spm_api.trade_models import (
     TradeAuditOriginRecord,
     TradeAuditRecovery,
     TradeCreate,
+    TradeHistoryReviewRecord,
+    TradeHistoryReviewStatus,
+    TradeHistoryReviewWrite,
     TradeRecord,
     TradeRevision,
     VoidTrade,
@@ -32,7 +36,7 @@ router = APIRouter(
 )
 
 
-def _recovery_version(
+def _physical_trade_version(
     value: Annotated[str, Header(alias="If-Match", pattern=r'^"[1-9][0-9]{0,18}"$')],
 ) -> int:
     version = matching_version(value)
@@ -41,7 +45,7 @@ def _recovery_version(
     return version
 
 
-RecoveryVersion = Annotated[int, Depends(_recovery_version)]
+PhysicalTradeVersion = Annotated[int, Depends(_physical_trade_version)]
 
 
 def _origin_unavailable() -> ApiError:
@@ -69,6 +73,67 @@ def _owned_origin(
         return row, origin, _origin_record(row, origin)
     except (ValueError, TypeError, KeyError, OverflowError):
         raise _origin_unavailable() from None
+
+
+def _review_unavailable() -> ApiError:
+    return ApiError(503, "TRADE_REVIEW_UNAVAILABLE", "The trade review cannot be read safely")
+
+
+def _review_record(record: trade_history_review.Review) -> TradeHistoryReviewRecord:
+    return TradeHistoryReviewRecord(
+        id=record.id,
+        trade_id=record.trade_id,
+        revision=str(record.revision),
+        decision=record.decision,
+        gap=record.gap,
+        observed_trade_status=record.observed_status,
+        observed_trade_version=record.observed_trade_version,
+        created_at=record.created_at,
+        reason=record.reason,
+    )
+
+
+def _owned_reviews(
+    con: Connection, owner: UUID, identifier: UUID
+) -> tuple[RowMapping, tuple[trade_history_review.Review, ...]]:
+    row = service.owned_trade(con, str(owner), str(identifier))
+    try:
+        reviews = trade_history_review.history(con, owner, identifier)
+        if reviews is None:
+            raise ValueError("Trade review disappeared")
+        return row, reviews
+    except (ValueError, TypeError, KeyError, OverflowError):
+        raise _review_unavailable() from None
+
+
+def _current_review_gap(
+    con: Connection, owner: UUID, trade: RowMapping
+) -> trade_history_review.Gap | None:
+    try:
+        return trade_history_review._gap(con, owner, trade)
+    except trade_history_review.TradeReviewError as error:
+        if str(error) == "TRADE_REVIEW_NOT_REQUIRED":
+            return None
+        raise
+
+
+def _review_failure(error: trade_history_review.TradeReviewError) -> ApiError:
+    code = str(error)
+    if code == "TRADE_REVIEW_NOT_FOUND":
+        return ApiError(404, "NOT_FOUND", "Trade not found")
+    if code == "TRADE_REVIEW_VERSION_CONFLICT":
+        return ApiError(412, "PRECONDITION_FAILED", "This review changed; reload before editing")
+    if code == "INVALID_TRADE_REVIEW_SCOPE":
+        return ApiError(422, code, "The trade review request is invalid")
+    if code in {
+        "TRADE_REVIEW_CONFLICT",
+        "TRADE_REVIEW_CHANGED",
+        "TRADE_REVIEW_DECISION_CONFLICT",
+        "TRADE_REVIEW_NOT_REQUIRED",
+        "TRADE_REVIEW_TIME_CONFLICT",
+    }:
+        return ApiError(409, code, "The trade review decision could not be accepted")
+    return _review_unavailable()
 
 
 @router.get("/trades", operation_id="list_trades")
@@ -164,7 +229,7 @@ def recover_trade_audit_origin(
     body: TradeAuditRecovery,
     request: Request,
     headers: WriteDep,
-    version: RecoveryVersion,
+    version: PhysicalTradeVersion,
 ) -> TradeAuditOriginRecord:
     """Reauthenticate an owned recovery; matched hashes are not ownership verification."""
 
@@ -237,6 +302,152 @@ def recover_trade_audit_origin(
         )
     except (ValueError, PydanticSerializationError):
         raise _origin_unavailable() from None
+
+
+@router.get("/trades/{id}/history-review", operation_id="get_trade_history_review")
+def trade_history_review_status(
+    id: UUID, request: Request, auth: AuthDep
+) -> TradeHistoryReviewStatus:
+    with unit_of_work(request.app.state.engine) as con:
+        row, reviews = _owned_reviews(con, auth.owner.id, id)
+        try:
+            gap = _current_review_gap(con, auth.owner.id, row)
+            latest = reviews[-1] if reviews else None
+            state: Literal[
+                "NOT_REQUIRED",
+                "NOT_REVIEWED",
+                "ACKNOWLEDGED_UNVERIFIED",
+                "WITHDRAWN",
+                "EVIDENCE_CHANGED",
+            ]
+            if latest is None:
+                state = "NOT_REQUIRED" if gap is None else "NOT_REVIEWED"
+            elif latest.decision == "WITHDRAW":
+                state = "WITHDRAWN"
+            else:
+                state = "ACKNOWLEDGED_UNVERIFIED" if gap == latest.gap else "EVIDENCE_CHANGED"
+            result = TradeHistoryReviewStatus(
+                trade_id=id,
+                trade_version=row["version"],
+                trade_status=row["status"],
+                review_revision=str(len(reviews)),
+                current_gap=gap,
+                state=state,
+                latest=_review_record(latest) if latest else None,
+            )
+        except (ValueError, TypeError, KeyError, OverflowError):
+            raise _review_unavailable() from None
+    return result
+
+
+@router.get("/trades/{id}/history-review/revisions", operation_id="list_trade_history_reviews")
+def trade_history_review_revisions(
+    id: UUID, request: Request, auth: AuthDep, page: PageDep
+) -> Page[TradeHistoryReviewRecord]:
+    value = page.cursor_value
+    if value is not None and (
+        re.fullmatch(r"[1-9][0-9]{0,18}", value) is None or int(value) > INT64_MAX
+    ):
+        raise ApiError(422, "INVALID_CURSOR", "Invalid trade review pagination cursor")
+    with unit_of_work(request.app.state.engine) as con:
+        _, reviews = _owned_reviews(con, auth.owner.id, id)
+        params = {
+            **page.params(),
+            "cursor_value": int(value) if value is not None else None,
+            "trade": str(id),
+            "owner": str(auth.owner.id),
+        }
+        rows = (
+            con.execute(
+                text(r"""
+            SELECT id,revision FROM trade_history_reviews
+            WHERE trade_id=:trade AND owner_id=:owner AND id LIKE :search ESCAPE '\'
+              AND (:cursor_value IS NULL OR (revision,id)<(:cursor_value,:cursor_id))
+            ORDER BY revision DESC,id DESC LIMIT :limit
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        records = {str(record.id): record for record in reviews}
+        try:
+            return paginate(rows, page, "revision", lambda row: _review_record(records[row["id"]]))
+        except (ValueError, TypeError, KeyError, OverflowError):
+            raise _review_unavailable() from None
+
+
+@router.post("/trades/{id}/history-review", operation_id="save_trade_history_review")
+def save_trade_history_review(
+    id: UUID,
+    body: TradeHistoryReviewWrite,
+    request: Request,
+    headers: WriteDep,
+    version: PhysicalTradeVersion,
+) -> TradeHistoryReviewRecord:
+    expected = int(body.expected_revision)
+
+    def save(con: Connection, auth: Auth) -> TradeHistoryReviewRecord:
+        row, reviews = _owned_reviews(con, auth.owner.id, id)
+        check_version(row["version"], version)
+        check_version(len(reviews), expected)
+        if body.decision == "ACKNOWLEDGE_UNVERIFIED":
+            current_gap = _current_review_gap(con, auth.owner.id, row)
+            if current_gap is None:
+                raise trade_history_review.TradeReviewError("TRADE_REVIEW_NOT_REQUIRED")
+            if current_gap != body.expected_gap:
+                raise trade_history_review.TradeReviewError("TRADE_REVIEW_CHANGED")
+        elif reviews and reviews[-1].gap != body.expected_gap:
+            raise trade_history_review.TradeReviewError("TRADE_REVIEW_CHANGED")
+        return _review_record(
+            trade_history_review.save(
+                con,
+                auth.owner.id,
+                id,
+                review_id=uuid4(),
+                request_id=UUID(request.state.request_id),
+                expected_trade_version=version,
+                expected_revision=expected,
+                decision=body.decision,
+                reason=body.reason,
+            )
+        )
+
+    def validate_replay(con: Connection, auth: Auth, cached: TradeHistoryReviewRecord) -> None:
+        if (
+            cached.trade_id != id
+            or cached.revision != str(expected + 1)
+            or cached.observed_trade_version != version
+        ):
+            raise _review_unavailable()
+        _, reviews = _owned_reviews(con, auth.owner.id, id)
+        if len(reviews) <= expected:
+            raise _review_unavailable()
+        original = reviews[expected]
+        if (
+            _review_record(original) != cached
+            or original.decision != body.decision
+            or original.gap != body.expected_gap
+            or original.reason != body.reason
+            or original.observed_trade_version != version
+        ):
+            raise _review_unavailable()
+
+    try:
+        result = mutate(
+            request,
+            headers,
+            {"version": version, **body.model_dump(mode="json")},
+            TradeHistoryReviewRecord,
+            save,
+            reauth=True,
+            validate_replay=validate_replay,
+        )
+    except trade_history_review.TradeReviewError as error:
+        raise _review_failure(error) from None
+    except (ValueError, PydanticSerializationError):
+        raise _review_unavailable() from None
+    return result
 
 
 @router.patch("/trades/{id}", operation_id="revise_trade")

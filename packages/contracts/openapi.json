@@ -4621,6 +4621,34 @@
         "title": "Page[SourceScheduleRecord]",
         "type": "object"
       },
+      "Page_TradeHistoryReviewRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TradeHistoryReviewRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[TradeHistoryReviewRecord]",
+        "type": "object"
+      },
       "Page_TradeRecord_": {
         "additionalProperties": false,
         "properties": {
@@ -7605,6 +7633,219 @@
           "currency"
         ],
         "title": "TradeCreate",
+        "type": "object"
+      },
+      "TradeHistoryReviewRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "ACKNOWLEDGE_UNVERIFIED",
+              "WITHDRAW"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "gap": {
+            "enum": [
+              "MISSING_CREATION_AUDIT",
+              "MISSING_RETIRED_ORIGIN"
+            ],
+            "title": "Gap",
+            "type": "string"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "default": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "observed_trade_status": {
+            "enum": [
+              "ACTIVE",
+              "DRAFT_SCHEDULED",
+              "PENDING_FX",
+              "SUPERSEDED",
+              "VOID"
+            ],
+            "title": "Observed Trade Status",
+            "type": "string"
+          },
+          "observed_trade_version": {
+            "title": "Observed Trade Version",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision": {
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Revision",
+            "type": "string"
+          },
+          "scope": {
+            "const": "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY",
+            "default": "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "trade_id": {
+            "format": "uuid",
+            "title": "Trade Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "trade_id",
+          "revision",
+          "decision",
+          "gap",
+          "observed_trade_status",
+          "observed_trade_version",
+          "created_at",
+          "reason"
+        ],
+        "title": "TradeHistoryReviewRecord",
+        "type": "object"
+      },
+      "TradeHistoryReviewStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "current_gap": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MISSING_CREATION_AUDIT",
+                  "MISSING_RETIRED_ORIGIN"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Gap"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "default": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TradeHistoryReviewRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_revision": {
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Review Revision",
+            "type": "string"
+          },
+          "scope": {
+            "const": "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY",
+            "default": "UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "NOT_REQUIRED",
+              "NOT_REVIEWED",
+              "ACKNOWLEDGED_UNVERIFIED",
+              "WITHDRAWN",
+              "EVIDENCE_CHANGED"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "trade_id": {
+            "format": "uuid",
+            "title": "Trade Id",
+            "type": "string"
+          },
+          "trade_status": {
+            "enum": [
+              "ACTIVE",
+              "DRAFT_SCHEDULED",
+              "PENDING_FX",
+              "SUPERSEDED",
+              "VOID"
+            ],
+            "title": "Trade Status",
+            "type": "string"
+          },
+          "trade_version": {
+            "title": "Trade Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trade_id",
+          "trade_version",
+          "trade_status",
+          "review_revision",
+          "current_gap",
+          "state",
+          "latest"
+        ],
+        "title": "TradeHistoryReviewStatus",
+        "type": "object"
+      },
+      "TradeHistoryReviewWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "ACKNOWLEDGE_UNVERIFIED",
+              "WITHDRAW"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expected_gap": {
+            "enum": [
+              "MISSING_CREATION_AUDIT",
+              "MISSING_RETIRED_ORIGIN"
+            ],
+            "title": "Expected Gap",
+            "type": "string"
+          },
+          "expected_revision": {
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Expected Revision",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "expected_revision",
+          "expected_gap",
+          "reason"
+        ],
+        "title": "TradeHistoryReviewWrite",
         "type": "object"
       },
       "TradeRecord": {
@@ -22314,6 +22555,410 @@
           }
         ],
         "summary": "Recover Trade Audit Origin",
+        "tags": [
+          "Trades"
+        ]
+      }
+    },
+    "/api/v1/trades/{id}/history-review": {
+      "get": {
+        "operationId": "get_trade_history_review",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeHistoryReviewStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Trade History Review Status",
+        "tags": [
+          "Trades"
+        ]
+      },
+      "post": {
+        "operationId": "save_trade_history_review",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
+              "title": "If-Match",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradeHistoryReviewWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeHistoryReviewRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Save Trade History Review",
+        "tags": [
+          "Trades"
+        ]
+      }
+    },
+    "/api/v1/trades/{id}/history-review/revisions": {
+      "get": {
+        "operationId": "list_trade_history_reviews",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_TradeHistoryReviewRecord_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Trade History Review Revisions",
         "tags": [
           "Trades"
         ]

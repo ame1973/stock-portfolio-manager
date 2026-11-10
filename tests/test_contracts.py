@@ -45,6 +45,9 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
     extensions = {
         ("/api/v1/trades/{id}/audit-origin", "get"): "get_trade_audit_origin",
         ("/api/v1/trades/{id}/audit-origin/recover", "post"): "recover_trade_audit_origin",
+        ("/api/v1/trades/{id}/history-review", "get"): "get_trade_history_review",
+        ("/api/v1/trades/{id}/history-review", "post"): "save_trade_history_review",
+        ("/api/v1/trades/{id}/history-review/revisions", "get"): "list_trade_history_reviews",
         ("/api/v1/dividends/candidates", "get"): "list_dividend_candidates",
         ("/api/v1/dividends/candidates", "post"): "create_dividend_candidate",
         ("/api/v1/dividends/candidates/{id}", "get"): "get_dividend_candidate",

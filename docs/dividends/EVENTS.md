@@ -339,8 +339,8 @@ serialization failure rolls them all back. A completed retry with the same key,
 version and normalized body returns the original response with no new writes,
 even after a later successor correction. Replay also revalidates its cached
 metadata and original intent against the retained audited origin. Both operations
-are private and `no-store`. An absent original creation audit still needs a separate
-explicit unverified review; the application does not yet provide that review.
+are private and `no-store`. An absent original creation audit needs the separate
+explicit unverified review API below; that review does not yet unblock correction.
 
 ## Browser recovery workspace
 
@@ -371,7 +371,7 @@ than guessing a version.
 The result reports consistency of retained database records only. It is not an
 external ownership statement, complete holdings history, entitlement or receipt.
 If the original response or creation audit is missing, do not invent one; the
-separate explicit unverified-review workflow remains unfinished.
+separate explicit review API below remains unverified and has no browser workflow yet.
 
 ## Inert unverified trade-history review storage
 
@@ -419,11 +419,68 @@ acknowledgment is no longer a current-use review, even when the later record
 matches. It does not treat a later audit as proof it existed at creation.
 
 These helpers do not authenticate an HTTP session or validate the entire trade
-root, ownership history or economic scope. No protected review API, review UI,
-trade-writer grant or eligibility integration consumes them yet. A future financial
-writer must consult the review history even when an audit later appears, and must
-revalidate the complete relevant scope in its own transaction. No provider or
-private-file access is performed.
+root, ownership history or economic scope. The protected API below authenticates
+review decisions; no review UI, trade-writer grant or eligibility integration
+consumes them yet. A future financial writer must consult the review history even
+when an audit later appears, and must revalidate the complete relevant scope in its
+own transaction. No provider or private-file access is performed.
+
+## Protected unverified trade-history review API
+
+`GET /api/v1/trades/{id}/history-review` returns the owned physical trade's
+version, status, exact review revision as a decimal **string**, current evidence
+gap, latest decision and review state. `NOT_REVIEWED` means a gap is present;
+`NOT_REQUIRED` means this particular check found no reviewable gap, not that
+ownership or the complete chain is verified. `ACKNOWLEDGED_UNVERIFIED` identifies
+the latest acknowledgment of the same still-current gap; `WITHDRAWN` identifies a
+withdrawn decision. `EVIDENCE_CHANGED` means a later audit or origin changed the
+gap after an acknowledgment, even if its fingerprints match. All responses retain
+`history_completeness=UNVERIFIED` and `scope=UNVERIFIED_TRADE_HISTORY_REVIEW_ONLY`.
+The paginated `GET /trades/{id}/history-review/revisions` returns the actual
+audited decisions in descending revision order; its optional search is restricted
+to decision IDs, not private reasons.
+
+`POST /trades/{id}/history-review` requires a current session, CSRF token,
+idempotency key, recent password confirmation and `If-Match` with the quoted
+physical trade version. The body names an explicit decision, the last observed
+review revision as a canonical decimal string, the exact observed gap, and a
+reason. The reason is retained in the audit and returned to the authenticated
+owner; do not include passwords or provider keys. For example, after reading a
+first missing-creation-audit gap on physical version 1:
+
+```json
+{
+  "decision": "ACKNOWLEDGE_UNVERIFIED",
+  "expected_revision": "0",
+  "expected_gap": "MISSING_CREATION_AUDIT",
+  "reason": "Synthetic example: the original audit is unavailable"
+}
+```
+
+For withdrawal, use `WITHDRAW`, the current review revision and the last decision's
+gap, even if current evidence has since changed. Review revisions are strings so
+their INT64 digits survive JavaScript; do not parse them through a floating-point
+number. A physical/review version mismatch returns 412. A changed evidence gap
+returns 409 `TRADE_REVIEW_CHANGED`, rather than recording an acknowledgment of a
+different gap. An absent reviewable gap returns 409; invalid or contradictory
+retained audits and forged cached decisions fail closed with 503. Foreign trades
+return 404. Responses are private and `no-store`.
+
+The current session, CSRF and reauthentication are rechecked inside the writer
+before a new decision or idempotent replay. Review, audit, portfolio invalidations
+and the serialized idempotency response commit together. The same key and unchanged
+intent replay the original audited decision without writes, even after a valid later
+withdrawal, retirement or matching-origin recovery. Replay rechecks the cached DTO
+and original version, decision, gap and reason against the full retained review
+history. The response's `observed_trade_version` is the **original observed physical
+version**; reread the status for current state. Review responses do not issue an
+ETag for the combined trade/review state; use the status's `trade_version` or the
+trade endpoint's ETag for the next physical `If-Match`. The response omits owner,
+audit/request IDs, raw trade snapshot and snapshot hash. Neither this API nor a
+bare SQL row unblocks trade
+PATCH/DELETE, establishes verified ownership, creates an entitlement or posts a
+receipt. The separate writer/eligibility integration and browser review UI remain
+unfinished.
 
 ## Required future protected writer and projection work
 
@@ -499,6 +556,13 @@ audits, actual retirement links, origin recovery, replay, competing decisions,
 owner/version fences and savepoint rollback. It uses newly created synthetic
 records in verified temporary databases and does not remove audit guards or alter
 existing audit events. It does not exercise a protected review endpoint or grant.
+
+`uv run pytest tests/test_trade_history_review_api.py` exercises protected status,
+explicit gap fencing, two versions, authentication/CSRF/reauthentication,
+concurrency, exact revision strings, pagination, corrupt audits, cached-intent
+validation and atomic rollback. It also checks that an acknowledged audit gap does
+not yet unblock either trade correction or void. These are isolated synthetic
+HTTP/SQLite tests, not proof of external ownership or eligibility.
 
 `uv run pytest tests/test_eligibility_trade_origins.py tests/test_dividend_eligibility_service.py`
 checks origin-to-retirement audit matching, mixed legacy histories, inconsistent
