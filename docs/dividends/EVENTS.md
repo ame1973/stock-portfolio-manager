@@ -375,12 +375,12 @@ than guessing a version.
 The result reports consistency of retained database records only. It is not an
 external ownership statement, complete holdings history, entitlement or receipt.
 If the original response or creation audit is missing, do not invent one; the
-separate explicit review API below remains unverified and has no browser workflow yet.
+separate explicit review API and browser workspace below remain unverified.
 
 ## Inert unverified trade-history review storage
 
 Migration `0018_trade_history_reviews` adds an initially empty append-only review
-decision table, bringing the current schema to 57 business tables. It does not
+decision table, bringing that schema revision to 57 business tables. It does not
 backfill a review, change existing financial facts or modify old audits. A
 physical trade can retain consecutive `ACKNOWLEDGE_UNVERIFIED` and `WITHDRAW`
 decisions, with an explicit missing-creation-audit or missing-retired-origin gap,
@@ -398,6 +398,28 @@ prove that a user saw or accepted a gap. Even a valid-shaped false snapshot hash
 can pass SQL. A bare SQL row does not unblock a trade correction or cause an
 eligibility projection. Missing or corrupt evidence remains unresolved, and a
 review is never a recreated creation audit or proof of ownership.
+
+## Inert unverified correction authorization storage
+
+Migration `0019_trade_correction_scope` adds an initially empty, append-only
+`trade_correction_authorizations` table, bringing the schema to 58 business
+tables. No existing fact, review, receipt or audit is rewritten. A record stores
+one corrected physical trade, the resulting revision or void, the correlated
+request and audit, an intent hash, and a JSON array of review pins. Each pin
+identifies its missing-creation trade, physical version, review ID, exact
+review-revision string and gap. SQL checks the owner/account/root and resulting
+trade-audit links, the latest acknowledgment, one pin per currently missing
+creation audit, canonical field shapes and append-only behavior. It rejects
+withdrawn reviews and later creation evidence for a new record; an existing
+record remains historical evidence after later withdrawal.
+
+SQL cannot authenticate a user, prove that an audit was created in the original
+transaction, validate the canonical intent or audit digest, or verify all economic
+scope. A valid-shaped but unrelated audit hash can pass the table guards. No
+production writer or HTTP endpoint consumes this storage yet, and inserting a row
+alone is **not** a correction authorization or eligibility grant. Future writers
+must recheck the entire scope and append the fact, correlated audit, idempotency
+and invalidation atomically.
 
 ## Internal unverified trade-history review controller
 
@@ -422,9 +444,10 @@ acknowledged gap; if a missing creation audit or origin later appears, the old
 acknowledgment is no longer a current-use review, even when the later record
 matches. It does not treat a later audit as proof it existed at creation.
 
-These helpers do not authenticate an HTTP session or validate the entire trade
-root, ownership history or economic scope. The protected API and browser workspace
-below authenticate review decisions; no trade-writer grant or eligibility
+These helpers do not authenticate an HTTP session or establish ownership history
+or complete economic scope. The correction-scope checker also validates the
+retained trade root, without granting a correction. The protected API and browser
+workspace below authenticate review decisions; no trade-writer grant or eligibility
 integration consumes them yet. A future financial writer must consult the review
 history even when an audit later appears, and must revalidate the complete relevant
 scope in its own transaction. No provider or private-file access is performed.

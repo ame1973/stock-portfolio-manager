@@ -192,7 +192,7 @@ def review_values(
 
 def test_current_schema_starts_with_no_unverified_review_decisions(engine: Engine) -> None:
     with unit_of_work(engine) as con:
-        assert schema_head() == HEAD
+        assert schema_head() == "0019_trade_correction_scope"
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
 
 
@@ -610,16 +610,71 @@ async def test_unattested_sql_review_fails_closed_for_trade_writes(
     assert database_snapshot(engine) == before
 
 
-async def test_downgrade_refuses_to_delete_review_history(
-    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+def test_downgrade_refuses_to_delete_review_history(
+    previous_engine: Engine, tmp_path: Path
 ) -> None:
-    trade_id = synthetic_legacy_draft(engine, book, unrelated_audit=False)
-    with unit_of_work(engine, write=True) as con:
-        insert(con, TABLE, review_values(con, book["owner"]["id"], trade_id))
-    before, definitions = database_snapshot(engine), schema(engine)
-    with engine.connect() as con:
+    assert previous_engine.url.database is not None
+    assert Path(previous_engine.url.database).resolve().is_relative_to(tmp_path.resolve())
+    upgrade_to(previous_engine, HEAD)
+    owner, portfolio, broker, account, trade_id = (str(uuid4()) for _ in range(5))
+    at = stamp()
+    with previous_engine.begin() as con:
+        insert(
+            con,
+            "owners",
+            {
+                "id": owner,
+                "password_hash": "synthetic",
+                "password_changed_at": at,
+                "created_at": at,
+            },
+        )
+        insert(
+            con,
+            "portfolios",
+            {"id": portfolio, "owner_id": owner, "name": "Synthetic", "created_at": at},
+        )
+        insert(con, "brokers", {"id": broker, "owner_id": owner, "name": "Synthetic"})
+        insert(
+            con,
+            "accounts",
+            {
+                "id": account,
+                "portfolio_id": portfolio,
+                "broker_id": broker,
+                "name": "Synthetic",
+                "default_currency": "USD",
+                "created_at": at,
+            },
+        )
+        sequence = allocate_sequence(con, "TRADE", trade_id)
+        insert(
+            con,
+            "trades",
+            {
+                "id": trade_id,
+                "root_id": trade_id,
+                "created_sequence": sequence,
+                "portfolio_id": portfolio,
+                "account_id": account,
+                "security_id": "stock",
+                "side": "BUY",
+                "trade_date": "2999-01-02",
+                "quantity_e8": 100000000,
+                "price_e8": 100000000,
+                "currency": "USD",
+                "gross_micro": 1000000,
+                "settlement_micro": 1000000,
+                "status": "DRAFT_SCHEDULED",
+                "created_at": at,
+                "updated_at": at,
+            },
+        )
+        insert(con, TABLE, review_values(con, owner, trade_id))
+    before, definitions = database_snapshot(previous_engine), schema(previous_engine)
+    with previous_engine.connect() as con:
         config = migration_config()
         config.attributes["connection"] = con
         with pytest.raises(RuntimeError, match="validated"):
             command.downgrade(config, PREVIOUS)
-    assert database_snapshot(engine) == before and schema(engine) == definitions
+    assert database_snapshot(previous_engine) == before and schema(previous_engine) == definitions
