@@ -304,6 +304,69 @@ def history(con: Connection, owner: UUID, identifier: UUID) -> tuple[Review, ...
         raise TradeReviewError("TRADE_REVIEW_UNAVAILABLE") from None
 
 
+def correction_requires_review(con: Connection, owner: UUID, identifier: UUID) -> bool:
+    """Check the retained trade root; this does not grant a correction or verify ownership."""
+    try:
+        selected = trade_audit._trade(con, owner, identifier)
+        if selected is None:
+            raise ValueError("Missing trade")
+        root = selected["root_id"]
+        # ponytail: scan retained root history; add indexed checkpoints if measured histories grow.
+        identifiers = con.execute(
+            text("SELECT id FROM trades WHERE root_id=:root"), {"root": root}
+        ).scalars()
+        trades = []
+        for item in identifiers:
+            trade = trade_audit._trade(con, owner, trade_audit._identity(item))
+            if trade is None:
+                raise ValueError("Invalid trade-root owner")
+            trades.append(trade)
+        trades.sort(key=lambda item: item["revision"])
+        if not trades or trades[-1]["id"] != str(identifier):
+            raise ValueError("Invalid current trade")
+        requires_review = False
+        for index, trade in enumerate(trades):
+            previous = trades[index - 1] if index else None
+            latest = index == len(trades) - 1
+            if (
+                trade["root_id"] != root
+                or trade["revision"] != index + 1
+                or (
+                    previous is None and (trade["id"] != root or trade["supersedes_id"] is not None)
+                )
+                or (
+                    previous is not None
+                    and (
+                        trade["supersedes_id"] != previous["id"]
+                        or trade["created_sequence"] != previous["created_sequence"]
+                    )
+                )
+                or (not latest and trade["status"] != "SUPERSEDED")
+                or (latest and trade["status"] == "SUPERSEDED")
+            ):
+                raise ValueError("Invalid trade-root history")
+            creation = _creation_if_present(con, owner, trade)
+            origin = trade_audit.get_origin(con, owner, trade_audit._identity(trade["id"]))
+            reviews = history(con, owner, trade_audit._identity(trade["id"]))
+            if reviews is None:
+                raise ValueError("Invalid reviewed trade")
+            requires_review |= creation is None or any(
+                item.gap == "MISSING_CREATION_AUDIT" for item in reviews
+            )
+            if trade["status"] in ("SUPERSEDED", "VOID"):
+                _retired_structure(con, owner, trade)
+                successor_creation = (
+                    _creation_if_present(con, owner, trades[index + 1]) if not latest else None
+                )
+                if origin is not None and (latest or successor_creation is not None):
+                    trade_audit._retirement(con, owner, trade, origin.before_sha256)
+        return requires_review
+    except TradeReviewError:
+        raise
+    except (ValueError, TypeError, KeyError, OverflowError, SQLAlchemyError):
+        raise TradeReviewError("TRADE_REVIEW_UNAVAILABLE") from None
+
+
 def save(
     con: Connection,
     owner: UUID,

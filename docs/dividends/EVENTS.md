@@ -240,13 +240,17 @@ particular, a well-shaped recovered timestamp can still be false. The mode named
 
 The trade writer verifies the original audited DTO before recording it, and
 captures the original and financial changes atomically before retiring a
-still-current trade. An older current trade with no original creation/revision
-audit returns 409 `NEEDS_REVIEW`; an inconsistent audit or stored origin returns
-503 `TRADE_AUDIT_UNAVAILABLE`. These failures do not change the fact, cash,
-origin, audit, idempotency or invalidation. The separate unverified review
-workflow records an acknowledgment or withdrawal but cannot yet authorize that
-blocked correction. Recovery of an already-retired trade needs retained original
-response evidence, immutable field
+still-current trade. Before a correction it checks the retained root's owner,
+sequence, revision links and available audits, including each retained original's
+fingerprint against its actual successor. A missing creation/revision audit in
+an otherwise readable root returns 409 `NEEDS_REVIEW`; inconsistent available
+evidence or an unverifiable review history returns 503 `TRADE_AUDIT_UNAVAILABLE`.
+These failures do not change the fact, cash, origin, audit, idempotency or
+invalidation. A retired trade without a retained original remains unverified:
+the writer cannot reconstruct the original fingerprint input from the retired
+row alone. The separate unverified review workflow records an acknowledgment or
+withdrawal but cannot yet authorize that blocked correction. Recovery of an
+already-retired trade needs retained original response evidence, immutable field
 mirrors and an exact match to the old audit digest, with a separately audited
 authorized workflow. An expired or missing response is not evidence: leave the
 history unverified and require explicit review rather than inventing a timestamp

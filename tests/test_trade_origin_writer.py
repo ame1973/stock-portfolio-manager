@@ -11,9 +11,11 @@ import pytest
 from sqlalchemy import Engine
 
 from spm_api import trade_audit, trade_service
-from spm_api.audit import audit
+from spm_api.audit import audit, stamp
 from spm_api.db import unit_of_work
 from tests.helpers import create, database_snapshot, version_headers, write_headers
+from tests.provider_evidence_helpers import insert
+from tests.test_trade_audit_legacy_guard import synthetic_legacy_draft
 from tests.test_trades import book as book
 from tests.test_trades import payload
 
@@ -124,6 +126,92 @@ async def test_existing_verified_trade_capture_and_retirement_share_one_transact
     )
     assert replay.status_code == 200 and replay.json() == response.json()
     assert database_snapshot(engine) == stable
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+@pytest.mark.parametrize(
+    "problem", ["missing_ancestor_audit", "missing_current_audit", "mismatched_early_link", "both"]
+)
+async def test_current_trade_change_fences_invalid_earlier_root_history(
+    client: httpx.AsyncClient,
+    engine: Engine,
+    book: dict[str, Any],
+    method: str,
+    problem: str,
+) -> None:
+    body = payload(book, trade_date="2999-01-02", fx_rate_hkd=None)
+    if problem in {"missing_ancestor_audit", "both"}:
+        current_id = synthetic_legacy_draft(engine, book, unrelated_audit=False)
+    else:
+        current_id = (await create(client, "trades", body))["id"]
+    with unit_of_work(engine, write=True) as con:
+        for revision in (2, 3):
+            previous = (
+                con.exec_driver_sql("SELECT * FROM trades WHERE id=?", (current_id,))
+                .mappings()
+                .one()
+            )
+            trade_service._retire(con, previous, "SUPERSEDED")
+            successor_id, at = str(uuid4()), stamp()
+            insert(
+                con,
+                "trades",
+                {
+                    **dict(previous),
+                    "id": successor_id,
+                    "revision": revision,
+                    "supersedes_id": current_id,
+                    "created_at": at,
+                    "updated_at": at,
+                },
+            )
+            successor = (
+                con.exec_driver_sql("SELECT * FROM trades WHERE id=?", (successor_id,))
+                .mappings()
+                .one()
+            )
+            if problem == "missing_current_audit" and revision == 3:
+                current_id = successor_id
+                continue
+            request_id = str(uuid4())
+            mismatch = (problem == "mismatched_early_link" and revision == 2) or (
+                problem == "both" and revision == 3
+            )
+            before = {"synthetic": "unrelated predecessor"} if mismatch else dict(previous)
+            audit(
+                con,
+                book["owner"]["id"],
+                "trade",
+                successor_id,
+                "REVISE",
+                request_id=request_id,
+                before=before,
+                after=trade_service.as_trade(successor).model_dump(mode="json"),
+                reason="Correct this synthetic scheduled trade",
+            )
+            trade_audit.remember_created(
+                con, UUID(book["owner"]["id"]), UUID(successor_id), UUID(request_id)
+            )
+            current_id = successor_id
+    snapshot = database_snapshot(engine)
+    change = (
+        {**body, "quantity": "12", "reason": "Correct this synthetic scheduled trade"}
+        if method == "PATCH"
+        else {"reason": "Void this synthetic scheduled trade"}
+    )
+    response = await client.request(
+        method, f"/api/v1/trades/{current_id}", json=change, headers=version_headers(client, 1)
+    )
+    expected = (
+        (409, "NEEDS_REVIEW")
+        if problem in {"missing_ancestor_audit", "missing_current_audit"}
+        else (503, "TRADE_AUDIT_UNAVAILABLE")
+    )
+    assert response.status_code == expected[0]
+    assert response.json()["code"] == expected[1]
+    assert response.headers["cache-control"] == "no-store"
+    assert current_id not in response.text
+    assert database_snapshot(engine) == snapshot
 
 
 async def test_create_capture_failure_rolls_back_every_financial_side_effect(

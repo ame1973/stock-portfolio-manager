@@ -66,48 +66,18 @@ def _capture_trade_origin(con: Connection, auth: Auth, row: RowMapping, request_
         raise ApiError(409, "INACTIVE_FACT", "Use the current trade revision")
     identifier = row["id"]
     try:
-        reviewed_ids = con.execute(
-            text("""
-            SELECT DISTINCT t.id FROM trades t
-            JOIN trade_history_reviews r ON r.trade_id=t.id
-            WHERE t.root_id=:root
-        """),
-            {"root": row["root_id"]},
-        ).scalars()
-        missing_creation = False
-        for reviewed_id in reviewed_ids:
-            reviews = trade_history_review.history(con, auth.owner.id, UUID(reviewed_id))
-            if not reviews:
-                raise ValueError("Invalid reviewed trade history")
-            missing_creation |= any(item.gap == "MISSING_CREATION_AUDIT" for item in reviews)
+        requires_review = trade_history_review.correction_requires_review(
+            con, auth.owner.id, UUID(identifier)
+        )
     except (ValueError, SQLAlchemyError):
         raise ApiError(
             503, "TRADE_AUDIT_UNAVAILABLE", "Trade audit history is unavailable"
         ) from None
-    if missing_creation:
+    if requires_review:
         raise ApiError(
             409,
             "NEEDS_REVIEW",
-            "A previously missing trade audit requires review before correction",
-        )
-    origin = con.execute(
-        text("SELECT 1 FROM trade_audit_origins WHERE trade_id=:id"), {"id": identifier}
-    ).first()
-    if (
-        origin is None
-        and con.execute(
-            text("""
-            SELECT 1 FROM audit_events WHERE entity_type='trade' AND entity_id=:id
-            AND action=:action LIMIT 1
-        """),
-            {"id": identifier, "action": "CREATE" if row["revision"] == 1 else "REVISE"},
-        ).first()
-        is None
-    ):
-        raise ApiError(
-            409,
-            "NEEDS_REVIEW",
-            "The original trade audit is missing; review is required before correction",
+            "A missing trade creation audit requires review before correction",
         )
     try:
         trade_audit.capture_before_retire(con, auth.owner.id, UUID(identifier), UUID(request_id))
