@@ -341,14 +341,54 @@ revision sequence and canonical dates; it rejects updates, deletions, replacemen
 and conflicting version/request identities. It cannot authenticate a session,
 verify an audit fingerprint, select an effective setting, prove eligibility or
 confirm actual withholding. SQL-shaped rows are not an income record or grant.
-There is no application writer, reader, projection provenance linkage or tax
-confirmation workflow yet. A later protected writer must validate the entire
-history and source, authenticate, and atomically invalidate affected projections;
-a future projection writer must record the selected setting and observed history
-head, revalidate them in the current writer transaction and retain `ESTIMATED`
-separately from computational quality. Existing projection fingerprints must not
-be changed. Downgrade refuses to remove history; restore a validated pre-upgrade
-backup instead.
+The separate internal controller below validates audit content and selection; there
+is still no protected tax-setting API, projection provenance linkage or confirmed-tax
+workflow. A future projection writer must retain the selected setting, observed
+history head and effective day, revalidate them in its own writer transaction, and
+keep `ESTIMATED` separate from computational quality. Existing projection
+fingerprints must not be changed. Downgrade refuses to remove history; restore a
+validated pre-upgrade backup instead.
+
+## Audited internal tax-setting controller
+
+`dividend_tax_service.history` reads one owner's explicit physical event revision
+and account in a single transaction. It validates the complete retained setting
+chain and event history, owner and original portfolio/broker scope, chronological
+predecessors and canonical audit fingerprints. Missing or foreign scope returns
+`None`; an owned scope without decisions returns an empty history, not a zero
+rate. Inconsistent history fails closed with a fixed error, and private identifiers,
+rates and reasons are omitted from object representations. Matching fingerprints
+show consistency of retained records, not session authentication, actual withholding,
+complete ownership or an entitlement.
+
+`select` uses a caller-supplied tax-effective calendar day. Of the decisions no
+later than that day, the one with the latest effective date wins; a later decision
+wins a same-day tie. An explicit `UNKNOWN` masks older estimates, and no applicable
+decision is `MISSING`. Selection retains the observed complete history head even
+when the selected decision is older or none applies. A supplied historical prefix
+can reproduce an earlier view; selection alone does not prove that a caller supplied
+the complete database history. Later backdated decisions do not rewrite a retained
+snapshot. No date is guessed from ex-date, exchange, receipt date or `as_of`.
+
+`save` rechecks the active owner, current event source and exact account/portfolio/
+broker versions inside a serialized writer. It appends a reasoned `ESTIMATED` or
+`UNKNOWN` decision, canonical audit and portfolio invalidation together. An explicit
+zero estimate is valid. A completed identical request replays its original decision
+without writes even after later changes; a new request must pass current checks.
+A caught failure rolls back the decision, audit and invalidation; an uncertain
+savepoint outcome aborts the enclosing transaction. `require_current` independently
+rechecks current event/source, the full setting history, its exact observed head and
+the selected account/broker scope. Callers must repeat that check after a relevant
+change even within the same transaction. Both return `OWNER_ESTIMATE_ONLY`, never
+confirmed tax. Reasons are retained in the local audit; do not include passwords or
+provider credentials in them.
+
+These are internal primitives, not an HTTP authorization or idempotency boundary.
+A protected API must recheck session and CSRF and commit its idempotency receipt in
+the same transaction. No current projection, event revision, receipt, cash or FX is
+created or changed here, and no provider request or credential-file read is made.
+An economic writer still needs independent current recorded eligibility, event-state,
+fee/FX provenance, authentication and atomic reconciliation checks.
 
 ## Internal retained-projection history reader
 
@@ -1018,6 +1058,13 @@ record a financial fact.
 projection components against the underlying unrounded arithmetic, preserving
 missing FX and unresolved states while rejecting inconsistent snapshots. It does
 not establish that the supplied event, shares or settings are authentic.
+
+`uv run pytest tests/test_dividend_tax_migration.py tests/test_dividend_tax_service.py`
+checks immutable setting storage, audited history, explicit effective-day/head
+selection, current source and account revalidation, zero versus unknown, historical
+replay, competing decisions and transaction failure rollback. Synthetic old receipts,
+locked FX and projection rows remain unchanged. These checks do not authenticate an
+HTTP caller or establish withholding, ownership or income.
 
 `uv run pytest tests/test_dividend_projection_migration.py` exercises isolated
 upgrade/rollback and private backup, immutable version chains, owner and current
