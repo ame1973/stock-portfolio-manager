@@ -106,8 +106,10 @@ even after a later source/action change or receipt. A new candidate use is not
 such a replay and must pass current-scope checks again.
 
 **Projection safety fence:** if *any* prior revision of an event has an
-entitlement, this internal writer rejects a new revision—even a verification with
-unchanged terms—until an atomic projection rebuild is installed. Repointing the
+entitlement, or the event has a stored projection version, this internal writer
+rejects a new revision—even a verification with unchanged terms—until an atomic
+projection rebuild is installed. The projection-history migration also blocks
+publication through direct SQL while any projection version exists. Repointing the
 current event without replacing the applicable projection could otherwise hide
 old entitlements and receipts. Initial decisions only invalidate affected
 portfolios; they do not calculate entitlements or create actual receipts. A
@@ -255,6 +257,49 @@ stored event/ledger and current eligibility in the same writer transaction, and
 apply ex-date recognition rules: an upcoming projection is not accrued income.
 No current source or event writer calls this selector yet; the existing event
 revision fence remains in place until atomic rebuilding and reconciliation exist.
+
+## Inert projection-version history
+
+Migration `0020_dividend_projection_history` adds an initially empty, append-only
+`dividend_projection_versions` table, bringing this schema revision to 59 business
+tables. It does not modify, reparent or backfill old entitlements, receipts, cash
+postings, historical FX or audit records. Existing receipts stay linked to their
+original entitlement; the new table has no receipt linkage or production
+projection reader or writer.
+
+A version records an explicitly identified managed event, its current physical
+revision and account, a consecutive per-event/account predecessor chain, the
+original portfolio and broker identities, observed account and broker versions,
+portfolio data revision, as-of date, eligibility rule and unverified trade-history
+scopes. These associations remain historical even if an account later moves; a
+consumer must recheck the actual current account, broker and fee settings rather
+than treating a recorded version or portfolio revision alone as a grant. Expected
+amounts retain scaled integer shares, gross, tax, fee, net,
+rounding delta, explicit tax and original-fee snapshots, and the selected FX and
+source. A nonzero fee in a different currency requires an explicit fee conversion
+rate and source. An explicitly zero cross-currency fee can retain its original
+currency with a null conversion rate and source; this does not infer an FX rate.
+Unknown USD/HKD conversion remains independently null with an explicit quality;
+HKD uses an explicit identity rate. `NO_POSITION`, `NEEDS_REVIEW` and `CANCELLED` store no
+invented monetary amounts. These values describe a supplied snapshot, not an
+assertion that a complete account scope or dividend entitlement was established.
+
+SQL checks owner, exact account/portfolio/broker associations and account/broker
+versions, current event revision, portfolio data revision, predecessor, correlated
+audit metadata and canonical timestamp ordering. A snapshot
+cannot predate its event revision or the event's correlated audit. SQL rejects
+mutation, deletion, replacement, stale event revisions and malformed value shapes.
+After any version is stored, direct event publication and the internal event writer
+are fenced until
+an atomic rebuild is implemented; historical decision replay remains read-only.
+These checks cannot authenticate the caller, verify canonical audit fingerprints,
+prove eligibility or validate the economic calculation. A valid-shaped false audit
+or amount can still pass SQL. The table itself must not be consumed as a financial
+grant, an income record or a receipt. Future protected consumers must recheck the
+complete current scope and arrange event publication, all affected projections,
+receipt reconciliation, audit and idempotency in one transaction; that work must
+replace the temporary publication fence deliberately. Downgrade refuses to remove
+history: restore a validated pre-upgrade backup instead.
 
 ## Inert trade-audit origin storage
 
@@ -446,7 +491,7 @@ review is never a recreated creation audit or proof of ownership.
 ## Inert unverified correction authorization storage
 
 Migration `0019_trade_correction_scope` adds an initially empty, append-only
-`trade_correction_authorizations` table, bringing the schema to 58 business
+`trade_correction_authorizations` table, bringing that schema revision to 58 business
 tables. No existing fact, review, receipt or audit is rewritten. A record stores
 one corrected physical trade, the resulting revision or void, the correlated
 request and audit, an intent hash, and a JSON array of review pins. Each pin
@@ -753,15 +798,16 @@ publication but cannot prove that every prerequisite was created in the same
 transaction or that an entitlement amount was calculated correctly.
 
 The reference schema has `UNIQUE(revision_id, account_id)` for entitlements.
-Managed entitlement snapshots are protected from in-place rewrites, so this
+Managed entitlement snapshots are protected from in-place rewrites, so that
 schema alone cannot retain multiple projection versions for the same event
-revision and account. A subsequent projection-history migration and rebuild
-controller are required before supporting corrections to eligibility within one
-revision. They must preserve old receipt links, aggregate active receipts by
-stable event/account/currency across revisions, and treat cross-currency or missing
-FX as review rather than inventing a rate. For example, an expected 10 USD with
-6 USD received, later accepted as 11 USD, leaves 6 received and 5 outstanding;
-the old and new expectations must not be added together.
+revision and account. The separate history table can retain multiple supplied
+versions without changing those entitlements, but a protected rebuild controller
+and receipt linkage are still required before economic use. They must preserve
+old receipt links, aggregate active receipts by stable event/account/currency across
+revisions, and treat cross-currency or missing FX as review rather than inventing a
+rate. For example, an expected 10 USD with 6 USD received, later accepted as 11
+USD, leaves 6 received and 5 outstanding; the old and new expectations must not be
+added together.
 
 Receipt creation still requires a protected writer to insert the actual receipt,
 its cash posting, audit, idempotency record and invalidation together. Likewise,
@@ -857,6 +903,13 @@ endpoints.
 checks pure current-version selection, exact rounding, independent event/account
 identities, cross-revision partial receipts and rejection of missing or corrupt
 projection chains. These cases do not exercise a persistent projection writer.
+
+`uv run pytest tests/test_dividend_projection_migration.py` exercises isolated
+upgrade/rollback and private backup, immutable version chains, owner and current
+revision/data-revision fences, competing inserts, integer extremes, nullable FX
+and coexistence with old entitlement/receipt/cash records. It also checks that a
+well-shaped but economically inconsistent row can be stored and cannot advance
+an event. These tests do not authenticate the row or implement a projection writer.
 
 `uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`
 checks migration preservation and rollback, source and candidate scope, publication

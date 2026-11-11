@@ -441,7 +441,11 @@ def save(
                 text("""
                 SELECT 1 FROM dividend_entitlements ent
                 JOIN dividend_event_revisions r ON r.id=ent.revision_id
-                WHERE r.event_id=:id LIMIT 1
+                WHERE r.event_id=:id
+                UNION ALL
+                SELECT 1 FROM dividend_projection_versions projection
+                WHERE projection.event_id=:id
+                LIMIT 1
             """),
                 {"id": str(intent.event_id)},
             ).first()

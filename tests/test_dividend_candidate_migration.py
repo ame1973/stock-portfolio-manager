@@ -105,14 +105,14 @@ def rejected(engine: Engine, values: dict[str, Any], *, replace: bool = False) -
 
 def test_new_current_schema_exposes_only_an_empty_candidate_revision_store(engine: Engine) -> None:
     with unit_of_work(engine) as con:
-        assert schema_head() == "0019_trade_correction_scope"
+        assert schema_head() == "0020_dividend_projection_history"
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert (
             con.exec_driver_sql(
                 "SELECT count(*) FROM sqlite_schema WHERE type='table' "
                 "AND name NOT LIKE 'sqlite_%' AND name<>'alembic_version'"
             ).scalar_one()
-            == 58
+            == 59
         )
 
 
