@@ -209,5 +209,4 @@ with one selected existing event. Both candidate identity and physical revision 
 pinned and revalidated; the review response's `NOT_ADOPTED` label is still not a
 linkage query. Adoption records an owner decision, not verified market history,
 eligible shares, confirmed income or a receipt. The candidate review UI, atomic
-entitlement rebuilding, verification/withdrawal and actual receipt workflow remain
-unfinished.
+entitlement rebuilding, verification and actual receipt workflow remain unfinished.

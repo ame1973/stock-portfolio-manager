@@ -52,9 +52,10 @@ def _write_failure(error: events.EventError) -> ApiError:
         "CANDIDATE_SOURCE_CHANGED",
         "DIVIDEND_EVENT_CANDIDATE_ALREADY_USED",
         "DIVIDEND_EVENT_LOCKED",
-        "DIVIDEND_EVENT_WITHDRAWN",
     }:
         return ApiError(409, code, "The candidate cannot be adopted into this event")
+    if code == "DIVIDEND_EVENT_WITHDRAWN":
+        return ApiError(409, code, "The event is already withdrawn")
     if code in {"INVALID_DIVIDEND_EVENT_SCOPE", "INVALID_DIVIDEND_EVENT_DECISION"}:
         return ApiError(422, code, "The dividend event decision is invalid")
     if code == "DIVIDEND_EVENT_VERSION_CONFLICT":
@@ -444,6 +445,69 @@ def _write_candidate(
         raise _unavailable() from None
 
 
+def _write_withdrawal(
+    request: Request,
+    headers: WriteDep,
+    body: models.DividendWithdrawal,
+    *,
+    identifier: UUID,
+    version: int,
+) -> models.DividendEventRecord:
+    payload = {"event_version": version, **body.model_dump(mode="json")}
+
+    def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
+        _observed(con, auth.owner.id, identifier, version, body.revision_id)
+        intent = writer.EventIntent(
+            event_id=identifier,
+            revision_id=uuid4(),
+            revision_no=version + 1,
+            kind="WITHDRAW",
+            citation=body.citation,
+            source_url=body.source_url,
+            reason=body.reason,
+        )
+        saved = writer.save(
+            con, auth.owner.id, intent, at=now(), request_id=UUID(request.state.request_id)
+        )
+        result = _current(saved)
+        _audit_intent(con, auth, request, headers, payload, saved.record)
+        return result
+
+    def replay(con: Connection, auth: Auth, cached: models.DividendEventRecord) -> None:
+        if cached.id != identifier or cached.version != version + 1:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        historical = events.get(con, auth.owner.id, identifier, version=version + 1)
+        if historical is None or _current(historical) != cached:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        record = historical.record
+        if (
+            record.decision_kind != "WITHDRAW"
+            or record.citation != body.citation
+            or record.source_url != body.source_url
+            or record.reason != body.reason
+        ):
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        previous = events.get(con, auth.owner.id, identifier, version=version)
+        if previous is None or previous.record.revision_id != body.revision_id:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        _check_intent(con, auth, request, headers, payload, record)
+
+    try:
+        return mutate(
+            request,
+            headers,
+            payload,
+            models.DividendEventRecord,
+            action,
+            reauth=True,
+            validate_replay=replay,
+        )
+    except events.EventError as error:
+        raise _write_failure(error) from None
+    except (ValueError, TypeError, KeyError, OverflowError, PydanticSerializationError):
+        raise _unavailable() from None
+
+
 @router.post(
     "",
     status_code=201,
@@ -488,6 +552,24 @@ def revise_from_candidate(
     version: DividendEventVersionDep,
 ) -> models.DividendEventRecord:
     result = _write_candidate(request, headers, body, identifier=event_id, version=version)
+    response.headers["ETag"] = f'"{result.version}"'
+    return result
+
+
+@router.post(
+    "/{event_id}/withdraw",
+    operation_id="withdraw_dividend_event",
+    responses={409: {"model": Error}, 412: {"model": Error}},
+)
+def withdraw_event(
+    event_id: UUID,
+    body: models.DividendWithdrawal,
+    request: Request,
+    response: Response,
+    headers: WriteDep,
+    version: DividendEventVersionDep,
+) -> models.DividendEventRecord:
+    result = _write_withdrawal(request, headers, body, identifier=event_id, version=version)
     response.headers["ETag"] = f'"{result.version}"'
     return result
 

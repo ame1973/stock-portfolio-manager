@@ -57,6 +57,14 @@ class CandidateEventRevision(CandidateEventSelection):
     confirmation: Literal["MATCH_EXISTING_EVENT"]
 
 
+class DividendWithdrawal(Model):
+    revision_id: UUID = Field(repr=False)
+    confirmation: Literal["WITHDRAW_EVENT"]
+    citation: CitationReference = Field(repr=False)
+    source_url: EvidenceUrl | None = Field(default=None, repr=False)
+    reason: Reason = Field(repr=False)
+
+
 class EventReference(Model):
     citation: CitationReference = Field(repr=False)
     url: EvidenceUrl | None = Field(repr=False)

@@ -1170,3 +1170,45 @@ async def test_openapi_requires_security_version_pins_and_explicit_identity_choi
         } <= set(schema["required"])
         assert schema["properties"]["confirmation"]["const"] == confirmation
     assert "revision_id" in schemas["CandidateEventRevision"]["required"]
+
+
+async def test_owner_can_withdraw_after_candidate_and_basis_change(
+    candidate_book: dict[str, Any],
+    selected: dict[str, Any],
+    client: httpx.AsyncClient,
+    engine: Engine,
+) -> None:
+    adopted = await client.post(
+        f"{PATH}/from-candidate", json=create_body(selected), headers=write_headers(client)
+    )
+    assert adopted.status_code == 201, adopted.text
+    event = adopted.json()
+    dismissed = await client.patch(
+        f"{CANDIDATES}/{selected['id']}",
+        json={**candidate_payload(candidate_book), "state": "DISMISSED", "matches": []},
+        headers=version_headers(client, 1),
+    )
+    assert dismissed.status_code == 200, dismissed.text
+    action = await client.patch(
+        f"/api/v1/corporate-actions/{candidate_book['action']['id']}",
+        json={**candidate_book["action_body"], "ratio_numerator": "2", "ratio_denominator": "1"},
+        headers=version_headers(client, 1),
+    )
+    assert action.status_code == 200, action.text
+    before = database_snapshot(engine)
+    result = await client.post(
+        f"{PATH}/{event['id']}/withdraw",
+        json={
+            "revision_id": event["current_revision_id"],
+            "confirmation": "WITHDRAW_EVENT",
+            "citation": "Synthetic owner withdrawal reference",
+            "reason": REASON,
+        },
+        headers=version_headers(client, 1),
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["workflow_status"] == "WITHDRAWN"
+    assert result.json()["dps"] == event["dps"]
+    assert result.json()["eligibility_scope"] == "NOT_ESTABLISHED"
+    only_event_writes(before, database_snapshot(engine))
+    safe(result)

@@ -107,9 +107,9 @@ workflow decision, not proof that a document was fetched or authenticated.
 Citation URLs containing a query or fragment are withheld rather than returned with
 private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
-cash or historical FX. Protected candidate adoption is described below; verification,
-withdrawal and the dividend browser workspace remain unfinished. The existing event
-revision fence is unchanged.
+cash or historical FX. Protected candidate adoption and owner-confirmed withdrawal
+are described below; verification and the dividend browser workspace remain unfinished.
+The existing event revision fence is unchanged.
 
 ## Protected manual event writes
 
@@ -174,9 +174,9 @@ result fails closed with 503, without attempting repair. Responses are private a
 The existing publication fence rejects **every** new revision when any prior revision
 has an entitlement or the event has projection history, until a future atomic rebuild
 and reconciliation workflow can preserve all receipt associations. Neither manual
-write calculates holdings, posts receipts or changes cash or locked FX. Explicit
-verification/withdrawal, projection rebuilding, receipt posting and the browser
-dividend workspace are separate unfinished work.
+write calculates holdings, posts receipts or changes cash or locked FX. Protected
+withdrawal is described below; explicit verification, projection rebuilding, receipt
+posting and the browser dividend workspace are separate unfinished work.
 
 ## Protected candidate adoption
 
@@ -225,6 +225,51 @@ and inconsistent retained history fails closed with 503. Responses are `no-store
 and explicitly retain `OWNER_EVENT_DECISION_ONLY`, `REVALIDATION_REQUIRED`,
 `document_verification=NOT_ESTABLISHED` and `eligibility_scope=NOT_ESTABLISHED`.
 No provider is contacted and no entitlement, receipt, cash or locked FX is changed.
+
+## Protected event withdrawal
+
+`POST /api/v1/dividends/events/{event_id}/withdraw` records a specific owner's
+explicit decision to withdraw one observed event revision. It requires the current
+physical revision ID, the quoted current version in `If-Match`, an owner reference,
+a reason and the exact `WITHDRAW_EVENT` confirmation. For example:
+
+```json
+{
+  "revision_id": "00000000-0000-4000-8000-000000000002",
+  "confirmation": "WITHDRAW_EVENT",
+  "citation": "Synthetic withdrawal notice reviewed by owner",
+  "source_url": null,
+  "reason": "Synthetic owner-confirmed withdrawal decision"
+}
+```
+
+An optional HTTP(S) `source_url` is retained as an owner-provided reference, never
+fetched or independently authenticated by this operation. URLs with queries or
+fragments are withheld in responses; credentials are not permitted in a URL and
+should never be placed in the citation or reason. A missing provider response never
+withdraws an event automatically.
+
+The endpoint requires the active owner session, matching Origin, CSRF, an idempotency
+key and recent password confirmation. The short serialized writer checks the exact
+observed event and retained history, then appends the withdrawal decision and its
+audits together with applicable portfolio invalidations and the idempotency response.
+It preserves the earlier terms and manual lock. A withdrawn event can only be reopened
+by a separate explicit manual revision, with the applicable reopen and unlock
+confirmations. A new key attempting to withdraw an already withdrawn event returns
+409; stale event pins return 412.
+
+An unchanged completed retry rechecks authentication, the full retained history,
+the original unredacted reference and request binding, and returns its original
+result without writing, even if the event was subsequently reopened. The returned
+ETag describes that historical result; read the event again for its current ETag.
+Changed intent under the same key conflicts and inconsistent history fails closed.
+Responses are private and `no-store`; the owner decision is not document verification
+or an eligibility grant.
+
+The existing publication fence still rejects withdrawal when any prior revision has
+an entitlement or the event has projection history. This endpoint does not reverse or
+hide receipts, cash or locked FX and does not replace the future atomic cancellation,
+reconciliation and receipt workflow.
 
 ## Audited internal decision writer
 
@@ -572,9 +617,9 @@ the owner/account scope and retained history remain readable. A changed
 intent under the same key conflicts; stale observed versions return 412. Results are
 `OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`, not confirmed tax, ownership,
 eligibility or income. No endpoint contacts a provider or modifies prior projections,
-receipts, cash or locked FX. Verification/withdrawal, projection rebuilding, receipt
-workflows and a browser tax workspace remain unfinished; these APIs alone do not
-provide a complete dividend workflow.
+receipts, cash or locked FX. Verification, projection rebuilding, receipt workflows
+and a browser tax workspace remain unfinished; these APIs alone do not provide a
+complete dividend workflow.
 
 ## Projection tax provenance
 
@@ -1312,6 +1357,12 @@ shares, demonstrating that this reader does not establish financial authority.
 active-owner and writer boundaries, later candidate changes or dismissals, changed
 basis, explicit manual decisions, same-transaction revalidation and competing
 writers. These synthetic tests establish no ownership or economic authorization.
+
+`uv run pytest tests/test_dividend_withdrawal_api.py` checks explicit withdrawal
+confirmation, physical/version pins, authentication and reauthentication races,
+retained terms and locks, historical replay, competing writes, atomic rollback and
+the existing entitlement/projection fence. Synthetic receipts and locked FX remain
+unchanged; this is not a cancellation/reconciliation or receipt workflow.
 
 `uv run pytest tests/test_dividend_candidate_adoption_api.py` checks the installed
 candidate-adoption routes, explicit distinct/match confirmations and physical pins,
