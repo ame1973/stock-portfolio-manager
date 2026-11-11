@@ -145,7 +145,9 @@ All operations require an owner session and return `Cache-Control: no-store`:
   first with bounded version keyset pagination.
 - `PATCH /api/v1/dividends/candidates/{id}` appends a full explicit revision. It
   requires the observed quoted `If-Match`; stale versions return 412. A candidate
-  cannot move to another security. There is no delete or canonical-adoption action.
+  cannot move to another security. There is no delete or automatic adoption on the
+  candidate resource; the separate protected event endpoints require an explicit
+  distinct-event or existing-event choice.
 
 Create and revise bodies require `state`, explicit `terms`, `matches` and
 `change_reason`. Each match supplies the existing observation UUID, its original
@@ -201,9 +203,11 @@ matches and an actual mock-HTTP source capture. It does not claim a live request
 server-minted identities, exact terms, CAS, concurrent idempotency, historical
 replay, tamper rejection, scope corruption, limits and physical keyset pages.
 
-The candidate review UI, protected canonical event workflow, entitlement rebuilding
-and actual receipts remain unfinished. The separate [event integrity foundation](EVENTS.md)
-includes an internal decision writer that can retain explicitly selected candidate
-lineage, but the candidate API itself does not publish an event. A current
-observation, hint or candidate result is never a claim of confirmed income or a
-current-use grant for a split-basis declaration.
+The [protected candidate-adoption endpoints](EVENTS.md#protected-candidate-adoption)
+let the owner create a distinct event or explicitly associate the current candidate
+with one selected existing event. Both candidate identity and physical revision are
+pinned and revalidated; the review response's `NOT_ADOPTED` label is still not a
+linkage query. Adoption records an owner decision, not verified market history,
+eligible shares, confirmed income or a receipt. The candidate review UI, atomic
+entitlement rebuilding, verification/withdrawal and actual receipt workflow remain
+unfinished.

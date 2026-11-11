@@ -107,8 +107,9 @@ workflow decision, not proof that a document was fetched or authenticated.
 Citation URLs containing a query or fragment are withheld rather than returned with
 private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
-cash or historical FX. Candidate adoption, verification, withdrawal and the dividend
-browser workspace remain unfinished; the existing event revision fence is unchanged.
+cash or historical FX. Protected candidate adoption is described below; verification,
+withdrawal and the dividend browser workspace remain unfinished. The existing event
+revision fence is unchanged.
 
 ## Protected manual event writes
 
@@ -173,9 +174,57 @@ result fails closed with 503, without attempting repair. Responses are private a
 The existing publication fence rejects **every** new revision when any prior revision
 has an entitlement or the event has projection history, until a future atomic rebuild
 and reconciliation workflow can preserve all receipt associations. Neither manual
-write calculates holdings, posts receipts or changes cash or locked FX. Candidate
-adoption, explicit verification/withdrawal, projection rebuilding, receipt posting
-and the browser dividend workspace are separate unfinished work.
+write calculates holdings, posts receipts or changes cash or locked FX. Explicit
+verification/withdrawal, projection rebuilding, receipt posting and the browser
+dividend workspace are separate unfinished work.
+
+## Protected candidate adoption
+
+These private endpoints record an explicit owner decision; they do not automatically
+merge source observations or establish income:
+
+- `POST /api/v1/dividends/events/from-candidate` creates a **distinct** stable event.
+  Its body requires `confirmation=CREATE_DISTINCT_EVENT`.
+- `POST /api/v1/dividends/events/{event_id}/from-candidate` appends a candidate
+  decision to the **selected existing** stable event. Its body requires
+  `confirmation=MATCH_EXISTING_EVENT` and the observed event `current_revision_id`
+  as `revision_id`; `If-Match` carries the quoted observed event version.
+
+Both bodies require the selected stable `candidate_id`, physical
+`candidate_revision_id`, integer `candidate_version` and a reason. For example:
+
+```json
+{
+  "candidate_id": "00000000-0000-4000-8000-000000000001",
+  "candidate_revision_id": "00000000-0000-4000-8000-000000000002",
+  "candidate_version": 1,
+  "confirmation": "CREATE_DISTINCT_EVENT",
+  "reason": "Synthetic explicit candidate association"
+}
+```
+
+The server rechecks the active owner, current open candidate and exact physical
+revision, its audited source associations and current recorded basis/actions inside
+the writer. Missing ex-date, DPS or currency is not filled; a complete candidate
+with conflicting or absent evidence retains `CONFLICT` or `INCOMPLETE` and opens
+an evidence review. A candidate already linked to a stable event cannot be linked
+to a different event. Distinct candidates on the same security and ex-date may be
+explicitly recorded as distinct events. A candidate cannot replace a locked or
+withdrawn event, change an existing event's security, or bypass the publication
+fence when entitlements or projection history already exist.
+
+Both operations require the session, matching Origin, CSRF, idempotency key and
+recent password confirmation. The event decision, links, audits, relevant review
+and portfolio invalidation, and serialized idempotency response commit together.
+An unchanged completed retry checks the current session and the complete retained
+event/candidate history and original intent, then returns its original result without
+writing. A later candidate dismissal, basis change or event revision does not turn
+that historical response into a new current-use grant; read the event again for its
+current ETag. Changed intent under the same key conflicts, stale pins return 412,
+and inconsistent retained history fails closed with 503. Responses are `no-store`
+and explicitly retain `OWNER_EVENT_DECISION_ONLY`, `REVALIDATION_REQUIRED`,
+`document_verification=NOT_ESTABLISHED` and `eligibility_scope=NOT_ESTABLISHED`.
+No provider is contacted and no entitlement, receipt, cash or locked FX is changed.
 
 ## Audited internal decision writer
 
@@ -523,9 +572,9 @@ the owner/account scope and retained history remain readable. A changed
 intent under the same key conflicts; stale observed versions return 412. Results are
 `OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`, not confirmed tax, ownership,
 eligibility or income. No endpoint contacts a provider or modifies prior projections,
-receipts, cash or locked FX. Candidate adoption, verification/withdrawal, projection
-rebuilding, receipt workflows and a browser tax workspace remain unfinished; these
-APIs alone do not provide a complete dividend workflow.
+receipts, cash or locked FX. Verification/withdrawal, projection rebuilding, receipt
+workflows and a browser tax workspace remain unfinished; these APIs alone do not
+provide a complete dividend workflow.
 
 ## Projection tax provenance
 
@@ -1098,17 +1147,17 @@ receipt grant.
 ## Required future adoption and projection work
 
 These constraints are defense in depth, not authentication, authorization,
-cryptographic validation or an application workflow. SQL checks stored source
-pins and audit hash *shapes*, not their canonical content. A future protected
-candidate-adoption and economic writer must recheck the active session and CSRF,
-original source/candidate audits, canonical hashes, current basis/action scope,
-explicit field-level provenance and
-manual authority inside its own short transaction. It must commit its decision,
-financial projections, audit, idempotency response and invalidations atomically;
-no provider HTTP or private-file reads belong in that transaction. A row or an
-existing audit alone does not grant adoption. The database checks presence at
-publication but cannot prove that every prerequisite was created in the same
-transaction or that an entitlement amount was calculated correctly.
+cryptographic validation or a complete application workflow. SQL checks stored
+source pins and audit hash *shapes*, not their canonical content. The protected
+candidate-adoption API rechecks the active session and CSRF, original source/candidate
+audits, canonical hashes and current basis/action scope inside its short transaction.
+A future economic writer must independently recheck these and all applicable
+eligibility and financial provenance in its own transaction. It must commit financial
+projections, audit, idempotency response and invalidations atomically; no provider HTTP
+or private-file reads belong in that transaction. A row or an existing audit alone
+does not grant economic use. The database checks presence at publication but cannot
+prove that every prerequisite was created in the same transaction or that an
+entitlement amount was calculated correctly.
 
 The reference schema has `UNIQUE(revision_id, account_id)` for entitlements.
 Managed entitlement snapshots are protected from in-place rewrites, so that
@@ -1263,6 +1312,13 @@ shares, demonstrating that this reader does not establish financial authority.
 active-owner and writer boundaries, later candidate changes or dismissals, changed
 basis, explicit manual decisions, same-transaction revalidation and competing
 writers. These synthetic tests establish no ownership or economic authorization.
+
+`uv run pytest tests/test_dividend_candidate_adoption_api.py` checks the installed
+candidate-adoption routes, explicit distinct/match confirmations and physical pins,
+owner/session/CSRF/reauthentication races, same-day identities, preserved unresolved
+assessments, publication fences, zero-write replay and atomic rollback. It uses
+isolated synthetic data and does not establish document verification, eligibility,
+provider coverage or a receipt workflow.
 
 `uv run pytest tests/test_dividend_event_write_api.py` checks protected manual
 creation and revision, explicit lock/reopen confirmation, exact DPS, session and

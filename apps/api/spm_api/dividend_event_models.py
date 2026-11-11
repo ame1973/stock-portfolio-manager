@@ -41,6 +41,22 @@ class ManualEventRevision(ManualEventCreate):
     confirm_reopen: bool = Field(default=False, strict=True)
 
 
+class CandidateEventSelection(Model):
+    candidate_id: UUID = Field(repr=False)
+    candidate_revision_id: UUID = Field(repr=False)
+    candidate_version: Version
+    reason: Reason = Field(repr=False)
+
+
+class CandidateEventCreate(CandidateEventSelection):
+    confirmation: Literal["CREATE_DISTINCT_EVENT"]
+
+
+class CandidateEventRevision(CandidateEventSelection):
+    revision_id: UUID = Field(repr=False)
+    confirmation: Literal["MATCH_EXISTING_EVENT"]
+
+
 class EventReference(Model):
     citation: CitationReference = Field(repr=False)
     url: EvidenceUrl | None = Field(repr=False)

@@ -57,6 +57,11 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "post",
         ): "revise_unverified_trade",
         ("/api/v1/trades/{id}/unverified-corrections/void", "post"): "void_unverified_trade",
+        ("/api/v1/dividends/events/from-candidate", "post"): "create_dividend_event_from_candidate",
+        (
+            "/api/v1/dividends/events/{event_id}/from-candidate",
+            "post",
+        ): "revise_dividend_event_from_candidate",
         ("/api/v1/dividends/events/{event_id}", "get"): "get_dividend_event",
         ("/api/v1/dividends/events/{event_id}", "patch"): "revise_dividend_event",
         (
