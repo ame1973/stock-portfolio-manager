@@ -24,7 +24,12 @@ from spm_api.master_service import invalidate_portfolio
 from spm_api.mutations import mutate
 from spm_api.providers.configuration import ProviderConfigurationStore
 from spm_api.providers.http import ProviderHTTP
-from spm_api.security import COOKIE, CSRF_COOKIE, issue_session
+from spm_api.security import (
+    COOKIE,
+    CSRF_COOKIE,
+    issue_session,
+    matching_dividend_event_version,
+)
 from tests.helpers import (
     PASSWORD,
     create,
@@ -1011,5 +1016,5 @@ async def test_replay_requires_original_setting_in_complete_retained_history(
 @pytest.mark.parametrize("header", ['"0"', '"01"', "1", '"1\n"', '"abc"'])
 async def test_internal_event_version_guard_rejects_noncanonical_headers(header: str) -> None:
     with pytest.raises(ApiError) as error:
-        routes._version(header)
+        matching_dividend_event_version(header)
     assert error.value.status == 422 and error.value.code == "INVALID_EVENT_VERSION"

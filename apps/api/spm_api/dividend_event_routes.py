@@ -1,8 +1,8 @@
-"""Read owned audited dividend events without granting present economic use."""
+"""Protected event decisions without granting present economic use."""
 
 from typing import Any
 from urllib.parse import urlsplit
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request, Response
 from pydantic_core import PydanticSerializationError
@@ -10,14 +10,17 @@ from sqlalchemy import Connection, RowMapping, text
 
 import spm_api.dividend_event_models as models
 import spm_api.dividend_event_service as events
+import spm_api.dividend_event_writer as writer
+from spm_api.audit import audit, canonical, digest, now
 from spm_api.candidate_models import CandidateAssessment, CandidateEvidenceCheck
 from spm_api.db import unit_of_work
 from spm_api.decimal_types import IsoDate
-from spm_api.dividend_evidence import EvidenceAssessment
+from spm_api.dividend_evidence import DividendTerms, EvidenceAssessment
 from spm_api.errors import ApiError, Error
 from spm_api.master_service import security_row
+from spm_api.mutations import check_version, mutate
 from spm_api.pagination import Page, PageDep, paginate, validate_date_page, validate_version_page
-from spm_api.security import AuthDep
+from spm_api.security import Auth, AuthDep, DividendEventVersionDep, WriteDep
 
 router = APIRouter(
     prefix="/api/v1/dividends/events",
@@ -28,6 +31,27 @@ router = APIRouter(
 
 def _unavailable() -> ApiError:
     return ApiError(503, "DIVIDEND_EVENT_HISTORY_UNAVAILABLE", "The event cannot be read safely")
+
+
+def _write_failure(error: events.EventError) -> ApiError:
+    code = str(error)
+    if code in {"DIVIDEND_EVENT_NOT_FOUND", "DIVIDEND_EVENT_SECURITY_UNAVAILABLE"}:
+        return ApiError(404, "NOT_FOUND", "Dividend event or security not found")
+    if code == "DIVIDEND_EVENT_OWNER_UNAVAILABLE":
+        return ApiError(401, "UNAUTHORIZED", "Authentication is required")
+    if code in {"INVALID_DIVIDEND_EVENT_SCOPE", "INVALID_DIVIDEND_EVENT_DECISION"}:
+        return ApiError(422, code, "The dividend event decision is invalid")
+    if code == "DIVIDEND_EVENT_VERSION_CONFLICT":
+        return ApiError(412, "PRECONDITION_FAILED", "The observed event changed; reload it")
+    if code in {
+        "DIVIDEND_EVENT_PROJECTION_REQUIRED",
+        "DIVIDEND_EVENT_SECURITY_CHANGED",
+        "DIVIDEND_EVENT_REVISION_CONFLICT",
+        "DIVIDEND_EVENT_TIME_CONFLICT",
+        "DIVIDEND_EVENT_VERSION_EXHAUSTED",
+    }:
+        return ApiError(409, code, "The dividend event decision cannot be accepted")
+    return _unavailable()
 
 
 def _owned(
@@ -143,6 +167,180 @@ def _history_row(
     if str(review.record.revision_id) != row["id"]:
         raise ValueError("Inconsistent revision identity")
     return _revision(review)
+
+
+def _terms(body: models.ManualEventCreate) -> DividendTerms:
+    return DividendTerms.model_validate(body.model_dump(include=set(DividendTerms.model_fields)))
+
+
+def _binding(
+    request: Request,
+    headers: WriteDep,
+    payload: dict[str, Any],
+    record: events.EventRevision,
+) -> dict[str, object]:
+    return {
+        "event_id": str(record.event_id),
+        "revision_id": str(record.revision_id),
+        "revision_no": record.revision_no,
+        "route": f"{request.method} {request.url.path}",
+        "key_sha256": digest(headers.key),
+        "intent_sha256": digest(canonical(payload)),
+    }
+
+
+def _write_manual(
+    request: Request,
+    headers: WriteDep,
+    body: models.ManualEventCreate,
+    *,
+    identifier: UUID | None,
+    version: int | None,
+) -> models.DividendEventRecord:
+    payload = body.model_dump(mode="json")
+    if version is not None:
+        payload = {"event_version": version, **payload}
+    terms = _terms(body)
+
+    def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
+        if identifier is None:
+            event_id, next_version = uuid4(), 1
+        else:
+            assert version is not None and isinstance(body, models.ManualEventRevision)
+            previous = _owned(con, auth.owner.id, identifier).record
+            check_version(previous.revision_no, version)
+            if previous.revision_id != body.revision_id:
+                raise ApiError(412, "PRECONDITION_FAILED", "The observed event changed; reload it")
+            if version == 2_147_483_647:
+                raise events.EventError("DIVIDEND_EVENT_VERSION_EXHAUSTED")
+            if previous.review_status == "WITHDRAWN" and not body.confirm_reopen:
+                raise ApiError(
+                    409, "DIVIDEND_EVENT_REOPEN_CONFIRMATION_REQUIRED", "Confirm reopening"
+                )
+            if previous.manual_locked and not body.confirm_unlock:
+                raise ApiError(
+                    409, "DIVIDEND_EVENT_UNLOCK_CONFIRMATION_REQUIRED", "Confirm unlocking"
+                )
+            event_id, next_version = identifier, version + 1
+        intent = writer.EventIntent(
+            event_id=event_id,
+            revision_id=uuid4(),
+            revision_no=next_version,
+            kind="MANUAL",
+            terms=terms,
+            citation=body.citation,
+            source_url=body.source_url,
+            reason=body.reason,
+        )
+        saved = writer.save(
+            con, auth.owner.id, intent, at=now(), request_id=UUID(request.state.request_id)
+        )
+        result = _current(saved)
+        audit(
+            con,
+            str(auth.owner.id),
+            "dividend_event_revision",
+            str(saved.record.revision_id),
+            "DIVIDEND_EVENT_HTTP_INTENT",
+            request_id=str(saved.record.request_id),
+            after=_binding(request, headers, payload, saved.record),
+        )
+        return result
+
+    def replay(con: Connection, auth: Auth, cached: models.DividendEventRecord) -> None:
+        expected = 1 if version is None else version + 1
+        if cached.version != expected or (identifier is not None and cached.id != identifier):
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        historical = events.get(con, auth.owner.id, cached.id, version=expected)
+        if historical is None or _current(historical) != cached:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        record = historical.record
+        if (
+            record.decision_kind != "MANUAL"
+            or record.terms != terms
+            or record.citation != body.citation
+            or record.source_url != body.source_url
+            or record.reason != body.reason
+            or record.review_status
+            != ("PROVISIONAL" if terms.adjustment_basis == "AS_DECLARED" else "INCOMPLETE")
+        ):
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        if version is not None:
+            assert isinstance(body, models.ManualEventRevision)
+            previous = events.get(con, auth.owner.id, cached.id, version=version)
+            if (
+                previous is None
+                or previous.record.revision_id != body.revision_id
+                or (previous.record.manual_locked and not body.confirm_unlock)
+                or (previous.record.review_status == "WITHDRAWN" and not body.confirm_reopen)
+            ):
+                raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        rows = con.execute(
+            text("""
+            SELECT owner_id,request_id,reason,before_sha256,after_sha256 FROM audit_events
+            WHERE entity_type='dividend_event_revision' AND entity_id=:revision
+              AND action='DIVIDEND_EVENT_HTTP_INTENT'
+        """),
+            {"revision": str(record.revision_id)},
+        ).all()
+        expected_audit = (
+            str(auth.owner.id),
+            str(record.request_id),
+            "",
+            None,
+            digest(canonical(_binding(request, headers, payload, record))),
+        )
+        if len(rows) != 1 or tuple(rows[0]) != expected_audit:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+
+    try:
+        return mutate(
+            request,
+            headers,
+            payload,
+            models.DividendEventRecord,
+            action,
+            status=201 if identifier is None else 200,
+            reauth=True,
+            validate_replay=replay,
+        )
+    except events.EventError as error:
+        raise _write_failure(error) from None
+    except (ValueError, TypeError, KeyError, OverflowError, PydanticSerializationError):
+        raise _unavailable() from None
+
+
+@router.post(
+    "",
+    status_code=201,
+    operation_id="create_manual_dividend_event",
+    responses={409: {"model": Error}, 412: {"model": Error}},
+)
+def create_manual_event(
+    body: models.ManualEventCreate, request: Request, response: Response, headers: WriteDep
+) -> models.DividendEventRecord:
+    result = _write_manual(request, headers, body, identifier=None, version=None)
+    response.headers["Location"] = f"/api/v1/dividends/events/{result.id}"
+    response.headers["ETag"] = f'"{result.version}"'
+    return result
+
+
+@router.patch(
+    "/{event_id}",
+    operation_id="revise_dividend_event",
+    responses={409: {"model": Error}, 412: {"model": Error}},
+)
+def revise_manual_event(
+    event_id: UUID,
+    body: models.ManualEventRevision,
+    request: Request,
+    response: Response,
+    headers: WriteDep,
+    version: DividendEventVersionDep,
+) -> models.DividendEventRecord:
+    result = _write_manual(request, headers, body, identifier=event_id, version=version)
+    response.headers["ETag"] = f'"{result.version}"'
+    return result
 
 
 @router.get("", operation_id="list_dividend_events")

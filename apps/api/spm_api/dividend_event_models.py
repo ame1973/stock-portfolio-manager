@@ -20,6 +20,27 @@ from spm_api.master_models import Currency
 from spm_api.providers.base import AdjustmentBasis, CitationReference, EventType
 
 
+class ManualEventCreate(Model):
+    security_id: UUID = Field(repr=False)
+    event_type: EventType
+    ex_date: IsoDate
+    announce_date: IsoDate | None = None
+    record_date: IsoDate | None = None
+    pay_date: IsoDate | None = None
+    dps: Dps = Field(repr=False)
+    currency: Currency
+    adjustment_basis: AdjustmentBasis
+    citation: CitationReference = Field(repr=False)
+    source_url: EvidenceUrl | None = Field(default=None, repr=False)
+    reason: Reason = Field(repr=False)
+
+
+class ManualEventRevision(ManualEventCreate):
+    revision_id: UUID = Field(repr=False)
+    confirm_unlock: bool = Field(default=False, strict=True)
+    confirm_reopen: bool = Field(default=False, strict=True)
+
+
 class EventReference(Model):
     citation: CitationReference = Field(repr=False)
     url: EvidenceUrl | None = Field(repr=False)

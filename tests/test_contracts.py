@@ -57,6 +57,24 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "post",
         ): "revise_unverified_trade",
         ("/api/v1/trades/{id}/unverified-corrections/void", "post"): "void_unverified_trade",
+        ("/api/v1/dividends/events/{event_id}", "get"): "get_dividend_event",
+        ("/api/v1/dividends/events/{event_id}", "patch"): "revise_dividend_event",
+        (
+            "/api/v1/dividends/events/{event_id}/revisions",
+            "get",
+        ): "list_dividend_event_revisions",
+        (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings",
+            "get",
+        ): "get_dividend_tax_estimate",
+        (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings",
+            "post",
+        ): "save_dividend_tax_estimate",
+        (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings/history",
+            "get",
+        ): "list_dividend_tax_estimate_history",
         ("/api/v1/dividends/candidates", "get"): "list_dividend_candidates",
         ("/api/v1/dividends/candidates", "post"): "create_dividend_candidate",
         ("/api/v1/dividends/candidates/{id}", "get"): "get_dividend_candidate",

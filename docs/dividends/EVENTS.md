@@ -1,11 +1,11 @@
 # Dividend event integrity foundation
 
-Migration `0016_dividend_event_controls` added database safeguards for a future
+Migration `0016_dividend_event_controls` added database safeguards for an
 owner-controlled dividend workflow. It added two initially empty provenance tables
 and brought that schema revision to 55 business tables. It neither adopts a source
 observation nor installs an entitlement, receipt or reconciliation API. The protected
-read API described below does not create events. An ordinary source sync still cannot
-create canonical income or mark a dividend received.
+manual event writes described below retain decisions but do not create income. An
+ordinary source sync still cannot create canonical income or mark a dividend received.
 
 ## Identity, decisions and evidence
 
@@ -107,8 +107,75 @@ workflow decision, not proof that a document was fetched or authenticated.
 Citation URLs containing a query or fragment are withheld rather than returned with
 private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
-cash or historical FX. An authenticated event-write API and dividend browser workspace
-remain unfinished; the existing event revision fence is unchanged.
+cash or historical FX. Candidate adoption, verification, withdrawal and the dividend
+browser workspace remain unfinished; the existing event revision fence is unchanged.
+
+## Protected manual event writes
+
+`POST /api/v1/dividends/events` creates a new stable event and initial physical
+revision from explicit owner-supplied terms, citation and reason. For example:
+
+```json
+{
+  "security_id": "00000000-0000-4000-8000-000000000003",
+  "event_type": "REGULAR",
+  "ex_date": "2026-01-08",
+  "announce_date": "2025-12-01",
+  "record_date": "2026-01-09",
+  "pay_date": "2026-02-01",
+  "dps": "1.23456789",
+  "currency": "USD",
+  "adjustment_basis": "AS_DECLARED",
+  "citation": "Synthetic distribution reference",
+  "source_url": null,
+  "reason": "Synthetic owner-entered distribution decision"
+}
+```
+
+Dates other than ex-date and the URL may be omitted when unknown. DPS must be an
+exact nonnegative decimal string with at most eight fractional digits; an explicit
+zero remains distinct from missing data. Currency is explicitly HKD or USD, never
+inferred from the security. `AS_DECLARED` creates a provisional owner decision;
+`UNKNOWN` and `SPLIT_ADJUSTED` remain incomplete and open an evidence review. A
+citation can describe a local reference, but neither a citation nor an HTTPS URL
+proves the document was fetched or authenticated. URLs with queries or fragments
+are withheld from responses; the original remains in the private decision record.
+Never include credentials in the citation, URL or reason.
+
+`PATCH /api/v1/dividends/events/{event_id}` requires the complete manual payload,
+the observed `current_revision_id` in `revision_id`, and `If-Match` containing
+its quoted event version. The security cannot be changed on the stable event.
+Replacing a manually locked decision requires `confirm_unlock: true`; reopening a
+withdrawn event requires `confirm_reopen: true`. Both flags are required when both
+conditions apply. These explicit owner actions create a new provisional or incomplete
+physical revision, not a verified document. The earlier revisions and decisions stay
+unchanged. A stale physical ID or version returns 412; an exhausted event version
+cannot be advanced. Two distributions on the same security and ex-date can be distinct
+stable events and are never merged by date.
+
+Both writes require an active owner session, matching Origin, CSRF token, idempotency
+key and recent password confirmation. The serialized writer rechecks session, CSRF,
+reauthentication and the observed event, and commits the decision, correlated audits,
+evidence-review changes, affected portfolio invalidations and idempotency response
+together. An additional append-only audit fingerprints the normalized HTTP intent,
+route, idempotency-key digest and exact event/revision identities, so a cached response
+cannot be swapped with another otherwise identical event. These database fingerprints
+are consistency checks, not signatures or independent document evidence.
+
+A completed unchanged retry reauthenticates and verifies the entire retained event
+history, original unredacted reference, request binding and cached response. It returns
+the original result without writing, even after a later revision; its ETag describes
+that original result, not the current event. Read the event again for its current ETag.
+Reusing a key with different input returns 409. An inconsistent history or cached
+result fails closed with 503, without attempting repair. Responses are private and
+`no-store`.
+
+The existing publication fence rejects **every** new revision when any prior revision
+has an entitlement or the event has projection history, until a future atomic rebuild
+and reconciliation workflow can preserve all receipt associations. Neither manual
+write calculates holdings, posts receipts or changes cash or locked FX. Candidate
+adoption, explicit verification/withdrawal, projection rebuilding, receipt posting
+and the browser dividend workspace are separate unfinished work.
 
 ## Audited internal decision writer
 
@@ -142,9 +209,9 @@ projection rebuild is installed. The projection-history migration also blocks
 publication through direct SQL while any projection version exists. Repointing the
 current event without replacing the applicable projection could otherwise hide
 old entitlements and receipts. Initial decisions only invalidate affected
-portfolios; they do not calculate entitlements or create actual receipts. Any future
-protected revision-write API must retain this fence until it can atomically maintain
-those projections and reconciliation; the receipt workflow remains separate.
+portfolios; they do not calculate entitlements or create actual receipts. The protected
+manual revision API retains this fence until it can atomically maintain those projections
+and reconciliation; the receipt workflow remains separate.
 
 Source, basis and candidate responses use `canonical_adoption_scope=RESPONSE_ONLY_NOT_LINKAGE`
 to make clear that their static `NOT_ADOPTED` marker describes the response itself,
@@ -456,8 +523,9 @@ the owner/account scope and retained history remain readable. A changed
 intent under the same key conflicts; stale observed versions return 412. Results are
 `OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`, not confirmed tax, ownership,
 eligibility or income. No endpoint contacts a provider or modifies prior projections,
-receipts, cash or locked FX. Event-write APIs and a browser tax workspace remain
-unfinished; these APIs alone do not provide a complete dividend workflow.
+receipts, cash or locked FX. Candidate adoption, verification/withdrawal, projection
+rebuilding, receipt workflows and a browser tax workspace remain unfinished; these
+APIs alone do not provide a complete dividend workflow.
 
 ## Projection tax provenance
 
@@ -1027,13 +1095,14 @@ This checks a caller-supplied snapshot only: it does not verify any audit, fee o
 setting, historical holdings, session or current event and is not an eligibility or
 receipt grant.
 
-## Required future protected writer and projection work
+## Required future adoption and projection work
 
 These constraints are defense in depth, not authentication, authorization,
 cryptographic validation or an application workflow. SQL checks stored source
-pins and audit hash *shapes*, not their canonical content. The future protected
-writer must recheck the active session and CSRF, original source/candidate audits,
-canonical hashes, current basis/action scope, explicit field-level provenance and
+pins and audit hash *shapes*, not their canonical content. A future protected
+candidate-adoption and economic writer must recheck the active session and CSRF,
+original source/candidate audits, canonical hashes, current basis/action scope,
+explicit field-level provenance and
 manual authority inside its own short transaction. It must commit its decision,
 financial projections, audit, idempotency response and invalidations atomically;
 no provider HTTP or private-file reads belong in that transaction. A row or an
@@ -1194,6 +1263,12 @@ shares, demonstrating that this reader does not establish financial authority.
 active-owner and writer boundaries, later candidate changes or dismissals, changed
 basis, explicit manual decisions, same-transaction revalidation and competing
 writers. These synthetic tests establish no ownership or economic authorization.
+
+`uv run pytest tests/test_dividend_event_write_api.py` checks protected manual
+creation and revision, explicit lock/reopen confirmation, exact DPS, session and
+reauthentication races, identical same-day event identities, full cached-intent
+binding, publication fences and atomic failure rollback. It uses isolated synthetic
+data and does not establish document verification, eligibility or a receipt workflow.
 
 `uv run pytest tests/test_dividend_event_read_api.py tests/test_dividend_event_candidate_api.py`
 checks the installed owner-only event list, current and historical reads, same-day

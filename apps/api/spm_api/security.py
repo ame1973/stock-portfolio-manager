@@ -1,6 +1,7 @@
 """Opaque sessions, independent CSRF secrets, bootstrap tokens, and durable login limits."""
 
 import hmac
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import timedelta
@@ -142,6 +143,20 @@ def matching_version(
 
 
 VersionDep = Annotated[int, Depends(matching_version)]
+
+
+def matching_dividend_event_version(
+    value: Annotated[str, Header(alias="If-Match", max_length=12, pattern=r'^"[1-9][0-9]{0,9}"$')],
+) -> int:
+    if re.fullmatch(r'"[1-9][0-9]{0,9}"', value) is None:
+        raise ApiError(422, "INVALID_EVENT_VERSION", "The event version is invalid")
+    number = int(value[1:-1])
+    if number > 2_147_483_647:
+        raise ApiError(422, "INVALID_EVENT_VERSION", "The event version is invalid")
+    return number
+
+
+DividendEventVersionDep = Annotated[int, Depends(matching_dividend_event_version)]
 
 
 def require_reauth(auth: Auth) -> None:

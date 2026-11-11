@@ -460,7 +460,8 @@ export interface paths {
         /** List Events */
         get: operations["list_dividend_events"];
         put?: never;
-        post?: never;
+        /** Create Manual Event */
+        post: operations["create_manual_dividend_event"];
         delete?: never;
         options?: never;
         head?: never;
@@ -481,7 +482,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Revise Manual Event */
+        patch: operations["revise_dividend_event"];
         trace?: never;
     };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
@@ -3048,6 +3050,105 @@ export interface components {
              * Format: password
              */
             password: string;
+        };
+        /** ManualEventCreate */
+        ManualEventCreate: {
+            /**
+             * Adjustment Basis
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /** Announce Date */
+            announce_date?: string | null;
+            /** Citation */
+            citation: string;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /** Dps */
+            dps: string;
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "REGULAR" | "SPECIAL" | "INTERIM" | "FINAL" | "SUPPLEMENTAL" | "ETF_DISTRIBUTION" | "REIT_DISTRIBUTION" | "UNKNOWN";
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+            /** Pay Date */
+            pay_date?: string | null;
+            /** Reason */
+            reason: string;
+            /** Record Date */
+            record_date?: string | null;
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Source Url */
+            source_url?: string | null;
+        };
+        /** ManualEventRevision */
+        ManualEventRevision: {
+            /**
+             * Adjustment Basis
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /** Announce Date */
+            announce_date?: string | null;
+            /** Citation */
+            citation: string;
+            /**
+             * Confirm Reopen
+             * @default false
+             */
+            confirm_reopen: boolean;
+            /**
+             * Confirm Unlock
+             * @default false
+             */
+            confirm_unlock: boolean;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /** Dps */
+            dps: string;
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "REGULAR" | "SPECIAL" | "INTERIM" | "FINAL" | "SUPPLEMENTAL" | "ETF_DISTRIBUTION" | "REIT_DISTRIBUTION" | "UNKNOWN";
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+            /** Pay Date */
+            pay_date?: string | null;
+            /** Reason */
+            reason: string;
+            /** Record Date */
+            record_date?: string | null;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Source Url */
+            source_url?: string | null;
         };
         /** MappingPeriodUpdate */
         MappingPeriodUpdate: {
@@ -9179,6 +9280,96 @@ export interface operations {
             };
         };
     };
+    create_manual_dividend_event: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualEventCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DividendEventRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     get_dividend_event: {
         parameters: {
             query?: never;
@@ -9219,6 +9410,99 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revise_dividend_event: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualEventRevision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DividendEventRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
                 headers: {
                     [name: string]: unknown;
                 };

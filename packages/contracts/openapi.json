@@ -4291,6 +4291,284 @@
         "title": "Login",
         "type": "object"
       },
+      "ManualEventCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_basis": {
+            "enum": [
+              "AS_DECLARED",
+              "SPLIT_ADJUSTED",
+              "UNKNOWN"
+            ],
+            "title": "Adjustment Basis",
+            "type": "string"
+          },
+          "announce_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Announce Date"
+          },
+          "citation": {
+            "maxLength": 300,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Citation",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "HKD",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "dps": {
+            "maxLength": 50,
+            "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+            "title": "Dps",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "REGULAR",
+              "SPECIAL",
+              "INTERIM",
+              "FINAL",
+              "SUPPLEMENTAL",
+              "ETF_DISTRIBUTION",
+              "REIT_DISTRIBUTION",
+              "UNKNOWN"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "ex_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Ex Date",
+            "type": "string"
+          },
+          "pay_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pay Date"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "pattern": "^[^\\x00]+$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "record_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Date"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "required": [
+          "security_id",
+          "event_type",
+          "ex_date",
+          "dps",
+          "currency",
+          "adjustment_basis",
+          "citation",
+          "reason"
+        ],
+        "title": "ManualEventCreate",
+        "type": "object"
+      },
+      "ManualEventRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_basis": {
+            "enum": [
+              "AS_DECLARED",
+              "SPLIT_ADJUSTED",
+              "UNKNOWN"
+            ],
+            "title": "Adjustment Basis",
+            "type": "string"
+          },
+          "announce_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Announce Date"
+          },
+          "citation": {
+            "maxLength": 300,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Citation",
+            "type": "string"
+          },
+          "confirm_reopen": {
+            "default": false,
+            "title": "Confirm Reopen",
+            "type": "boolean"
+          },
+          "confirm_unlock": {
+            "default": false,
+            "title": "Confirm Unlock",
+            "type": "boolean"
+          },
+          "currency": {
+            "enum": [
+              "HKD",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "dps": {
+            "maxLength": 50,
+            "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+            "title": "Dps",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "REGULAR",
+              "SPECIAL",
+              "INTERIM",
+              "FINAL",
+              "SUPPLEMENTAL",
+              "ETF_DISTRIBUTION",
+              "REIT_DISTRIBUTION",
+              "UNKNOWN"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "ex_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Ex Date",
+            "type": "string"
+          },
+          "pay_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pay Date"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "pattern": "^[^\\x00]+$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "record_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Date"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "required": [
+          "security_id",
+          "event_type",
+          "ex_date",
+          "dps",
+          "currency",
+          "adjustment_basis",
+          "citation",
+          "reason",
+          "revision_id"
+        ],
+        "title": "ManualEventRevision",
+        "type": "object"
+      },
       "MappingPeriodUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -16021,6 +16299,134 @@
         "tags": [
           "Dividend event decisions"
         ]
+      },
+      "post": {
+        "operationId": "create_manual_dividend_event",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualEventCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DividendEventRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Create Manual Event",
+        "tags": [
+          "Dividend event decisions"
+        ]
       }
     },
     "/api/v1/dividends/events/{event_id}": {
@@ -16106,6 +16512,155 @@
           }
         ],
         "summary": "Get Event",
+        "tags": [
+          "Dividend event decisions"
+        ]
+      },
+      "patch": {
+        "operationId": "revise_dividend_event",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "maxLength": 12,
+              "pattern": "^\"[1-9][0-9]{0,9}\"$",
+              "title": "If-Match",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualEventRevision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DividendEventRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Revise Manual Event",
         "tags": [
           "Dividend event decisions"
         ]

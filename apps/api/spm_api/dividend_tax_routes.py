@@ -5,7 +5,7 @@ from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi import APIRouter, Query, Request
 from pydantic_core import PydanticSerializationError
 from sqlalchemy import Connection, text
 
@@ -18,7 +18,7 @@ from spm_api.errors import ApiError, Error
 from spm_api.master_service import owned_account, owned_broker
 from spm_api.mutations import check_version, mutate
 from spm_api.pagination import Page, PageDep, paginate
-from spm_api.security import Auth, AuthDep, WriteDep
+from spm_api.security import Auth, AuthDep, DividendEventVersionDep, WriteDep
 
 router = APIRouter(
     prefix="/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings",
@@ -27,18 +27,6 @@ router = APIRouter(
 )
 
 
-def _version(
-    value: Annotated[str, Header(alias="If-Match", max_length=12, pattern=r'^"[1-9][0-9]{0,9}"$')],
-) -> int:
-    if re.fullmatch(r'"[1-9][0-9]{0,9}"', value) is None:
-        raise ApiError(422, "INVALID_EVENT_VERSION", "The event version is invalid")
-    number = int(value[1:-1])
-    if number > 2_147_483_647:
-        raise ApiError(422, "INVALID_EVENT_VERSION", "The event version is invalid")
-    return number
-
-
-EventVersion = Annotated[int, Depends(_version)]
 HistoryVersion = Annotated[int, Query(ge=1, le=2_147_483_647)]
 
 
@@ -227,7 +215,7 @@ def save_estimate(
     body: models.TaxSettingWrite,
     request: Request,
     headers: WriteDep,
-    version: EventVersion,
+    version: DividendEventVersionDep,
 ) -> models.TaxSettingRecord:
     expected = int(body.expected_head_no)
 
