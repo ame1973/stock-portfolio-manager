@@ -107,9 +107,9 @@ workflow decision, not proof that a document was fetched or authenticated.
 Citation URLs containing a query or fragment are withheld rather than returned with
 private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
-cash or historical FX. Protected candidate adoption and owner-confirmed withdrawal
-are described below; verification and the dividend browser workspace remain unfinished.
-The existing event revision fence is unchanged.
+cash or historical FX. Protected candidate adoption, owner acceptance and withdrawal
+are described below; rejection, manual override and the dividend browser workspace
+remain unfinished. The existing event revision fence is unchanged.
 
 ## Protected manual event writes
 
@@ -175,8 +175,8 @@ The existing publication fence rejects **every** new revision when any prior rev
 has an entitlement or the event has projection history, until a future atomic rebuild
 and reconciliation workflow can preserve all receipt associations. Neither manual
 write calculates holdings, posts receipts or changes cash or locked FX. Protected
-withdrawal is described below; explicit verification, projection rebuilding, receipt
-posting and the browser dividend workspace are separate unfinished work.
+acceptance and withdrawal are described below; rejection, manual override, projection
+rebuilding, receipt posting and the browser dividend workspace remain separate work.
 
 ## Protected candidate adoption
 
@@ -225,6 +225,55 @@ and inconsistent retained history fails closed with 503. Responses are `no-store
 and explicitly retain `OWNER_EVENT_DECISION_ONLY`, `REVALIDATION_REQUIRED`,
 `document_verification=NOT_ESTABLISHED` and `eligibility_scope=NOT_ESTABLISHED`.
 No provider is contacted and no entitlement, receipt, cash or locked FX is changed.
+
+## Protected owner acceptance
+
+`POST /api/v1/dividends/{event_id}/verify` currently accepts only an explicit
+`ACCEPT_REVISION` decision. It requires the observed physical `revision_id`, the
+quoted event version in `If-Match`, an owner citation and a reason. An optional
+`evidence_url` is a reference supplied by the owner, not a document fetched or
+independently authenticated by the server. For example:
+
+```json
+{
+  "revision_id": "00000000-0000-4000-8000-000000000002",
+  "decision": "ACCEPT_REVISION",
+  "citation": "Synthetic distribution notice reviewed by owner",
+  "evidence_url": null,
+  "reason": "Synthetic owner acceptance of this revision"
+}
+```
+
+The operation requires an active owner session, matching Origin, CSRF token,
+idempotency key and recent password confirmation. Inside the serialized writer it
+rechecks the event and exact observed physical revision; for a candidate decision it
+also rechecks the current candidate, source and recorded basis/action scope. It appends
+an audited `VERIFY` revision with the same terms, `workflow_status=VERIFIED` and
+`manual_locked=true`, together with relevant review resolution, portfolio invalidation
+and the idempotency response. The adjustment basis must be `AS_DECLARED`; unknown or
+split-adjusted basis cannot be accepted. A withdrawn event cannot be accepted without
+an explicit manual reopening. An owner can explicitly accept unchanged terms even when
+source comparison previously needed review; closing that workflow review does not
+establish that the evidence or document is independently verified.
+
+A completed unchanged retry reauthenticates and validates the complete retained
+history, original unredacted reference, request binding and cached response, then
+returns the original result without writing. A later candidate dismissal or event
+revision does not make that historical response a new grant. Its ETag describes the
+original accepted revision; read the event again for the current version. Changed
+intent under the same key conflicts, stale event or candidate pins return 412,
+unresolved current scope returns 409, and inconsistent retained history fails closed
+with 503. URLs with a query or fragment are withheld in responses. Responses are
+private and `no-store` and explicitly retain `OWNER_EVENT_DECISION_ONLY`,
+`REVALIDATION_REQUIRED`, `document_verification=NOT_ESTABLISHED` and
+`eligibility_scope=NOT_ESTABLISHED`.
+
+The existing publication fence rejects acceptance when any prior revision has an
+entitlement or the event has projection history. This decision does not calculate
+holdings, post receipts or alter cash or locked FX; tax estimates for an earlier
+physical revision are not inherited. `REJECT_REVISION` and `MANUAL_OVERRIDE` are not
+implemented by this endpoint yet and must not be interpreted as withdrawal or a
+replacement of terms.
 
 ## Protected event withdrawal
 
@@ -617,9 +666,9 @@ the owner/account scope and retained history remain readable. A changed
 intent under the same key conflicts; stale observed versions return 412. Results are
 `OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`, not confirmed tax, ownership,
 eligibility or income. No endpoint contacts a provider or modifies prior projections,
-receipts, cash or locked FX. Verification, projection rebuilding, receipt workflows
-and a browser tax workspace remain unfinished; these APIs alone do not provide a
-complete dividend workflow.
+receipts, cash or locked FX. Verification rejection and override, projection rebuilding,
+receipt workflows and a browser tax workspace remain unfinished; these APIs alone do
+not provide a complete dividend workflow.
 
 ## Projection tax provenance
 
@@ -1357,6 +1406,11 @@ shares, demonstrating that this reader does not establish financial authority.
 active-owner and writer boundaries, later candidate changes or dismissals, changed
 basis, explicit manual decisions, same-transaction revalidation and competing
 writers. These synthetic tests establish no ownership or economic authorization.
+
+`uv run pytest tests/test_dividend_verification_api.py` exercises owner acceptance,
+physical and source pins, session and reauthentication races, unchanged historical
+replay, competing decisions, atomic rollback and the entitlement fence. These
+synthetic checks do not authenticate a cited document or establish eligibility.
 
 `uv run pytest tests/test_dividend_withdrawal_api.py` checks explicit withdrawal
 confirmation, physical/version pins, authentication and reauthentication races,

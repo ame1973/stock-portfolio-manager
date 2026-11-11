@@ -28,6 +28,11 @@ router = APIRouter(
     tags=["Dividend event decisions"],
     responses={code: {"model": Error} for code in (401, 403, 404, 422, 503)},
 )
+verification_router = APIRouter(
+    prefix="/api/v1/dividends",
+    tags=["Dividend event decisions"],
+    responses={code: {"model": Error} for code in (401, 403, 404, 422, 503)},
+)
 
 
 def _unavailable() -> ApiError:
@@ -445,25 +450,34 @@ def _write_candidate(
         raise _unavailable() from None
 
 
-def _write_withdrawal(
+def _write_cited_decision(
     request: Request,
     headers: WriteDep,
-    body: models.DividendWithdrawal,
+    body: models.DividendWithdrawal | models.AcceptDividendRevision,
     *,
     identifier: UUID,
     version: int,
 ) -> models.DividendEventRecord:
     payload = {"event_version": version, **body.model_dump(mode="json")}
+    accepting = isinstance(body, models.AcceptDividendRevision)
+    kind: events.DecisionKind = "VERIFY" if accepting else "WITHDRAW"
+    source_url = (
+        body.evidence_url if isinstance(body, models.AcceptDividendRevision) else body.source_url
+    )
 
     def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
         _observed(con, auth.owner.id, identifier, version, body.revision_id)
+        if accepting:
+            writer.require_current_source(
+                con, auth.owner.id, identifier, revision_id=body.revision_id, version=version
+            )
         intent = writer.EventIntent(
             event_id=identifier,
             revision_id=uuid4(),
             revision_no=version + 1,
-            kind="WITHDRAW",
+            kind=kind,
             citation=body.citation,
-            source_url=body.source_url,
+            source_url=source_url,
             reason=body.reason,
         )
         saved = writer.save(
@@ -481,9 +495,10 @@ def _write_withdrawal(
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         record = historical.record
         if (
-            record.decision_kind != "WITHDRAW"
+            record.decision_kind != kind
+            or (accepting and (record.review_status != "VERIFIED" or not record.manual_locked))
             or record.citation != body.citation
-            or record.source_url != body.source_url
+            or record.source_url != source_url
             or record.reason != body.reason
         ):
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
@@ -503,6 +518,14 @@ def _write_withdrawal(
             validate_replay=replay,
         )
     except events.EventError as error:
+        if accepting and str(error) in {
+            "CANDIDATE_DISMISSED",
+            "CANDIDATE_BASIS_CHANGED",
+            "CANDIDATE_SOURCE_CHANGED",
+            "DIVIDEND_EVENT_SOURCE_CHANGED",
+            "DIVIDEND_EVENT_UNRESOLVED_BASIS",
+        }:
+            raise ApiError(409, str(error), "The event revision cannot be accepted") from None
         raise _write_failure(error) from None
     except (ValueError, TypeError, KeyError, OverflowError, PydanticSerializationError):
         raise _unavailable() from None
@@ -569,7 +592,25 @@ def withdraw_event(
     headers: WriteDep,
     version: DividendEventVersionDep,
 ) -> models.DividendEventRecord:
-    result = _write_withdrawal(request, headers, body, identifier=event_id, version=version)
+    result = _write_cited_decision(request, headers, body, identifier=event_id, version=version)
+    response.headers["ETag"] = f'"{result.version}"'
+    return result
+
+
+@verification_router.post(
+    "/{event_id}/verify",
+    operation_id="verify_dividend_event",
+    responses={409: {"model": Error}, 412: {"model": Error}},
+)
+def accept_revision(
+    event_id: UUID,
+    body: models.AcceptDividendRevision,
+    request: Request,
+    response: Response,
+    headers: WriteDep,
+    version: DividendEventVersionDep,
+) -> models.DividendEventRecord:
+    result = _write_cited_decision(request, headers, body, identifier=event_id, version=version)
     response.headers["ETag"] = f'"{result.version}"'
     return result
 

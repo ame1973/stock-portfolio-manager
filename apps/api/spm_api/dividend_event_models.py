@@ -65,6 +65,14 @@ class DividendWithdrawal(Model):
     reason: Reason = Field(repr=False)
 
 
+class AcceptDividendRevision(Model):
+    revision_id: UUID = Field(repr=False)
+    decision: Literal["ACCEPT_REVISION"]
+    citation: CitationReference = Field(repr=False)
+    evidence_url: EvidenceUrl | None = Field(default=None, repr=False)
+    reason: Reason = Field(repr=False)
+
+
 class EventReference(Model):
     citation: CitationReference = Field(repr=False)
     url: EvidenceUrl | None = Field(repr=False)

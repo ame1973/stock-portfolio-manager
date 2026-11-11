@@ -23,6 +23,7 @@ from spm_api.db import check_database, make_engine
 from spm_api.dividend_basis_service import BasisError
 from spm_api.dividend_candidate_service import CandidateError
 from spm_api.dividend_event_routes import router as dividend_event_router
+from spm_api.dividend_event_routes import verification_router as dividend_verification_router
 from spm_api.dividend_tax_routes import router as dividend_tax_router
 from spm_api.errors import ApiError, Error, Status, error_response
 from spm_api.finance import FinanceError
@@ -236,6 +237,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(basis_router)
     app.include_router(candidate_router)
     app.include_router(dividend_event_router)
+    app.include_router(dividend_verification_router)
     app.include_router(dividend_tax_router)
     app.include_router(schedule_router)
     return app
