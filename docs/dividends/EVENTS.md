@@ -805,6 +805,25 @@ before reporting success. Passwords and form inputs are not stored in browser
 storage or query/mutation caches. A successful operation does not establish
 ownership, income or dividend eligibility.
 
+## Pure accrual arithmetic with foreign fees
+
+The internal `dividend_math.accrue` calculates one supplied event/account amount;
+it does not determine eligibility, authenticate a source or record a receipt. The
+legacy positional fee is already denominated in the event currency. Alternatively,
+pass its original `fee_currency` and an explicit `fee_rate_event` expressed as event
+currency per unit of fee currency. Same-currency rates must be identity; a nonzero
+foreign fee requires its own rate. A known zero foreign fee needs no invented rate.
+The separate `rate` is the event-currency-to-HKD valuation rate; unavailable USD
+valuation leaves HKD null and is `MISSING_FX`, unless the raw net requires the
+stricter `NEEDS_REVIEW` quality. Only HKD and USD are supported.
+
+The calculation retains the unrounded fee conversion through net and HKD, then
+rounds gross, tax, fee, net and HKD independently to six places and records the
+component rounding difference. A negative unrounded net requires review even if it
+rounds to zero. This pure result does not retain the original fee, FX provenance or
+an effective tax setting; a future audited writer must retain and validate those
+inputs separately. Its computational `OK` is not confirmation of withholding tax.
+
 ## Required future protected writer and projection work
 
 These constraints are defense in depth, not authentication, authorization,
@@ -925,6 +944,11 @@ endpoints.
 checks pure current-version selection, exact rounding, independent event/account
 identities, cross-revision partial receipts and rejection of missing or corrupt
 projection chains. These cases do not exercise a persistent projection writer.
+
+`uv run pytest tests/test_dividend_cross_fee.py` checks foreign-fee FX direction,
+missing versus explicit zero, independent valuation FX, overflow and exact rounding
+against an independent rational-number oracle. It does not verify the source or
+record a financial fact.
 
 `uv run pytest tests/test_dividend_projection_migration.py` exercises isolated
 upgrade/rollback and private backup, immutable version chains, owner and current

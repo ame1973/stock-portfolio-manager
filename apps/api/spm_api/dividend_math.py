@@ -56,8 +56,15 @@ def accrue(
     tax_rate: Decimal,
     fee: Decimal,
     rate: Decimal | None = None,
+    *,
+    fee_currency: Currency | None = None,
+    fee_rate_event: Decimal | None = None,
 ) -> Accrual:
-    """Calculate a declared accrual, not an actual receipt or a verification assertion."""
+    """Calculate a declared accrual, not an actual receipt or a verification assertion.
+
+    A foreign fee uses an explicit event-currency-per-fee-currency rate; the
+    separate ``rate`` is the event-currency-to-HKD valuation rate.
+    """
     if not event_id or not account_id:
         raise FinanceError("INVALID_EVENT", "Stable event and account identities are required")
     quantity = exact_decimal(eligible_quantity, 8, nonnegative=True)
@@ -67,24 +74,39 @@ def accrue(
     if tax_rate > ONE:
         raise FinanceError("INVALID_FINANCIAL_VALUE", "A tax fraction cannot exceed one")
     fx = conversion_rate(currency, rate)
+    fee_currency = currency if fee_currency is None else fee_currency
+    conversion_rate(fee_currency, None)
+    fee_fx = (
+        exact_decimal(fee_rate_event, 12, positive=True) if fee_rate_event is not None else None
+    )
+    if fee_currency == currency:
+        if fee_fx is not None and fee_fx != ONE:
+            raise FinanceError("CURRENCY_MISMATCH", "A same-currency fee must use identity FX")
+        fee_fx = ONE
+    elif fee_fx is None and fee != ZERO:
+        raise FinanceError("MISSING_FX", "A nonzero foreign-currency fee requires an explicit rate")
     with localcontext(prec=64, rounding=ROUND_HALF_UP):
+        converted_fee = fee * fee_fx if fee_fx is not None else ZERO
         gross = quantity * dps
         tax = gross * tax_rate
-        net = gross - tax - fee
+        net = gross - tax - converted_fee
         # Derive HKD before quantizing the separate persisted monetary components.
         hkd = round_money(net * fx) if fx is not None else None
         quality: Quality = "NEEDS_REVIEW" if net < ZERO else "MISSING_FX" if fx is None else "OK"
-        gross_money, tax_money, net_money = round_money(gross), round_money(tax), round_money(net)
+        gross_money = round_money(gross)
+        tax_money = round_money(tax)
+        fee_money = round_money(converted_fee)
+        net_money = round_money(net)
         return Accrual(
             event_id,
             account_id,
             currency,
             gross_money,
             tax_money,
-            fee,
+            fee_money,
             net_money,
             hkd,
-            net_money - (gross_money - tax_money - fee),
+            net_money - (gross_money - tax_money - fee_money),
             quality,
         )
 
