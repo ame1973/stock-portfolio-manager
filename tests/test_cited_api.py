@@ -106,11 +106,13 @@ async def test_actual_protected_create_retains_one_source_and_server_authorship(
         "citation_id",
         "scope",
         "canonical_adoption",
+        "canonical_adoption_scope",
         "document_verification",
     }
     assert (
         created["scope"] == "SOURCE_ONLY"
         and created["canonical_adoption"] == "NOT_ADOPTED"
+        and created["canonical_adoption_scope"] == "RESPONSE_ONLY_NOT_LINKAGE"
         and created["document_verification"] == "NOT_VERIFIED"
     )
     assert UUID(created["citation_id"]).version == UUID(created["provider_run_id"]).version == 4
@@ -417,6 +419,7 @@ async def test_invalid_attribution_and_dated_identity_do_not_persist_or_echo_inp
         "http_status",
         "raw_sha256",
         "scope",
+        "canonical_adoption_scope",
         "cash_amount",
     ],
 )
@@ -454,6 +457,41 @@ async def test_unknown_private_value_error_is_safely_unavailable_not_echoed_or_r
     assert response.status_code == 503 and response.json()["code"] == "CITED_SOURCE_UNAVAILABLE"
     assert "private-configuration" not in response.text
     safe(response)
+    assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize("scope", ["missing", "forged"])
+async def test_retained_citation_scope_is_explicit_without_new_private_work(
+    book: dict[str, Any],
+    client: httpx.AsyncClient,
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    scope: str,
+) -> None:
+    headers, body = write_headers(client), payload(book)
+    original = await client.post(PATH, json=body, headers=headers)
+    assert original.status_code == 201
+    retained = original.json()
+    if scope == "missing":
+        del retained["canonical_adoption_scope"]
+    else:
+        retained["canonical_adoption_scope"] = "LINKAGE_CHECKED"
+    with unit_of_work(engine, write=True) as con:
+        con.exec_driver_sql(
+            "UPDATE idempotency_keys SET response_json=? WHERE idem_key=?",
+            (json.dumps(retained), headers["Idempotency-Key"]),
+        )
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("A retained response must not prepare private evidence")
+
+    monkeypatch.setattr(core, "prepare", forbidden)
+    before = database_snapshot(engine)
+    response = await client.post(PATH, json=body, headers=headers)
+    if scope == "missing":
+        assert response.status_code == 201 and response.json() == original.json()
+    else:
+        assert response.status_code == 503 and response.json()["code"] == "CITED_SOURCE_UNAVAILABLE"
     assert database_snapshot(engine) == before
 
 

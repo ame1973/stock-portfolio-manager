@@ -75,6 +75,10 @@ class DividendBasisRecord(Model):
     created_at: AwareDatetime
     scope: Literal["BASIS_DECLARATION_ONLY"] = "BASIS_DECLARATION_ONLY"
     canonical_adoption: Literal["NOT_ADOPTED"] = "NOT_ADOPTED"
+    canonical_adoption_scope: Literal["RESPONSE_ONLY_NOT_LINKAGE"] = Field(
+        default="RESPONSE_ONLY_NOT_LINKAGE",
+        description="The marker describes this declaration, not current or historical links.",
+    )
     current_use_scope: Literal["REVALIDATION_REQUIRED_FOR_NEW_ADOPTION"] = (
         "REVALIDATION_REQUIRED_FOR_NEW_ADOPTION"
     )

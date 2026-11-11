@@ -1568,6 +1568,13 @@ export interface components {
              * @constant
              */
             canonical_adoption: "NOT_ADOPTED";
+            /**
+             * Canonical Adoption Scope
+             * @description The marker describes this review response, not current or historical links.
+             * @default RESPONSE_ONLY_NOT_LINKAGE
+             * @constant
+             */
+            canonical_adoption_scope: "RESPONSE_ONLY_NOT_LINKAGE";
             /** Change Reason */
             change_reason: string;
             /**
@@ -1987,6 +1994,13 @@ export interface components {
              */
             canonical_adoption: "NOT_ADOPTED";
             /**
+             * Canonical Adoption Scope
+             * @description The marker describes this creation response, not current or historical links.
+             * @default RESPONSE_ONLY_NOT_LINKAGE
+             * @constant
+             */
+            canonical_adoption_scope: "RESPONSE_ONLY_NOT_LINKAGE";
+            /**
              * Citation Id
              * Format: uuid
              */
@@ -2252,6 +2266,13 @@ export interface components {
              * @constant
              */
             canonical_adoption: "NOT_ADOPTED";
+            /**
+             * Canonical Adoption Scope
+             * @description The marker describes this declaration, not current or historical links.
+             * @default RESPONSE_ONLY_NOT_LINKAGE
+             * @constant
+             */
+            canonical_adoption_scope: "RESPONSE_ONLY_NOT_LINKAGE";
             citation: components["schemas"]["PublicCitation"];
             /**
              * Complete
@@ -2339,6 +2360,13 @@ export interface components {
              * @constant
              */
             canonical_adoption: "NOT_ADOPTED";
+            /**
+             * Canonical Adoption Scope
+             * @description The marker describes this source response, not current or historical links.
+             * @default RESPONSE_ONLY_NOT_LINKAGE
+             * @constant
+             */
+            canonical_adoption_scope: "RESPONSE_ONLY_NOT_LINKAGE";
             /** Currency */
             currency: ("HKD" | "USD") | null;
             /** Dps */
@@ -3994,6 +4022,13 @@ export interface components {
              * @constant
              */
             canonical_adoption: "NOT_ADOPTED";
+            /**
+             * Canonical Adoption Scope
+             * @description The marker describes this source response, not current or historical links.
+             * @default RESPONSE_ONLY_NOT_LINKAGE
+             * @constant
+             */
+            canonical_adoption_scope: "RESPONSE_ONLY_NOT_LINKAGE";
             /**
              * Effect Scope
              * @constant

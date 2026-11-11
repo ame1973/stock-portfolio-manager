@@ -316,7 +316,8 @@ async def test_late_failures_and_invalid_cached_json_roll_back_or_fail_closed(
 
 
 @pytest.mark.parametrize(
-    "tamper", ["amount", "assessment", "missing-history", "different-intent", "private-extra"]
+    "tamper",
+    ["amount", "assessment", "missing-history", "different-intent", "private-extra", "scope"],
 )
 async def test_valid_shaped_cached_receipt_is_fenced_against_audited_original(
     candidate_book: dict[str, Any], client: httpx.AsyncClient, engine: Engine, tamper: str
@@ -334,6 +335,8 @@ async def test_valid_shaped_cached_receipt_is_fenced_against_audited_original(
         altered["revision_id"] = str(uuid4())
     elif tamper == "private-extra":
         altered["private"] = "private-invalid-marker"
+    elif tamper == "scope":
+        altered["canonical_adoption_scope"] = "LINKAGE_CHECKED"
     else:
         different = await client.post(
             PATH, json={**body, "state": "DISMISSED"}, headers=write_headers(client)
@@ -361,6 +364,7 @@ async def test_valid_shaped_cached_receipt_is_fenced_against_audited_original(
         "version",
         "owner_id",
         "canonical_adoption",
+        "canonical_adoption_scope",
         "state",
         "reason",
         "extra-match",
@@ -380,7 +384,14 @@ async def test_untrusted_or_invalid_input_rejects_without_echo_or_writes(
     candidate_book: dict[str, Any], client: httpx.AsyncClient, engine: Engine, change: str
 ) -> None:
     body = payload(candidate_book)
-    if change in {"id", "revision_id", "version", "owner_id", "canonical_adoption"}:
+    if change in {
+        "id",
+        "revision_id",
+        "version",
+        "owner_id",
+        "canonical_adoption",
+        "canonical_adoption_scope",
+    }:
         body[change] = "private-untrusted-value"
     elif change == "state":
         body["state"] = "VERIFIED"

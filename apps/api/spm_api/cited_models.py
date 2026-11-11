@@ -90,4 +90,8 @@ class CitedSourceCreated(Model):
     citation_id: UUID
     scope: Literal["SOURCE_ONLY"] = "SOURCE_ONLY"
     canonical_adoption: Literal["NOT_ADOPTED"] = "NOT_ADOPTED"
+    canonical_adoption_scope: Literal["RESPONSE_ONLY_NOT_LINKAGE"] = Field(
+        default="RESPONSE_ONLY_NOT_LINKAGE",
+        description="The marker describes this creation response, not current or historical links.",
+    )
     document_verification: Literal["NOT_VERIFIED"] = "NOT_VERIFIED"

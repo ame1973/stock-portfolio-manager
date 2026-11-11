@@ -46,14 +46,14 @@ export function ObservationDetails({ record }: { record: Observation }) {
   return <article aria-label={`${record.provider_symbol} ${record.id}`} className="grid min-w-0 gap-4 break-words">
     <h3 className="font-semibold">{providerNames[record.provider_id]} · 觀測時代號 {record.provider_symbol}</h3>
     <p className="break-all text-sm leading-7">{dividend ? `每股來源金額：${observationTerms(record)}` : `精確來源因子：${observationTerms(record)}（未採納股數）`}</p>
-    <p className="text-sm leading-7 text-secondary">SOURCE_ONLY / NOT_ADOPTED。{dividend ? "來源列不是已驗證股息、應收或實收。" : "PROVIDER_ADJUSTMENT_ONLY；不改變持股、成本或現金。"}</p>
+    <p className="text-sm leading-7 text-secondary">SOURCE_ONLY / NOT_ADOPTED 只描述來源列本身，未查詢目前或過往關聯。{dividend ? "來源列不是已驗證股息、應收或實收。" : "PROVIDER_ADJUSTMENT_ONLY；不改變持股、成本或現金。"}</p>
     {dividend && record.incomplete_reasons.length > 0 && <p className="text-sm leading-7 text-danger">尚待核對：{record.incomplete_reasons.map(code => incompleteLabels[code] ?? code).join("；")}。</p>}
     <SourceValues values={[
       ["目前目錄證券（非來源代號）", <SecurityName id={record.security_id} />], ["來源穩定分組", `${record.origin_group}；Yahoo 包裝不另計獨立來源，人工引用不是供應商第二票`],
       [dividend ? "除淨日期" : "因子生效日期", dividend ? record.ex_date ?? "未知，不用擷取日代替" : record.effective_date],
       ...(dividend ? [
         ["宣告／記錄／付款日期", `${record.announce_date ?? "未知"} / ${record.record_date ?? "未知"} / ${record.pay_date ?? "未知"}`],
-        ["調整基準", record.adjustment_basis === "AS_DECLARED" ? "來源／人工稱宣告條款，仍未採納或驗證" : record.adjustment_basis === "SPLIT_ADJUSTED" ? "拆股調整後金額，不能直接認列" : "UNKNOWN，調整基準未知"],
+        ["調整基準", record.adjustment_basis === "AS_DECLARED" ? "來源／人工稱宣告條款；不代表已驗證，事件關聯未查詢" : record.adjustment_basis === "SPLIT_ADJUSTED" ? "拆股調整後金額，不能直接認列" : "UNKNOWN，調整基準未知"],
         ["來源幣別標籤／期間／頻率", `${record.source_currency ?? "未知"} / ${record.source_period ?? "未知"} / ${record.source_frequency ?? "未知"}；不據此推定一般股息`],
       ] as [string, ReactNode][] : [["來源調整類型", record.source_adjustment_type ?? "未知，不推定公司條款"]] as [string, ReactNode][]),
       ["觀測識別碼", record.id], ["首次執行識別碼", record.provider_run_id], ["來源事件識別碼", record.provider_event_id ?? "未提供"],

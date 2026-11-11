@@ -171,7 +171,11 @@ Responses distinguish the stable candidate `id` from physical `revision_id`, and
 include exact proposed terms, explicit matches, review reasons and a field-level
 historical `assessment`. `CANDIDATE_REVIEW_ONLY`, `NOT_ADOPTED` and
 `REVALIDATION_REQUIRED` are explicit: an assessment is not a current action-scope
-check, official verification, canonical event, entitlement or payment. Source
+check, official verification, canonical event, entitlement or payment. The additional
+`canonical_adoption_scope=RESPONSE_ONLY_NOT_LINKAGE` means that `NOT_ADOPTED`
+describes the review response, not a lookup of current or historical event use. An
+older cached response receives the fixed scope label on replay without changing its
+original decision or retained idempotency record. Source
 payloads, private URLs, owner/request IDs, provider credentials and raw association
 JSON are not returned. A malformed or unaudited retained candidate fails safely
 with 503 rather than silently falling back or repairing history.

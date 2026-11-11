@@ -10,7 +10,7 @@ import { ObservationsPage } from "./SourcePages";
 type Schemas = components["schemas"];
 const security: Schemas["Security"] = { id: "11111111-1111-4111-8111-111111111111", name: "Synthetic cited security", display_ticker: "0005", exchange_code: "HKG", quote_currency: "USD", security_type: "EQUITY", status: "DELISTED", isin: null, verified: false, version: 1 };
 const alias: Schemas["ProviderSymbol"] = { id: "22222222-2222-4222-8222-222222222222", security_id: security.id, provider_id: "manual", provider_symbol: "0005.CITED", effective_from: "2020-01-01", effective_to: null, version: 1, verified: false };
-const result: CitedResult = { provider_id: "manual", security_id: security.id, operation: "DIVIDENDS", observation_id: "33333333-3333-4333-8333-333333333333", provider_run_id: "44444444-4444-4444-8444-444444444444", citation_id: "55555555-5555-4555-8555-555555555555", scope: "SOURCE_ONLY", canonical_adoption: "NOT_ADOPTED", document_verification: "NOT_VERIFIED" };
+const result: CitedResult = { provider_id: "manual", security_id: security.id, operation: "DIVIDENDS", observation_id: "33333333-3333-4333-8333-333333333333", provider_run_id: "44444444-4444-4444-8444-444444444444", citation_id: "55555555-5555-4555-8555-555555555555", scope: "SOURCE_ONLY", canonical_adoption: "NOT_ADOPTED", canonical_adoption_scope: "RESPONSE_ONLY_NOT_LINKAGE", document_verification: "NOT_VERIFIED" };
 const reference = "Synthetic local document page 3";
 const reason = "Explicit synthetic quotation, not verified income.";
 const reply = <T,>(data: T) => ({ data, response: new Response() });

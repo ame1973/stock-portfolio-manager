@@ -59,4 +59,8 @@ class CandidateRecord(Model):
     assessment: CandidateAssessment
     scope: Literal["CANDIDATE_REVIEW_ONLY"] = "CANDIDATE_REVIEW_ONLY"
     canonical_adoption: Literal["NOT_ADOPTED"] = "NOT_ADOPTED"
+    canonical_adoption_scope: Literal["RESPONSE_ONLY_NOT_LINKAGE"] = Field(
+        default="RESPONSE_ONLY_NOT_LINKAGE",
+        description="The marker describes this review response, not current or historical links.",
+    )
     current_use_scope: Literal["REVALIDATION_REQUIRED"] = "REVALIDATION_REQUIRED"

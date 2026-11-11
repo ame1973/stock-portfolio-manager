@@ -191,9 +191,13 @@ quantity action fails rather than creating a partial statement.
 
 A successful response is `201` with a declaration `Location`; the exact action
 ratios are JSON decimal **strings**. `scope=BASIS_DECLARATION_ONLY`,
-`canonical_adoption=NOT_ADOPTED`, `market_history=OWNER_ASSERTED_NOT_VERIFIED`
-and `current_use_scope=REVALIDATION_REQUIRED_FOR_NEW_ADOPTION` are explicit
-limits. Citation reference and reason are visible to the authenticated owner;
+`canonical_adoption=NOT_ADOPTED`, `canonical_adoption_scope=RESPONSE_ONLY_NOT_LINKAGE`,
+`market_history=OWNER_ASSERTED_NOT_VERIFIED` and
+`current_use_scope=REVALIDATION_REQUIRED_FOR_NEW_ADOPTION` are explicit limits.
+The adoption marker describes the declaration response, not a current or historical
+linkage lookup. Older retained idempotency responses gain this fixed scope label on
+replay without rewriting the declaration or its audit. Citation reference and reason
+are visible to the authenticated owner;
 a URL with a query or fragment is withheld with `url_withheld=true`, without
 rewriting the stored statement. Do not put secrets in citation text or URL paths.
 

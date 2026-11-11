@@ -101,7 +101,7 @@ export function ObservationsPage({ mode }: { mode: ObservationKind }) {
   const title = mode === "dividends" ? "股息來源觀測" : "provider-only 拆股因子";
   const dateLabel = mode === "dividends" ? "除淨" : "生效";
   function filter(change: Partial<SourceFilters>) { setFilters(previous => ({ ...previous, ...change })); page.search(page.q); }
-  return <div className="grid min-w-0 gap-5"><div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-7 text-secondary">只列 immutable v1 來源證據（SOURCE_ONLY / NOT_ADOPTED）。{mode === "dividends" ? "每股金額、幣別及日期原樣保留；未知不是零，報價幣別不會補成股息幣別。" : "精確比例字串只供核對，不會採納股數、成本或現金。"}重複觀測不會變成多筆收入。</p></div><Button data-editor-create disabled={editor} onClick={() => setEditor(true)}>{citationTitle(mode)}</Button></div>
+  return <div className="grid min-w-0 gap-5"><div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-7 text-secondary">只列 immutable v1 來源證據（SOURCE_ONLY / NOT_ADOPTED，僅指來源列）；未查詢目前或過往關聯。{mode === "dividends" ? "每股金額、幣別及日期原樣保留；未知不是零，報價幣別不會補成股息幣別。" : "精確比例字串只供核對，不會採納股數、成本或現金。"}重複觀測不會變成多筆收入。</p></div><Button data-editor-create disabled={editor} onClick={() => setEditor(true)}>{citationTitle(mode)}</Button></div>
     {created && <section role="status" className="panel grid min-w-0 gap-3 text-sm leading-7"><p>伺服器已確認來源引用，可能是原鍵回覆；不是文件驗證、財務採納或實收。請以符合的篩選重新載入核對，不把回覆當成最新版本。</p><SourceValues values={[["確認引用識別碼", created.citation_id], ["確認觀測識別碼", created.observation_id]]} /></section>}
     {editor && <EditorSheet title={citationTitle(mode)} onClose={() => setEditor(false)}><CitedForm key={mode} mode={mode} onCancel={() => setEditor(false)} onSaved={record => { setEditor(false); setCreated(record); void refreshSources(cache); }} /></EditorSheet>}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選{title}</summary><div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -118,7 +118,7 @@ export function ObservationsPage({ mode }: { mode: ObservationKind }) {
       { id: "source", header: "來源／當次代號", cell: ({ row }) => <>{providerNames[row.original.provider_id]}<span className="block text-secondary">{row.original.provider_symbol}</span></> },
       { id: "date", header: `${dateLabel}日期`, cell: ({ row }) => isDividend(row.original) ? row.original.ex_date ?? "未知，不用擷取日代替" : row.original.effective_date },
       { id: "terms", header: mode === "dividends" ? "每股來源金額／幣別" : "精確因子，非採納股數", cell: ({ row }) => <span className="break-all">{observationTerms(row.original)}</span> },
-      { id: "basis", header: "來源口徑／未採納", cell: ({ row }) => isDividend(row.original) ? row.original.adjustment_basis : row.original.effect_scope },
+      { id: "basis", header: "來源口徑（非事件狀態）", cell: ({ row }) => isDividend(row.original) ? row.original.adjustment_basis : row.original.effect_scope },
     ]}>{record => <ObservationDetails record={record} />}</RecordList>
   </div>;
 }

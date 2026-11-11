@@ -820,6 +820,13 @@
             "title": "Canonical Adoption",
             "type": "string"
           },
+          "canonical_adoption_scope": {
+            "const": "RESPONSE_ONLY_NOT_LINKAGE",
+            "default": "RESPONSE_ONLY_NOT_LINKAGE",
+            "description": "The marker describes this review response, not current or historical links.",
+            "title": "Canonical Adoption Scope",
+            "type": "string"
+          },
           "change_reason": {
             "maxLength": 1000,
             "minLength": 10,
@@ -1913,6 +1920,13 @@
             "title": "Canonical Adoption",
             "type": "string"
           },
+          "canonical_adoption_scope": {
+            "const": "RESPONSE_ONLY_NOT_LINKAGE",
+            "default": "RESPONSE_ONLY_NOT_LINKAGE",
+            "description": "The marker describes this creation response, not current or historical links.",
+            "title": "Canonical Adoption Scope",
+            "type": "string"
+          },
           "citation_id": {
             "format": "uuid",
             "title": "Citation Id",
@@ -2551,6 +2565,13 @@
             "title": "Canonical Adoption",
             "type": "string"
           },
+          "canonical_adoption_scope": {
+            "const": "RESPONSE_ONLY_NOT_LINKAGE",
+            "default": "RESPONSE_ONLY_NOT_LINKAGE",
+            "description": "The marker describes this declaration, not current or historical links.",
+            "title": "Canonical Adoption Scope",
+            "type": "string"
+          },
           "citation": {
             "$ref": "#/components/schemas/PublicCitation"
           },
@@ -2677,6 +2698,13 @@
             "const": "NOT_ADOPTED",
             "default": "NOT_ADOPTED",
             "title": "Canonical Adoption",
+            "type": "string"
+          },
+          "canonical_adoption_scope": {
+            "const": "RESPONSE_ONLY_NOT_LINKAGE",
+            "default": "RESPONSE_ONLY_NOT_LINKAGE",
+            "description": "The marker describes this source response, not current or historical links.",
+            "title": "Canonical Adoption Scope",
             "type": "string"
           },
           "currency": {
@@ -7114,6 +7142,13 @@
             "const": "NOT_ADOPTED",
             "default": "NOT_ADOPTED",
             "title": "Canonical Adoption",
+            "type": "string"
+          },
+          "canonical_adoption_scope": {
+            "const": "RESPONSE_ONLY_NOT_LINKAGE",
+            "default": "RESPONSE_ONLY_NOT_LINKAGE",
+            "description": "The marker describes this source response, not current or historical links.",
+            "title": "Canonical Adoption Scope",
             "type": "string"
           },
           "effect_scope": {

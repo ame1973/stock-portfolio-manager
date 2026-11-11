@@ -345,7 +345,9 @@ async def test_late_failure_and_corrupt_cached_result_never_leave_or_repair_writ
     assert database_snapshot(engine) == before
 
 
-@pytest.mark.parametrize("tamper", ["private-url", "ratio", "missing-history", "different-intent"])
+@pytest.mark.parametrize(
+    "tamper", ["private-url", "ratio", "missing-history", "different-intent", "scope"]
+)
 async def test_well_formed_cached_receipt_is_fenced_against_audited_history(
     basis_book: dict[str, Any], client: httpx.AsyncClient, engine: Engine, tamper: str
 ) -> None:
@@ -361,6 +363,8 @@ async def test_well_formed_cached_receipt_is_fenced_against_audited_history(
     elif tamper == "missing-history":
         altered["id"] = str(uuid4())
         altered["citation"]["id"] = altered["id"]
+    elif tamper == "scope":
+        altered["canonical_adoption_scope"] = "LINKAGE_CHECKED"
     else:
         different = await client.post(
             PATH, json={**body, "share_basis_date": "2026-01-11"}, headers=write_headers(client)
@@ -390,6 +394,7 @@ async def test_well_formed_cached_receipt_is_fenced_against_audited_history(
         ("status", "CONFIRMED"),
         ("ratio_numerator", "3"),
         ("canonical_adoption", "VERIFIED"),
+        ("canonical_adoption_scope", "LINKAGE_CHECKED"),
         ("complete", False),
         ("complete", 1),
         ("split_only", False),

@@ -43,6 +43,10 @@ class _ObservationRecord(Model):
     provenance_version: Literal[1] = 1
     scope: Literal["SOURCE_ONLY"] = "SOURCE_ONLY"
     canonical_adoption: Literal["NOT_ADOPTED"] = "NOT_ADOPTED"
+    canonical_adoption_scope: Literal["RESPONSE_ONLY_NOT_LINKAGE"] = Field(
+        default="RESPONSE_ONLY_NOT_LINKAGE",
+        description="The marker describes this source response, not current or historical links.",
+    )
 
 
 class DividendObservationRecord(_ObservationRecord):

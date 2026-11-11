@@ -51,9 +51,12 @@ frequency is not automatically REGULAR. Null dates and UNKNOWN/SPLIT_ADJUSTED
 basis remain unresolved. Yahoo/yfinance still share YAHOO and manual/official
 citations are not another independent vendor vote.
 
-Every item declares `provenance_version=1`, `scope=SOURCE_ONLY` and
-`canonical_adoption=NOT_ADOPTED`. These are source assertions, not VERIFIED income,
-owner receipts or a complete-market-coverage report. See
+Every item declares `provenance_version=1`, `scope=SOURCE_ONLY`,
+`canonical_adoption=NOT_ADOPTED` and
+`canonical_adoption_scope=RESPONSE_ONLY_NOT_LINKAGE`. The marker describes the
+source response itself: these reads do not check whether any current or historical
+event used the observation. It is neither a negative linkage lookup nor a claim of
+VERIFIED income, owner receipts or complete market coverage. See
 [provider diagnostics](DIAGNOSTICS.md) for separate local/recorded availability
 and [source storage](EVIDENCE.md) for immutable capture/replay behavior.
 

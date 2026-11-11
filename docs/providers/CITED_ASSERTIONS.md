@@ -50,8 +50,12 @@ but browser callers must not parse large terms through JavaScript Number.
 
 A successful HTTP201 returns `provider_id`, `security_id`, `operation`,
 `observation_id`, `provider_run_id`, `citation_id`, `scope=SOURCE_ONLY`,
-`canonical_adoption=NOT_ADOPTED` and `document_verification=NOT_VERIFIED`. IDs are
-server-minted, not client-authorized ownership or verification. No Location/ETag
+`canonical_adoption=NOT_ADOPTED`, `canonical_adoption_scope=RESPONSE_ONLY_NOT_LINKAGE`
+and `document_verification=NOT_VERIFIED`. The adoption marker describes the creation
+response; neither it nor a replay checks current or historical event linkage. IDs are
+server-minted, not client-authorized ownership or verification. Older retained
+idempotency responses acquire the fixed scope label when replayed without changing
+stored evidence or their original IDs. No Location/ETag
 is invented: read the existing [bounded observation lists](OBSERVATIONS.md) by
 security/provider and follow their real cursors. No new observation-by-ID route
 or canonical event is created.

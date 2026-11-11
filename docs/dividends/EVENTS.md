@@ -116,11 +116,11 @@ portfolios; they do not calculate entitlements or create actual receipts. A
 protected API must not be exposed until it can atomically maintain those
 projections and reconciliation, and the receipt workflow remains separate.
 
-Source-observation responses currently describe their own source-only payload;
-their `NOT_ADOPTED` marker is not a query for later event evidence links. Before
-exposing event adoption, make the public source and candidate views unambiguous
-about any current or historical event linkage. No internal decision invokes a
-provider, reads credential files or verifies a cited document.
+Source, basis and candidate responses use `canonical_adoption_scope=RESPONSE_ONLY_NOT_LINKAGE`
+to make clear that their static `NOT_ADOPTED` marker describes the response itself,
+not a lookup for current or historical event evidence links. An event may retain a
+link even though the source/review payload is not itself an event. No internal decision
+invokes a provider, reads credential files or verifies a cited document.
 
 ## Current event-source fence
 
