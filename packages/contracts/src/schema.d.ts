@@ -450,6 +450,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Events */
+        get: operations["list_dividend_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dividends/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Event */
+        get: operations["get_dividend_event"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
         parameters: {
             query?: never;
@@ -477,6 +511,23 @@ export interface paths {
         };
         /** Estimate History */
         get: operations["list_dividend_tax_estimate_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dividends/events/{event_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Revisions */
+        get: operations["list_dividend_event_revisions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2380,6 +2431,196 @@ export interface components {
              */
             target_basis: "PRE_EX_DATE_EVENTS";
         };
+        /** DividendEventRecord */
+        DividendEventRecord: {
+            /**
+             * Adjustment Basis
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /** Announce Date */
+            announce_date: string | null;
+            assessment: components["schemas"]["CandidateAssessment"] | null;
+            /** Candidate Revision Id */
+            candidate_revision_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /**
+             * Current Revision Id
+             * Format: uuid
+             */
+            current_revision_id: string;
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Decision Kind
+             * @enum {string}
+             */
+            decision_kind: "CANDIDATE" | "MANUAL" | "VERIFY" | "WITHDRAW";
+            /**
+             * Document Verification
+             * @constant
+             */
+            document_verification: "NOT_ESTABLISHED";
+            /** Dps */
+            dps: string;
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "REGULAR" | "SPECIAL" | "INTERIM" | "FINAL" | "SUPPLEMENTAL" | "ETF_DISTRIBUTION" | "REIT_DISTRIBUTION" | "UNKNOWN";
+            /** Evidence */
+            evidence: components["schemas"]["EventEvidence"][];
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Independent Origin Groups */
+            independent_origin_groups: number | null;
+            /** Manual Locked */
+            manual_locked: boolean;
+            /** Pay Date */
+            pay_date: string | null;
+            /** Reason */
+            reason: string;
+            /** Record Date */
+            record_date: string | null;
+            reference: components["schemas"]["EventReference"] | null;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "OWNER_EVENT_DECISION_ONLY";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Version */
+            version: number;
+            /**
+             * Workflow Status
+             * @enum {string}
+             */
+            workflow_status: "PROVISIONAL" | "CORROBORATED" | "VERIFIED" | "CONFLICT" | "INCOMPLETE" | "WITHDRAWN";
+        };
+        /** DividendEventRevisionRecord */
+        DividendEventRevisionRecord: {
+            /**
+             * Adjustment Basis
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /** Announce Date */
+            announce_date: string | null;
+            assessment: components["schemas"]["CandidateAssessment"] | null;
+            /** Candidate Revision Id */
+            candidate_revision_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Decision Kind
+             * @enum {string}
+             */
+            decision_kind: "CANDIDATE" | "MANUAL" | "VERIFY" | "WITHDRAW";
+            /**
+             * Document Verification
+             * @constant
+             */
+            document_verification: "NOT_ESTABLISHED";
+            /** Dps */
+            dps: string;
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "REGULAR" | "SPECIAL" | "INTERIM" | "FINAL" | "SUPPLEMENTAL" | "ETF_DISTRIBUTION" | "REIT_DISTRIBUTION" | "UNKNOWN";
+            /** Evidence */
+            evidence: components["schemas"]["EventEvidence"][];
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+            /** Independent Origin Groups */
+            independent_origin_groups: number | null;
+            /** Manual Locked */
+            manual_locked: boolean;
+            /** Pay Date */
+            pay_date: string | null;
+            /** Reason */
+            reason: string;
+            /** Record Date */
+            record_date: string | null;
+            reference: components["schemas"]["EventReference"] | null;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "OWNER_EVENT_DECISION_ONLY";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /**
+             * Workflow Status
+             * @enum {string}
+             */
+            workflow_status: "PROVISIONAL" | "CORROBORATED" | "VERIFIED" | "CONFLICT" | "INCOMPLETE" | "WITHDRAWN";
+        };
         /** DividendObservationRecord */
         DividendObservationRecord: {
             /**
@@ -2534,6 +2775,28 @@ export interface components {
             message: string;
             /** Request Id */
             request_id: string;
+        };
+        /**
+         * EventEvidence
+         * @description Fields supported by one explicitly associated original source observation.
+         */
+        EventEvidence: {
+            /** Fields */
+            fields: ("ex_date" | "announce_date" | "record_date" | "pay_date" | "event_type" | "currency" | "dps" | "adjustment_basis")[];
+            /**
+             * Observation Id
+             * Format: uuid
+             */
+            observation_id: string;
+        };
+        /** EventReference */
+        EventReference: {
+            /** Citation */
+            citation: string;
+            /** Url */
+            url: string | null;
+            /** Url Withheld */
+            url_withheld: boolean;
         };
         /** Exchange */
         Exchange: {
@@ -2939,6 +3202,20 @@ export interface components {
         Page_DividendBasisRecord_: {
             /** Items */
             items: components["schemas"]["DividendBasisRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[DividendEventRecord] */
+        Page_DividendEventRecord_: {
+            /** Items */
+            items: components["schemas"]["DividendEventRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[DividendEventRevisionRecord] */
+        Page_DividendEventRevisionRecord_: {
+            /** Items */
+            items: components["schemas"]["DividendEventRevisionRecord"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -8829,6 +9106,146 @@ export interface operations {
             };
         };
     };
+    list_dividend_events: {
+        parameters: {
+            query?: {
+                security_id?: string | null;
+                workflow_status?: ("PROVISIONAL" | "CORROBORATED" | "VERIFIED" | "CONFLICT" | "INCOMPLETE" | "WITHDRAWN") | null;
+                from_date?: string | null;
+                to_date?: string | null;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DividendEventRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_dividend_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DividendEventRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     get_dividend_tax_estimate: {
         parameters: {
             query: {
@@ -9076,6 +9493,77 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_dividend_event_revisions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DividendEventRevisionRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

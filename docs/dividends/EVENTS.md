@@ -2,9 +2,10 @@
 
 Migration `0016_dividend_event_controls` added database safeguards for a future
 owner-controlled dividend workflow. It added two initially empty provenance tables
-and brought that schema revision to 55 business tables. It neither adopts a source observation
-nor installs an event, entitlement, receipt or reconciliation API. An ordinary
-source sync still cannot create canonical income or mark a dividend received.
+and brought that schema revision to 55 business tables. It neither adopts a source
+observation nor installs an entitlement, receipt or reconciliation API. The protected
+read API described below does not create events. An ordinary source sync still cannot
+create canonical income or mark a dividend received.
 
 ## Identity, decisions and evidence
 
@@ -75,10 +76,39 @@ follow a withdrawal.
 This is a historical integrity check, not a current-use grant: a later candidate
 dismissal or action correction leaves a valid historical record readable, but
 new adoption must independently revalidate the current candidate and recorded
-basis/action scope. Internal records and citations are not public DTOs; future
-routes must authenticate the caller and withhold private URL details. The reader
-performs no writes, provider requests, credential-file access, entitlement
-calculation or receipt posting. No canonical event HTTP endpoint is installed.
+basis/action scope. The protected DTOs described below authenticate the caller and
+withhold private URL details. The internal reader performs no writes, provider
+requests, credential-file access, entitlement calculation or receipt posting.
+
+## Protected event-decision read API
+
+Authenticated owners can read retained managed decisions through three private,
+`Cache-Control: no-store` endpoints:
+
+- `GET /api/v1/dividends/events` lists current owned events with optional security,
+  workflow-status and inclusive ex-date filters, literal search and bounded keyset
+  pagination. Distinct events with the same ex-date remain distinct.
+- `GET /api/v1/dividends/events/{event_id}` returns the current physical revision
+  and an event-version ETag.
+- `GET /api/v1/dividends/events/{event_id}/revisions` lists the complete retained
+  decisions by descending revision, with bounded pagination and literal search.
+
+Each returned event is checked against its entire audited history, including later
+revisions, candidate lineage and original evidence. An inconsistent owned chain
+returns a fixed 503 error rather than a partial or repaired result. An unrelated or
+unmanaged legacy event is not silently assigned to the owner. Historical candidate
+assessments remain historical after later basis or action changes and do not establish
+current adoption. The response explicitly carries `OWNER_EVENT_DECISION_ONLY`,
+`REVALIDATION_REQUIRED`, `document_verification=NOT_ESTABLISHED` and
+`eligibility_scope=NOT_ESTABLISHED`. A manual decision has no independent-origin
+count rather than an invented zero; a `VERIFIED` status is an owner's retained
+workflow decision, not proof that a document was fetched or authenticated.
+
+Citation URLs containing a query or fragment are withheld rather than returned with
+private parameters; the reference and a withholding marker remain visible to the
+owner. These reads never contact a provider, create an entitlement or change receipts,
+cash or historical FX. An authenticated event-write API and dividend browser workspace
+remain unfinished; the existing event revision fence is unchanged.
 
 ## Audited internal decision writer
 
@@ -112,9 +142,9 @@ projection rebuild is installed. The projection-history migration also blocks
 publication through direct SQL while any projection version exists. Repointing the
 current event without replacing the applicable projection could otherwise hide
 old entitlements and receipts. Initial decisions only invalidate affected
-portfolios; they do not calculate entitlements or create actual receipts. A
-protected API must not be exposed until it can atomically maintain those
-projections and reconciliation, and the receipt workflow remains separate.
+portfolios; they do not calculate entitlements or create actual receipts. Any future
+protected revision-write API must retain this fence until it can atomically maintain
+those projections and reconciliation; the receipt workflow remains separate.
 
 Source, basis and candidate responses use `canonical_adoption_scope=RESPONSE_ONLY_NOT_LINKAGE`
 to make clear that their static `NOT_ADOPTED` marker describes the response itself,
@@ -426,8 +456,8 @@ the owner/account scope and retained history remain readable. A changed
 intent under the same key conflicts; stale observed versions return 412. Results are
 `OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`, not confirmed tax, ownership,
 eligibility or income. No endpoint contacts a provider or modifies prior projections,
-receipts, cash or locked FX. A general event API and browser tax workspace remain
-unfinished; this API alone does not provide a complete dividend workflow.
+receipts, cash or locked FX. Event-write APIs and a browser tax workspace remain
+unfinished; these APIs alone do not provide a complete dividend workflow.
 
 ## Projection tax provenance
 
@@ -1164,6 +1194,12 @@ shares, demonstrating that this reader does not establish financial authority.
 active-owner and writer boundaries, later candidate changes or dismissals, changed
 basis, explicit manual decisions, same-transaction revalidation and competing
 writers. These synthetic tests establish no ownership or economic authorization.
+
+`uv run pytest tests/test_dividend_event_read_api.py tests/test_dividend_event_candidate_api.py`
+checks the installed owner-only event list, current and historical reads, same-day
+identity, keyset pages, private citation handling, late audit corruption, candidate
+lineage and no provider or financial writes. It does not establish current eligibility
+or document verification.
 
 `uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`
 checks migration preservation and rollback, source and candidate scope, publication

@@ -2669,6 +2669,500 @@
         "title": "DividendBasisRecord",
         "type": "object"
       },
+      "DividendEventRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_basis": {
+            "enum": [
+              "AS_DECLARED",
+              "SPLIT_ADJUSTED",
+              "UNKNOWN"
+            ],
+            "title": "Adjustment Basis",
+            "type": "string"
+          },
+          "announce_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Announce Date"
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Revision Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "HKD",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "current_revision_id": {
+            "format": "uuid",
+            "title": "Current Revision Id",
+            "type": "string"
+          },
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "decision_kind": {
+            "enum": [
+              "CANDIDATE",
+              "MANUAL",
+              "VERIFY",
+              "WITHDRAW"
+            ],
+            "title": "Decision Kind",
+            "type": "string"
+          },
+          "document_verification": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Document Verification",
+            "type": "string"
+          },
+          "dps": {
+            "maxLength": 50,
+            "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+            "title": "Dps",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "REGULAR",
+              "SPECIAL",
+              "INTERIM",
+              "FINAL",
+              "SUPPLEMENTAL",
+              "ETF_DISTRIBUTION",
+              "REIT_DISTRIBUTION",
+              "UNKNOWN"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EventEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "ex_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Ex Date",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "independent_origin_groups": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Independent Origin Groups"
+          },
+          "manual_locked": {
+            "title": "Manual Locked",
+            "type": "boolean"
+          },
+          "pay_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pay Date"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "pattern": "^[^\\x00]+$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "record_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Date"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "const": "OWNER_EVENT_DECISION_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          },
+          "workflow_status": {
+            "enum": [
+              "PROVISIONAL",
+              "CORROBORATED",
+              "VERIFIED",
+              "CONFLICT",
+              "INCOMPLETE",
+              "WITHDRAWN"
+            ],
+            "title": "Workflow Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "security_id",
+          "event_type",
+          "ex_date",
+          "announce_date",
+          "record_date",
+          "pay_date",
+          "dps",
+          "currency",
+          "adjustment_basis",
+          "workflow_status",
+          "manual_locked",
+          "decision_kind",
+          "candidate_revision_id",
+          "independent_origin_groups",
+          "assessment",
+          "evidence",
+          "reference",
+          "reason",
+          "created_at",
+          "scope",
+          "current_use_scope",
+          "document_verification",
+          "eligibility_scope",
+          "id",
+          "current_revision_id",
+          "version"
+        ],
+        "title": "DividendEventRecord",
+        "type": "object"
+      },
+      "DividendEventRevisionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_basis": {
+            "enum": [
+              "AS_DECLARED",
+              "SPLIT_ADJUSTED",
+              "UNKNOWN"
+            ],
+            "title": "Adjustment Basis",
+            "type": "string"
+          },
+          "announce_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Announce Date"
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Revision Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "HKD",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "decision_kind": {
+            "enum": [
+              "CANDIDATE",
+              "MANUAL",
+              "VERIFY",
+              "WITHDRAW"
+            ],
+            "title": "Decision Kind",
+            "type": "string"
+          },
+          "document_verification": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Document Verification",
+            "type": "string"
+          },
+          "dps": {
+            "maxLength": 50,
+            "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+            "title": "Dps",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "REGULAR",
+              "SPECIAL",
+              "INTERIM",
+              "FINAL",
+              "SUPPLEMENTAL",
+              "ETF_DISTRIBUTION",
+              "REIT_DISTRIBUTION",
+              "UNKNOWN"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EventEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "ex_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Ex Date",
+            "type": "string"
+          },
+          "independent_origin_groups": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Independent Origin Groups"
+          },
+          "manual_locked": {
+            "title": "Manual Locked",
+            "type": "boolean"
+          },
+          "pay_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pay Date"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "pattern": "^[^\\x00]+$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "record_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Date"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "OWNER_EVENT_DECISION_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "workflow_status": {
+            "enum": [
+              "PROVISIONAL",
+              "CORROBORATED",
+              "VERIFIED",
+              "CONFLICT",
+              "INCOMPLETE",
+              "WITHDRAWN"
+            ],
+            "title": "Workflow Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "security_id",
+          "event_type",
+          "ex_date",
+          "announce_date",
+          "record_date",
+          "pay_date",
+          "dps",
+          "currency",
+          "adjustment_basis",
+          "workflow_status",
+          "manual_locked",
+          "decision_kind",
+          "candidate_revision_id",
+          "independent_origin_groups",
+          "assessment",
+          "evidence",
+          "reference",
+          "reason",
+          "created_at",
+          "scope",
+          "current_use_scope",
+          "document_verification",
+          "eligibility_scope",
+          "event_id",
+          "revision_id",
+          "revision_no"
+        ],
+        "title": "DividendEventRevisionRecord",
+        "type": "object"
+      },
       "DividendObservationRecord": {
         "additionalProperties": false,
         "properties": {
@@ -3136,6 +3630,77 @@
           "request_id"
         ],
         "title": "Error",
+        "type": "object"
+      },
+      "EventEvidence": {
+        "additionalProperties": false,
+        "description": "Fields supported by one explicitly associated original source observation.",
+        "properties": {
+          "fields": {
+            "items": {
+              "enum": [
+                "ex_date",
+                "announce_date",
+                "record_date",
+                "pay_date",
+                "event_type",
+                "currency",
+                "dps",
+                "adjustment_basis"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Fields",
+            "type": "array"
+          },
+          "observation_id": {
+            "format": "uuid",
+            "title": "Observation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "observation_id",
+          "fields"
+        ],
+        "title": "EventEvidence",
+        "type": "object"
+      },
+      "EventReference": {
+        "additionalProperties": false,
+        "properties": {
+          "citation": {
+            "maxLength": 300,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Citation",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "url_withheld": {
+            "title": "Url Withheld",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "citation",
+          "url",
+          "url_withheld"
+        ],
+        "title": "EventReference",
         "type": "object"
       },
       "Exchange": {
@@ -4255,6 +4820,62 @@
           "items"
         ],
         "title": "Page[DividendBasisRecord]",
+        "type": "object"
+      },
+      "Page_DividendEventRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DividendEventRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[DividendEventRecord]",
+        "type": "object"
+      },
+      "Page_DividendEventRevisionRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DividendEventRevisionRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[DividendEventRevisionRecord]",
         "type": "object"
       },
       "Page_Exchange_": {
@@ -15207,6 +15828,289 @@
         ]
       }
     },
+    "/api/v1/dividends/events": {
+      "get": {
+        "operationId": "list_dividend_events",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "security_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Security Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workflow_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "PROVISIONAL",
+                    "CORROBORATED",
+                    "VERIFIED",
+                    "CONFLICT",
+                    "INCOMPLETE",
+                    "WITHDRAWN"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_DividendEventRecord_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "List Events",
+        "tags": [
+          "Dividend event decisions"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}": {
+      "get": {
+        "operationId": "get_dividend_event",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DividendEventRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Get Event",
+        "tags": [
+          "Dividend event decisions"
+        ]
+      }
+    },
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
       "get": {
         "operationId": "get_dividend_tax_estimate",
@@ -15671,6 +16575,134 @@
         "summary": "Estimate History",
         "tags": [
           "Dividend tax estimates"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/revisions": {
+      "get": {
+        "operationId": "list_dividend_event_revisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_DividendEventRevisionRecord_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Revisions",
+        "tags": [
+          "Dividend event decisions"
         ]
       }
     },
