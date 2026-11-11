@@ -323,6 +323,33 @@ receipt reconciliation, audit and idempotency in one transaction; that work must
 replace the temporary publication fence deliberately. Downgrade refuses to remove
 history: restore a validated pre-upgrade backup instead.
 
+## Inert tax-setting provenance storage
+
+Migration `0021_dividend_tax_settings` adds one initially empty, append-only table
+and brings the schema to 60 business tables. It does not backfill or change old
+projections, entitlements, receipts, cash, FX or audit records. A row records one
+explicit event revision/account scope, original portfolio and broker identities,
+observed account and broker versions, an effective-from date, a consecutive
+predecessor, a correlated request/audit and either an `ESTIMATED` fraction in
+scaled parts per million or an explicit `UNKNOWN` with no rate. Zero is valid
+only when explicitly supplied; neither a missing row nor `UNKNOWN` means zero.
+A setting for an earlier physical event revision is not automatically inherited
+by a later revision.
+
+SQL checks the current event and account scope at insertion, audit metadata,
+revision sequence and canonical dates; it rejects updates, deletions, replacement
+and conflicting version/request identities. It cannot authenticate a session,
+verify an audit fingerprint, select an effective setting, prove eligibility or
+confirm actual withholding. SQL-shaped rows are not an income record or grant.
+There is no application writer, reader, projection provenance linkage or tax
+confirmation workflow yet. A later protected writer must validate the entire
+history and source, authenticate, and atomically invalidate affected projections;
+a future projection writer must record the selected setting and observed history
+head, revalidate them in the current writer transaction and retain `ESTIMATED`
+separately from computational quality. Existing projection fingerprints must not
+be changed. Downgrade refuses to remove history; restore a validated pre-upgrade
+backup instead.
+
 ## Internal retained-projection history reader
 
 `dividend_projection_history.history` reads one supplied owner, event and account in
