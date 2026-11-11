@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from sqlalchemy import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from spm_api import trade_audit, trade_service
 from spm_api.audit import audit, canonical, digest
@@ -472,6 +473,32 @@ async def test_caught_late_failure_still_rolls_back_the_recovery_savepoint(
             uuid4(),
             REASON,
         )
+    assert database_snapshot(engine) == before
+
+
+async def test_caught_savepoint_release_failure_aborts_recovery_and_outer_work(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    original = await legacy_trade(client, book)
+    before = database_snapshot(engine)
+    with unit_of_work(engine, write=True) as con:
+        with (
+            patch.object(
+                engine.dialect,
+                "do_release_savepoint",
+                side_effect=SQLAlchemyError("synthetic release failure"),
+            ),
+            pytest.raises(SQLAlchemyError),
+        ):
+            trade_audit.recover_from_response(
+                con,
+                UUID(book["owner"]["id"]),
+                UUID(original["id"]),
+                TradeRecord.model_validate(original),
+                uuid4(),
+                REASON,
+            )
+        assert not con.in_transaction()
     assert database_snapshot(engine) == before
 
 

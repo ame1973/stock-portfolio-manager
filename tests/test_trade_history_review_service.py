@@ -4,11 +4,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from sqlalchemy import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from spm_api import trade_audit, trade_service
 from spm_api import trade_history_review as review
@@ -705,6 +707,36 @@ async def test_late_failure_caught_by_caller_rolls_back_the_inner_review(
             decision="ACKNOWLEDGE_UNVERIFIED",
             reason=REASON,
         )
+    assert database_snapshot(engine) == before
+
+
+async def test_caught_savepoint_release_failure_aborts_review_and_outer_work(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    trade = UUID(synthetic_legacy_draft(engine, book, unrelated_audit=False))
+    owner = UUID(book["owner"]["id"])
+    before = database_snapshot(engine)
+    with unit_of_work(engine, write=True) as con:
+        with (
+            patch.object(
+                engine.dialect,
+                "do_release_savepoint",
+                side_effect=SQLAlchemyError("synthetic release failure"),
+            ),
+            pytest.raises(SQLAlchemyError),
+        ):
+            review.save(
+                con,
+                owner,
+                trade,
+                review_id=uuid4(),
+                request_id=uuid4(),
+                expected_trade_version=1,
+                expected_revision=0,
+                decision="ACKNOWLEDGE_UNVERIFIED",
+                reason=REASON,
+            )
+        assert not con.in_transaction()
     assert database_snapshot(engine) == before
 
 

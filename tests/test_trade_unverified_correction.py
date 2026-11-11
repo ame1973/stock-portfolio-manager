@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from sqlalchemy import Engine
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from spm_api import (
     trade_audit,
@@ -696,6 +696,29 @@ async def test_caught_failure_rolls_back_a_new_pre_retirement_origin(
         pytest.raises(trade_correction_authorization.CorrectionAuthorizationError),
     ):
         call(con, client, "REVISE", current, pins, uuid4(), revision(book))
+    assert database_snapshot(engine) == before
+
+
+async def test_caught_savepoint_release_failure_aborts_correction_and_outer_work(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    first, current = audited_current_with_a_missing_ancestor(engine, book)
+    pins = (trade_history_review.CorrectionReviewPin(first, 2, 1),)
+    before = database_snapshot(engine)
+    with unit_of_work(engine, write=True) as con:
+        with (
+            patch.object(
+                engine.dialect,
+                "do_release_savepoint",
+                side_effect=SQLAlchemyError("synthetic release failure"),
+            ),
+            pytest.raises(
+                trade_unverified_correction.UnverifiedCorrectionError,
+                match="^TRADE_CORRECTION_UNAVAILABLE$",
+            ),
+        ):
+            call(con, client, "REVISE", current, pins, uuid4(), revision(book))
+        assert not con.in_transaction()
     assert database_snapshot(engine) == before
 
 

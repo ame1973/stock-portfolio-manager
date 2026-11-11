@@ -9,7 +9,8 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.trade_routes as routes
 from spm_api import trade_service
@@ -80,6 +81,30 @@ async def test_owned_origin_read_distinguishes_missing_from_retained_without_ado
         "history_completeness": "UNVERIFIED",
     }
     assert database_snapshot(engine) == before
+
+
+async def test_release_failure_returns_private_error_and_keeps_original_retry_available(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    original = await legacy_trade(client, book)
+    headers = version_headers(client, 2, key="synthetic-origin-release-failure")
+    before = database_snapshot(engine)
+    with patch.object(
+        Connection,
+        "_release_savepoint_impl",
+        side_effect=SQLAlchemyError("private-untrusted release failure"),
+    ):
+        response = await client.post(
+            path(original["id"]) + "/recover", json=body(original), headers=headers
+        )
+    assert response.status_code == 503 and response.json()["code"] == "DATABASE_UNAVAILABLE"
+    safe(response)
+    assert database_snapshot(engine) == before
+    retry = await client.post(
+        path(original["id"]) + "/recover", json=body(original), headers=headers
+    )
+    assert retry.status_code == 200
+    safe(retry)
 
 
 async def test_protected_recovery_replays_original_receipt_without_financial_changes(

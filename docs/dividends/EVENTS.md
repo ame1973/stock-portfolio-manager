@@ -612,7 +612,10 @@ gap, its verified original is captured before retirement as usual.
 The ordinary financial replay and exact settlement reversal run before the writer
 appends a canonical authorization audit and immutable scope record. A nested
 savepoint rolls back facts, cash, audit, origins and invalidations even if a caller
-catches an error. Repeating the same internal request ID and normalized intent
+catches an error. If starting, rolling back or releasing that savepoint fails, the
+entire enclosing transaction is aborted; a failed outer rollback invalidates the
+connection. Trade-origin recovery and trade-history review use the same guard.
+Repeating the same internal request ID and normalized intent
 returns the validated original result without writes, including after a later
 withdrawal; changing the intent conflicts. A separate historical replay helper
 rechecks the original authorization and result without making a new grant.

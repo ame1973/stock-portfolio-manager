@@ -73,6 +73,42 @@ def make_engine(path: Path) -> Engine:
     return engine
 
 
+def _abort_uncertain_transaction(connection: Connection) -> None:
+    try:
+        connection.rollback()
+    except BaseException:
+        connection.invalidate()
+        raise
+
+
+@contextmanager
+def savepoint(connection: Connection) -> Iterator[None]:
+    """Abort the outer transaction when a savepoint outcome cannot be trusted."""
+    try:
+        nested = connection.begin_nested()
+    except BaseException:
+        _abort_uncertain_transaction(connection)
+        raise
+    try:
+        yield
+    except BaseException:
+        if nested.is_active:
+            try:
+                nested.rollback()
+            except BaseException:
+                _abort_uncertain_transaction(connection)
+                raise
+        else:
+            _abort_uncertain_transaction(connection)
+        raise
+    else:
+        try:
+            nested.commit()
+        except BaseException:
+            _abort_uncertain_transaction(connection)
+            raise
+
+
 @contextmanager
 def unit_of_work(engine: Engine, *, write: bool = False) -> Iterator[Connection]:
     """Commit facts, cash effects, audit, and invalidations together or roll everything back."""

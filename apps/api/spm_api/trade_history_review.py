@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from spm_api import trade_audit
 from spm_api.audit import audit, canonical, digest
+from spm_api.db import savepoint
 from spm_api.decimal_types import INT64_MAX
 from spm_api.trade_codec import as_trade
 
@@ -459,7 +460,7 @@ def save(
         or not trade_audit._reason(reason)
     ):
         raise TradeReviewError("INVALID_TRADE_REVIEW_SCOPE")
-    with con.begin_nested():
+    with savepoint(con):
         try:
             trade = trade_audit._trade(con, owner, identifier)
             if trade is None:

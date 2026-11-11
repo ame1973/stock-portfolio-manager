@@ -5,11 +5,13 @@ import json
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from spm_api.audit import stamp
 from spm_api.db import unit_of_work
@@ -63,6 +65,38 @@ def safe(response: httpx.Response) -> None:
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-request-id"]
     assert "private-untrusted" not in response.text
+
+
+async def test_release_failure_rolls_back_cash_and_idempotency_before_original_retry(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    trade = active_auditless_buy(engine, book)
+    decision(engine, UUID(book["owner"]["id"]), trade)
+    data = body(trade, "void", book)
+    headers = version_headers(client, 1, key="synthetic-correction-release-failure")
+    before = database_snapshot(engine)
+    with patch.object(
+        Connection,
+        "_release_savepoint_impl",
+        side_effect=SQLAlchemyError("private-untrusted release failure"),
+    ):
+        response = await client.post(path(trade, "void"), json=data, headers=headers)
+    assert response.status_code == 503 and response.json()["code"] == "TRADE_CORRECTION_UNAVAILABLE"
+    safe(response)
+    assert database_snapshot(engine) == before
+    retry = await client.post(path(trade, "void"), json=data, headers=headers)
+    assert retry.status_code == 200
+    safe(retry)
+    with unit_of_work(engine) as con:
+        entries = con.exec_driver_sql(
+            "SELECT amount_micro,fx_rate_hkd_e12,entry_role FROM cash_ledger_entries "
+            "WHERE source_type='TRADE' AND source_id=? ORDER BY rowid",
+            (str(trade),),
+        ).all()
+    assert [tuple(row) for row in entries] == [
+        (-1000000000, 7800000000000, "PRIMARY"),
+        (1000000000, 7800000000000, "REVERSAL"),
+    ]
 
 
 @pytest.mark.parametrize("operation", ["revise", "void"])

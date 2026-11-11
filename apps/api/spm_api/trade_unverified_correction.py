@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from spm_api import trade_audit, trade_correction_authorization, trade_history_review, trade_service
 from spm_api.audit import audit, canonical, digest
+from spm_api.db import savepoint
 from spm_api.decimal_types import INT64_MAX, to_scaled
 from spm_api.errors import ApiError
 from spm_api.mutations import check_version
@@ -302,7 +303,7 @@ def _change(
         raise UnverifiedCorrectionError("INVALID_TRADE_CORRECTION_SCOPE")
     intent = _intent(identifier, version, operation, change, pins)
     try:
-        with con.begin_nested():
+        with savepoint(con):
             existing = _existing(con, auth, request_id, intent)
             if existing is not None:
                 return existing

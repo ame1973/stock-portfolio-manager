@@ -10,7 +10,8 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.trade_routes as routes
 from spm_api import trade_audit, trade_service
@@ -87,6 +88,26 @@ async def test_owned_status_reports_the_actual_missing_gap_without_writes(
     assert second.json()["current_gap"] == "MISSING_RETIRED_ORIGIN"
     assert second.json()["trade_version"] == 2
     assert database_snapshot(engine) == before
+
+
+async def test_release_failure_returns_private_error_and_keeps_original_retry_available(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    trade = synthetic_legacy_draft(engine, book, unrelated_audit=False)
+    headers = version_headers(client, 1, key="synthetic-review-release-failure")
+    before = database_snapshot(engine)
+    with patch.object(
+        Connection,
+        "_release_savepoint_impl",
+        side_effect=SQLAlchemyError("private-untrusted release failure"),
+    ):
+        response = await client.post(path(trade), json=body(), headers=headers)
+    assert response.status_code == 503 and response.json()["code"] == "DATABASE_UNAVAILABLE"
+    safe(response)
+    assert database_snapshot(engine) == before
+    retry = await client.post(path(trade), json=body(), headers=headers)
+    assert retry.status_code == 200
+    safe(retry)
 
 
 async def test_acknowledge_withdraw_and_original_retry_are_atomic(

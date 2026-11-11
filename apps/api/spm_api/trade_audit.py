@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import Connection, RowMapping, text
 
 from spm_api.audit import audit, canonical, digest, stamp
+from spm_api.db import savepoint
 from spm_api.decimal_types import INT64_MAX, INT64_MIN
 from spm_api.master_service import invalidate_portfolio
 from spm_api.trade_codec import as_trade
@@ -446,7 +447,7 @@ def recover_from_response(
         or not _reason(reason)
     ):
         raise TradeAuditError("INVALID_TRADE_AUDIT_SCOPE")
-    with con.begin_nested():
+    with savepoint(con):
         return _recover_response(con, owner, identifier, response, request_id, reason)
 
 
