@@ -71,6 +71,58 @@ def _writer(con: Connection, owner_id: UUID) -> None:
         raise events.EventError("DIVIDEND_EVENT_OWNER_UNAVAILABLE")
 
 
+def require_current_source(
+    con: Connection,
+    owner_id: UUID,
+    event_id: UUID,
+    *,
+    revision_id: UUID,
+    version: int,
+) -> events.ReviewedEvent:
+    """Recheck a source now, without authenticating or granting financial use.
+
+    Callers must revalidate after changing its event, candidate or action scope, even
+    inside the same transaction; the result is not a grant for another transaction.
+    """
+    _writer(con, owner_id)
+    if (
+        not isinstance(revision_id, UUID)
+        or type(version) is not int
+        or not 1 <= version <= 2_147_483_647
+    ):
+        raise events.EventError("INVALID_DIVIDEND_EVENT_SCOPE")
+    reviewed = events.get(con, owner_id, event_id)
+    if reviewed is None:
+        raise events.EventError("DIVIDEND_EVENT_NOT_FOUND")
+    record = reviewed.record
+    if record.revision_id != revision_id or record.revision_no != version:
+        raise events.EventError("DIVIDEND_EVENT_VERSION_CONFLICT")
+    if record.decision_kind == "CANDIDATE":
+        row = con.execute(
+            text("SELECT candidate_id,revision_no FROM dividend_candidate_revisions WHERE id=:id"),
+            {"id": str(record.candidate_revision_id)},
+        ).first()
+        try:
+            if row is None or type(row.revision_no) is not int:
+                raise ValueError
+            candidate_id = events._uuid(row.candidate_id)
+        except (ValueError, TypeError):
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE") from None
+        try:
+            candidate = candidates.require_current(
+                con, owner_id, candidate_id, version=row.revision_no
+            )
+        except candidates.CandidateError as error:
+            raise events.EventError(str(error)) from None
+        if (
+            candidate.record.decision.id != record.candidate_revision_id
+            or candidate.record.decision.terms != record.terms
+            or candidate.assessment != reviewed.assessment
+        ):
+            raise events.EventError("DIVIDEND_EVENT_SOURCE_CHANGED")
+    return reviewed
+
+
 def _replay_matches(
     con: Connection,
     intent: EventIntent,

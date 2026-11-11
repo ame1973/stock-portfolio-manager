@@ -122,6 +122,28 @@ exposing event adoption, make the public source and candidate views unambiguous
 about any current or historical event linkage. No internal decision invokes a
 provider, reads credential files or verifies a cited document.
 
+## Current event-source fence
+
+The internal `dividend_event_writer.require_current_source` rechecks one active
+owner's complete audited event history and exact physical revision/version in
+an existing writer transaction. For a candidate decision it independently
+requires the same current, open candidate, original source and recorded
+basis/action scope, and matches its identity, terms and assessment to the event.
+Dismissed or superseded candidates and changed basis are rejected for new use;
+they do not erase valid historical reads. Explicit manual verification or
+withdrawal remains its own decision rather than silently reverting to an old
+candidate. The caller must use the application engine's writer unit of work;
+changing a connection option after a read transaction starts cannot promote its
+potentially stale WAL snapshot to a serialized writer.
+
+This function does not authenticate a session, prove eligible shares or complete
+ownership, create income or authorize receipts. `CONFLICT`, `INCOMPLETE` and
+`WITHDRAWN` statuses remain visible and are not economic approvals. Its result
+is valid only at the instant of the check: a caller that changes the event,
+candidate or related action scope in the same transaction must recheck before
+using it, and must never carry it into a different transaction. It performs no
+provider requests or credential-file access. No projection writer consumes it yet.
+
 ## Recorded account-share calculation
 
 The internal `dividend_eligibility.recorded_eligibility` calculates an
@@ -910,6 +932,11 @@ revision/data-revision fences, competing inserts, integer extremes, nullable FX
 and coexistence with old entitlement/receipt/cash records. It also checks that a
 well-shaped but economically inconsistent row can be stored and cannot advance
 an event. These tests do not authenticate the row or implement a projection writer.
+
+`uv run pytest tests/test_dividend_event_current_use.py` checks exact revision pins,
+active-owner and writer boundaries, later candidate changes or dismissals, changed
+basis, explicit manual decisions, same-transaction revalidation and competing
+writers. These synthetic tests establish no ownership or economic authorization.
 
 `uv run pytest tests/test_dividend_event_migration.py tests/test_dividend_event_service.py tests/test_dividend_event_writer.py`
 checks migration preservation and rollback, source and candidate scope, publication
