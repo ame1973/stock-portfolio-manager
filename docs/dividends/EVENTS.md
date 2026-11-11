@@ -287,7 +287,7 @@ Migration `0020_dividend_projection_history` adds an initially empty, append-onl
 tables. It does not modify, reparent or backfill old entitlements, receipts, cash
 postings, historical FX or audit records. Existing receipts stay linked to their
 original entitlement; the new table has no receipt linkage or production
-projection reader or writer.
+projection writer. Its separate internal history reader is described below.
 
 A version records an explicitly identified managed event, its current physical
 revision and account, a consecutive per-event/account predecessor chain, the
@@ -322,6 +322,32 @@ complete current scope and arrange event publication, all affected projections,
 receipt reconciliation, audit and idempotency in one transaction; that work must
 replace the temporary publication fence deliberately. Downgrade refuses to remove
 history: restore a validated pre-upgrade backup instead.
+
+## Internal retained-projection history reader
+
+`dividend_projection_history.history` reads one supplied owner, event and account in
+a single existing transaction. It checks the complete retained event and projection
+chains, original portfolio/broker associations, canonical timestamps, correlated
+projection audit and exact component arithmetic. It preserves each physical version;
+it does not sum prior amounts or select a current financial entitlement. A missing or
+foreign event/account returns `None`; an owned scope with no projections returns an
+empty history, not a zero entitlement. Unreadable or inconsistent history fails with
+a fixed error, and private financial values and reasons are omitted from representations.
+
+The projection audit fingerprint covers the retained snapshot fields, physical event
+revision number, a hash of the reason and a fixed unverified-scope label. The audit ID
+is correlated separately. Future schema changes must preserve the fingerprint contract
+for existing rows. A matching hash only verifies consistency with the stored audit: it
+does not prove that the actor was authenticated, the account actually held the stated
+shares, or the fee and tax settings were effective. The reader returns
+`history_completeness=UNVERIFIED` and `scope=UNVERIFIED_PROJECTION_HISTORY_ONLY`;
+its stored trade-history labels are also unverified assertions. An inactive owner's
+history can remain readable internally but cannot pass the active-owner current-use
+fence. Callers must authenticate separately and recheck the event, ledger, eligibility,
+account configuration and authorization in a writer transaction before economic use.
+There is no projection rebuild or receipt writer, event publication remains fenced,
+and computational `OK` is not confirmed tax. This read performs no writes or provider
+access.
 
 ## Inert trade-audit origin storage
 
@@ -969,6 +995,12 @@ revision/data-revision fences, competing inserts, integer extremes, nullable FX
 and coexistence with old entitlement/receipt/cash records. It also checks that a
 well-shaped but economically inconsistent row can be stored and cannot advance
 an event. These tests do not authenticate the row or implement a projection writer.
+
+`uv run pytest tests/test_dividend_projection_history.py` checks complete retained
+chains, canonical fingerprints, private fixed errors, exact component arithmetic,
+owner/account scope, later audit changes, historical account configuration and WAL
+snapshot consistency. A synthetic matching audit can coexist with zero recorded
+shares, demonstrating that this reader does not establish financial authority.
 
 `uv run pytest tests/test_dividend_event_current_use.py` checks exact revision pins,
 active-owner and writer boundaries, later candidate changes or dismissals, changed
