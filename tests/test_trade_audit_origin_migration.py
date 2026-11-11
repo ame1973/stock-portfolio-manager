@@ -127,7 +127,7 @@ def test_upgrade_preserves_legacy_facts_schema_receipts_and_fx(previous_engine: 
     assert after["audit_events"][: len(before["audit_events"])] == before["audit_events"]
     assert all(row in schema(previous_engine) for row in definitions)
     with unit_of_work(previous_engine) as con:
-        assert schema_head() == "0021_dividend_tax_settings"
+        assert schema_head() == "0022_dividend_projection_tax"
         assert con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == HEAD
         assert con.exec_driver_sql(
             "SELECT count(*) FROM audit_events WHERE action=?", (ACTION,)

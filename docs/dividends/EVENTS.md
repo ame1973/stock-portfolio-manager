@@ -342,12 +342,12 @@ and conflicting version/request identities. It cannot authenticate a session,
 verify an audit fingerprint, select an effective setting, prove eligibility or
 confirm actual withholding. SQL-shaped rows are not an income record or grant.
 The separate internal controller below validates audit content and selection; there
-is still no protected tax-setting API, projection provenance linkage or confirmed-tax
-workflow. A future projection writer must retain the selected setting, observed
-history head and effective day, revalidate them in its own writer transaction, and
-keep `ESTIMATED` separate from computational quality. Existing projection
-fingerprints must not be changed. Downgrade refuses to remove history; restore a
-validated pre-upgrade backup instead.
+is still no protected tax-setting API or confirmed-tax workflow. The projection
+provenance described below retains an optional selected setting, observed history
+head and effective day without rewriting existing projection fingerprints. A future
+projection writer must revalidate them in its own writer transaction and keep
+`ESTIMATED` separate from computational quality. Downgrade refuses to remove history;
+restore a validated pre-upgrade backup instead.
 
 ## Audited internal tax-setting controller
 
@@ -390,6 +390,35 @@ created or changed here, and no provider request or credential-file read is made
 An economic writer still needs independent current recorded eligibility, event-state,
 fee/FX provenance, authentication and atomic reconciliation checks.
 
+## Projection tax provenance
+
+Migration `0022_dividend_projection_tax` adds six nullable columns directly to each
+immutable projection version, without adding a business table or changing prior
+entitlements, receipts, cash, FX or audit fingerprints. Existing rows retain null
+provenance: a legacy tax amount is not proof of an effective setting or confirmed
+withholding. Provenance cannot be attached to an old immutable row after the fact.
+
+A version 1 snapshot retains the explicitly supplied tax-effective day, observed
+setting-history head number and identity, selected setting identity and separate
+`MISSING`, `UNKNOWN` or `ESTIMATED` status. An empty head has number zero and no
+identity; an inapplicable future setting can give a nonempty head with no selected
+setting. A known zero estimate stays distinct from a missing or unknown rate.
+An `EXPECTED` amount requires an `ESTIMATED` selection with an exactly matching tax
+fraction; non-amount states carry no invented monetary amount. SQL checks the latest scoped
+head, effective-day selection, account/broker versions and timestamp ordering when
+inserting a version, but does not authenticate a caller or prove an audit's contents.
+
+The internal projection-history reader verifies the complete retained setting and
+projection chains, then reproduces the selection from the original observed prefix.
+A later backdated setting does not relabel the older projection; corrupt later
+history still fails the complete read closed. Versioned tax fields are included in
+that projection's canonical audit fingerprint, while legacy fingerprints stay
+unchanged. The explicit day is not inferred from ex-date, receipt date or the server
+clock. These checks establish only consistency of retained owner assertions, not
+actual withholding, eligible shares or an economic grant. No production projection
+writer or tax-setting HTTP API is installed. Event publication remains fenced until
+an authenticated atomic rebuild and receipt reconciliation are implemented.
+
 ## Internal retained-projection history reader
 
 `dividend_projection_history.history` reads one supplied owner, event and account in
@@ -402,11 +431,12 @@ empty history, not a zero entitlement. Unreadable or inconsistent history fails 
 a fixed error, and private financial values and reasons are omitted from representations.
 
 The projection audit fingerprint covers the retained snapshot fields, physical event
-revision number, a hash of the reason and a fixed unverified-scope label. The audit ID
-is correlated separately. Future schema changes must preserve the fingerprint contract
-for existing rows. A matching hash only verifies consistency with the stored audit: it
-does not prove that the actor was authenticated, the account actually held the stated
-shares, or the fee and tax settings were effective. The reader returns
+revision number, a hash of the reason and a fixed unverified-scope label. Version 1
+also covers the explicit tax provenance above; the audit ID is correlated separately.
+Future schema changes must preserve the fingerprint contract for existing rows. A
+matching hash only verifies consistency with the stored audit: it does not prove that
+the actor was authenticated, the account actually held the stated shares, the fee
+setting was effective or the owner estimate represents actual withholding. The reader returns
 `history_completeness=UNVERIFIED` and `scope=UNVERIFIED_PROJECTION_HISTORY_ONLY`;
 its stored trade-history labels are also unverified assertions. An inactive owner's
 history can remain readable internally but cannot pass the active-owner current-use
@@ -1065,6 +1095,12 @@ selection, current source and account revalidation, zero versus unknown, histori
 replay, competing decisions and transaction failure rollback. Synthetic old receipts,
 locked FX and projection rows remain unchanged. These checks do not authenticate an
 HTTP caller or establish withholding, ownership or income.
+
+`uv run pytest tests/test_dividend_projection_tax.py tests/test_dividend_projection_tax_migration.py`
+checks legacy fingerprint preservation, private pre-upgrade backup, atomic migration
+rollback, distinct missing/unknown/zero estimates, exact selected/head/day pins,
+backdated decisions and fail-closed retained history. It does not establish session
+authentication, confirmed tax or a financial projection writer.
 
 `uv run pytest tests/test_dividend_projection_migration.py` exercises isolated
 upgrade/rollback and private backup, immutable version chains, owner and current

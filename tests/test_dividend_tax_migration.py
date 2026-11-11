@@ -24,6 +24,7 @@ from tests.provider_evidence_helpers import insert
 from tests.test_action_opening_migration import schema
 from tests.test_dividend_event_migration import OTHER, OWNER, REASON
 from tests.test_dividend_event_migration import old_engine as old_engine
+from tests.test_dividend_event_migration import owned_account as historical_account
 from tests.test_dividend_event_migration import source as source
 from tests.test_dividend_event_writer import AT, manual, next_intent, owned_account, submit
 from tests.test_dividend_projection_migration import snapshot_values
@@ -110,7 +111,7 @@ def setting_values(
 
 
 def test_head_starts_empty_without_setting_a_rate(engine: Engine) -> None:
-    assert schema_head() == HEAD
+    assert schema_head() == "0022_dividend_projection_tax"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
@@ -368,14 +369,22 @@ def test_competing_first_versions_commit_only_one_audit_and_setting(
     }
 
 
-def test_downgrade_does_not_delete_tax_history(engine: Engine, scenario: tuple[Any, str]) -> None:
-    intent, account = scenario
-    with unit_of_work(engine, write=True) as con:
+def test_downgrade_does_not_delete_tax_history(previous_engine: Engine) -> None:
+    # Exercise the historical tax migration's guard, not the newer head's guard.
+    upgrade_to(previous_engine, HEAD)
+    intent = manual()
+    with previous_engine.connect().execution_options(writer=True) as con, con.begin():
+        con.exec_driver_sql(
+            "INSERT INTO owners(id,password_hash,password_changed_at,created_at) VALUES (?,?,?,?)",
+            (str(OWNER), "synthetic-only", stamp(AT), stamp(AT)),
+        )
+        account = historical_account(con)
+        event_writer.save(con, OWNER, intent, at=AT, request_id=uuid4())
         insert(con, TABLE, setting_values(con, intent, account))
-    before, definitions = database_snapshot(engine), schema(engine)
-    with engine.begin() as con:
+    before, definitions = database_snapshot(previous_engine), schema(previous_engine)
+    with previous_engine.begin() as con:
         config = migration_config()
         config.attributes["connection"] = con
         with pytest.raises(RuntimeError, match="validated pre-upgrade backup"):
             command.downgrade(config, PREVIOUS)
-    assert database_snapshot(engine) == before and schema(engine) == definitions
+    assert database_snapshot(previous_engine) == before and schema(previous_engine) == definitions

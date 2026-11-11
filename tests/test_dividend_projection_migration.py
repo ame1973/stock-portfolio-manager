@@ -16,7 +16,8 @@ from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from spm_api import dividend_event_service as events
-from spm_api.audit import audit
+from spm_api import dividend_event_writer as event_writer
+from spm_api.audit import audit, stamp
 from spm_api.cli import migrate
 from spm_api.config import Settings
 from spm_api.db import migration_config, schema_head, unit_of_work
@@ -143,7 +144,7 @@ def staged_event(
 
 
 def test_head_adds_an_empty_projection_history(engine: Engine) -> None:
-    assert schema_head() == "0021_dividend_tax_settings"
+    assert schema_head() == "0022_dividend_projection_tax"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
@@ -919,18 +920,30 @@ def test_int64_overflow_is_not_accepted_as_sqlite_real(
     assert database_snapshot(engine) == before
 
 
-def test_nonempty_history_cannot_be_downgraded_or_deleted(
-    engine: Engine, source: dict[str, Any]
-) -> None:
-    with unit_of_work(engine, write=True) as con:
-        event, revision, account = staged_event(con, source)
-        insert(con, TABLE, snapshot_values(con, event, revision, account))
-    before, definitions = database_snapshot(engine), schema(engine)
+def test_nonempty_history_cannot_be_downgraded_or_deleted(previous_engine: Engine) -> None:
+    # Exercise the historical projection migration's guard, not a newer head's guard.
+    upgrade_to(previous_engine, HEAD)
+    intent = manual()
+    with previous_engine.connect().execution_options(writer=True) as con, con.begin():
+        con.exec_driver_sql(
+            "INSERT INTO owners(id,password_hash,password_changed_at,created_at) VALUES (?,?,?,?)",
+            (str(OWNER), "synthetic-only", stamp(WRITER_AT), stamp(WRITER_AT)),
+        )
+        account = owned_account(con)
+        event_writer.save(con, OWNER, intent, at=WRITER_AT, request_id=uuid4())
+        snapshot = snapshot_values(
+            con,
+            {"id": str(intent.event_id)},
+            {"id": str(intent.revision_id), "currency": "USD"},
+            account,
+        )
+        insert(con, TABLE, snapshot)
+    before, definitions = database_snapshot(previous_engine), schema(previous_engine)
     with (
         pytest.raises(RuntimeError, match="Restore a validated pre-upgrade backup"),
-        engine.connect() as con,
+        previous_engine.connect() as con,
     ):
         config = migration_config()
         config.attributes["connection"] = con
         command.downgrade(config, PREVIOUS)
-    assert database_snapshot(engine) == before and schema(engine) == definitions
+    assert database_snapshot(previous_engine) == before and schema(previous_engine) == definitions

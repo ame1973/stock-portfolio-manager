@@ -11,8 +11,9 @@ from sqlalchemy import Connection, text
 from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.dividend_event_service as events
+import spm_api.dividend_tax_service as tax
 from spm_api.audit import canonical, digest
-from spm_api.decimal_types import INT64_MAX, from_scaled
+from spm_api.decimal_types import INT64_MAX, from_scaled, to_scaled
 from spm_api.dividend_eligibility import EligibilityRule
 from spm_api.dividend_eligibility_service import TradeCreationAuditScope, TradeHistoryAuditScope
 from spm_api.dividend_projection import ProjectionScope, ProjectionVersion, select_current
@@ -22,6 +23,18 @@ from spm_api.master_models import Currency
 
 class ProjectionHistoryError(ValueError):
     """Fixed codes only; never include retained data or private rationale."""
+
+
+@dataclass(frozen=True, slots=True)
+class RetainedTaxProvenance:
+    """A retained owner estimate, not confirmed tax or an economic grant."""
+
+    effective_on: date
+    selected_setting_id: UUID | None = field(repr=False)
+    observed_head_no: int
+    observed_head_id: UUID | None = field(repr=False)
+    status: Literal["MISSING", "UNKNOWN", "ESTIMATED"]
+    scope: Literal["OWNER_ESTIMATE_ONLY"] = "OWNER_ESTIMATE_ONLY"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +62,7 @@ class RetainedProjection:
     audit_id: UUID = field(repr=False)
     created_at: datetime = field(repr=False)
     reason: str = field(repr=False)
+    tax_provenance: RetainedTaxProvenance | None = field(default=None, repr=False)
     history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
     scope: Literal["UNVERIFIED_PROJECTION_HISTORY_ONLY"] = "UNVERIFIED_PROJECTION_HISTORY_ONLY"
 
@@ -91,6 +105,14 @@ _PAYLOAD_FIELDS = (
     "request_id",
     "created_at",
 )
+_TAX_FIELDS = (
+    "tax_provenance_version",
+    "tax_effective_on",
+    "tax_observed_head_no",
+    "tax_observed_head_id",
+    "tax_selected_setting_id",
+    "tax_estimate_status",
+)
 
 
 def _payload(row: Mapping[str, Any], revision_no: int, reason: str) -> dict[str, Any]:
@@ -103,8 +125,18 @@ def _payload(row: Mapping[str, Any], revision_no: int, reason: str) -> dict[str,
         or not 10 <= len(reason) <= 1000
     ):
         raise ValueError
+    version = row.get("tax_provenance_version")
+    if version is None:
+        if any(row.get(name) is not None for name in _TAX_FIELDS[1:]):
+            raise ValueError
+        provenance: dict[str, Any] = {}
+    elif type(version) is int and version == 1:
+        provenance = {name: row[name] for name in _TAX_FIELDS}
+    else:
+        raise ValueError
     return {
         **{key: row[key] for key in _PAYLOAD_FIELDS},
+        **provenance,
         "revision_no": revision_no,
         "reason_sha256": digest(canonical(reason)),
         "scope": "UNVERIFIED_PROJECTION_HISTORY_ONLY",
@@ -150,6 +182,82 @@ def _owned_account(con: Connection, owner: UUID, account: UUID) -> bool:
     return True
 
 
+def _tax_provenance(
+    con: Connection,
+    owner: UUID,
+    account_id: UUID,
+    reviewed: events.ReviewedEvent,
+    row: Mapping[str, Any],
+    cache: dict[UUID, tuple[tax.TaxSetting, ...]],
+) -> RetainedTaxProvenance | None:
+    version = row.get("tax_provenance_version")
+    if version is None:
+        if any(row.get(name) is not None for name in _TAX_FIELDS[1:]):
+            raise ValueError
+        return None
+    if type(version) is not int or version != 1:
+        raise ValueError
+    record = reviewed.record
+    if record.revision_id not in cache:
+        settings = tax.history(
+            con, owner, record.event_id, record.revision_id, record.revision_no, account_id
+        )
+        if settings is None:
+            raise ValueError
+        cache[record.revision_id] = settings
+    settings = cache[record.revision_id]
+    head_no = _integer(row["tax_observed_head_no"], 0)
+    if head_no > len(settings):
+        raise ValueError
+    effective_on = _day(row["tax_effective_on"])
+    head_id = (
+        events._uuid(row["tax_observed_head_id"])
+        if row["tax_observed_head_id"] is not None
+        else None
+    )
+    selected_id = (
+        events._uuid(row["tax_selected_setting_id"])
+        if row["tax_selected_setting_id"] is not None
+        else None
+    )
+    selection = tax.select(settings[:head_no], effective_on)
+    selected = selection.selected
+    created_at = events._time(row["created_at"])
+    if (
+        (selection.head_no, selection.head_id) != (head_no, head_id)
+        or (selected.id if selected else None) != selected_id
+        or selection.status != row["tax_estimate_status"]
+        or (head_no > 0 and settings[head_no - 1].created_at > created_at)
+        or (
+            selected is not None
+            and (
+                str(selected.portfolio_id) != row["portfolio_id"]
+                or str(selected.broker_id) != row["broker_id"]
+                or selected.account_version != row["account_version"]
+                or selected.broker_version != row["broker_version"]
+                or selected.created_at > created_at
+            )
+        )
+        or (
+            row["state"] == "EXPECTED"
+            and (
+                selected is None
+                or selection.status != "ESTIMATED"
+                or selected.rate is None
+                or to_scaled(selected.rate, 6) != row["tax_rate_snapshot_ppm"]
+            )
+        )
+    ):
+        raise ValueError
+    return RetainedTaxProvenance(
+        effective_on=effective_on,
+        selected_setting_id=selected_id,
+        observed_head_no=head_no,
+        observed_head_id=head_id,
+        status=selection.status,
+    )
+
+
 def history(
     con: Connection, owner: UUID, event_id: UUID, account_id: UUID
 ) -> tuple[RetainedProjection, ...] | None:
@@ -166,6 +274,7 @@ def history(
         if head is None or not _owned_account(con, owner, account_id):
             return None
         revisions: dict[int, events.ReviewedEvent] = {head.record.revision_no: head}
+        tax_histories: dict[UUID, tuple[tax.TaxSetting, ...]] = {}
         rows = con.execute(
             text("""
                 SELECT v.*,r.revision_no,p.owner_id AS retained_portfolio_owner,
@@ -306,6 +415,9 @@ def history(
                     audit_id=audit_id,
                     created_at=created_at,
                     reason=reason,
+                    tax_provenance=_tax_provenance(
+                        con, owner, account_id, reviewed, row, tax_histories
+                    ),
                 )
             )
         if result:

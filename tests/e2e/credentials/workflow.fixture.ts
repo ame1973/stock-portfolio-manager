@@ -21,7 +21,7 @@ with sqlite3.connect(f"file:{Path(os.environ['DATA_DIR']) / 'portfolio.sqlite3'}
     db.execute('PRAGMA query_only=ON')
     assert db.execute('PRAGMA integrity_check').fetchone() == ('ok',)
     assert db.execute('PRAGMA foreign_key_check').fetchall() == []
-    assert db.execute('SELECT version_num FROM alembic_version').fetchone() == ('0021_dividend_tax_settings',)
+    assert db.execute('SELECT version_num FROM alembic_version').fetchone() == ('0022_dividend_projection_tax',)
     tables = [r[0] for r in db.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'alembic_version' ORDER BY name")]
     assert len(tables) == 60
     print(json.dumps({name: db.execute('SELECT * FROM "' + name.replace('"', '""') + '" ORDER BY rowid').fetchall() for name in tables}))
