@@ -824,6 +824,14 @@ rounds to zero. This pure result does not retain the original fee, FX provenance
 an effective tax setting; a future audited writer must retain and validate those
 inputs separately. Its computational `OK` is not confirmation of withholding tax.
 
+`dividend_projection_arithmetic.checked_accrual` independently recomputes a supplied
+projection's components from its event terms, recorded shares, tax fraction, original
+fee and both FX rates. Inconsistent amounts, invalid source labels, a hidden negative
+net or a changed event identity fail closed; non-amount states remain non-amounts.
+This checks a caller-supplied snapshot only: it does not verify any audit, fee or tax
+setting, historical holdings, session or current event and is not an eligibility or
+receipt grant.
+
 ## Required future protected writer and projection work
 
 These constraints are defense in depth, not authentication, authorization,
@@ -949,6 +957,11 @@ projection chains. These cases do not exercise a persistent projection writer.
 missing versus explicit zero, independent valuation FX, overflow and exact rounding
 against an independent rational-number oracle. It does not verify the source or
 record a financial fact.
+
+`uv run pytest tests/test_dividend_projection_arithmetic.py` verifies supplied
+projection components against the underlying unrounded arithmetic, preserving
+missing FX and unresolved states while rejecting inconsistent snapshots. It does
+not establish that the supplied event, shares or settings are authentic.
 
 `uv run pytest tests/test_dividend_projection_migration.py` exercises isolated
 upgrade/rollback and private backup, immutable version chains, owner and current
