@@ -51,7 +51,7 @@ def round_money(value: Decimal) -> Decimal:
 
 
 def conversion_rate(currency: Currency, rate: Decimal | None) -> Decimal | None:
-    if currency not in {"HKD", "USD"}:
+    if currency not in ("HKD", "USD"):
         raise FinanceError("UNSUPPORTED_CURRENCY", "Only HKD and USD are supported")
     if rate is not None:
         rate = exact_decimal(rate, 12, positive=True)
@@ -126,10 +126,9 @@ def native_settlement(
     reason: str | None = None,
 ) -> NativeSettlement:
     """Calculate native cash without inventing FX for an unposted scheduled draft."""
-    if side not in {"BUY", "SELL"}:
+    if side not in ("BUY", "SELL"):
         raise FinanceError("INVALID_SIDE", "Select BUY or SELL")
-    if currency not in {"HKD", "USD"}:
-        raise FinanceError("UNSUPPORTED_CURRENCY", "Only HKD and USD are supported")
+    conversion_rate(currency, None)
     quantity = exact_decimal(quantity, 8, positive=True)
     price = exact_decimal(price, 8, nonnegative=True)
     fee = exact_decimal(fee, 6, nonnegative=True)
@@ -340,7 +339,7 @@ def net_asset_value(
     receivables_hkd: Decimal = ZERO,
     liabilities_hkd: Decimal = ZERO,
 ) -> Metric:
-    if completeness not in {"UNKNOWN", "PARTIAL", "COMPLETE"}:
+    if completeness not in ("UNKNOWN", "PARTIAL", "COMPLETE"):
         raise FinanceError("INVALID_COMPLETENESS", "Unknown cash completeness assertion")
     if completeness != "COMPLETE" or cash_hkd is None:
         return Metric(None, "NOT_COMPUTABLE")
@@ -358,7 +357,7 @@ def time_weighted_return(
     subperiods: Sequence[tuple[Decimal, Decimal]] | None, completeness: Completeness
 ) -> Metric:
     """Chain complete valuations split immediately around every external cash flow."""
-    if completeness not in {"UNKNOWN", "PARTIAL", "COMPLETE"}:
+    if completeness not in ("UNKNOWN", "PARTIAL", "COMPLETE"):
         raise FinanceError("INVALID_COMPLETENESS", "Unknown cash completeness assertion")
     if completeness != "COMPLETE" or not subperiods:
         return Metric(None, "NOT_COMPUTABLE")
