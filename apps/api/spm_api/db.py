@@ -50,12 +50,25 @@ def make_engine(path: Path) -> Engine:
         if connection.execute("PRAGMA foreign_keys").fetchone()[0] != 1:
             raise RuntimeError("Foreign key enforcement is unavailable")
 
+    @event.listens_for(engine, "set_connection_execution_options")
+    def freeze_transaction_mode(connection: Connection, options: dict[str, object]) -> None:
+        # A label change cannot promote an existing WAL snapshot to BEGIN IMMEDIATE.
+        if "writer" not in options:
+            return
+        mode = options["writer"]
+        if type(mode) is not bool:
+            raise ValueError("INVALID_TRANSACTION_MODE")
+        if connection.in_transaction() and mode is not connection.get_execution_options().get(
+            "writer", False
+        ):
+            raise RuntimeError("TRANSACTION_MODE_FROZEN")
+
     @event.listens_for(engine, "begin")
     def begin(connection: Connection) -> None:
-        statement = (
-            "BEGIN IMMEDIATE" if connection.get_execution_options().get("writer") else "BEGIN"
-        )
-        connection.exec_driver_sql(statement)
+        mode = connection.get_execution_options().get("writer", False)
+        if type(mode) is not bool:
+            raise ValueError("INVALID_TRANSACTION_MODE")
+        connection.exec_driver_sql("BEGIN IMMEDIATE" if mode else "BEGIN")
 
     return engine
 
