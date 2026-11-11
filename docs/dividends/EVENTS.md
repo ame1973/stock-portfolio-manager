@@ -341,9 +341,9 @@ revision sequence and canonical dates; it rejects updates, deletions, replacemen
 and conflicting version/request identities. It cannot authenticate a session,
 verify an audit fingerprint, select an effective setting, prove eligibility or
 confirm actual withholding. SQL-shaped rows are not an income record or grant.
-The separate internal controller below validates audit content and selection; there
-is still no protected tax-setting API or confirmed-tax workflow. The projection
-provenance described below retains an optional selected setting, observed history
+The separate internal controller below validates audit content and selection; the
+protected API described below adds authentication but does not confirm withholding.
+The projection provenance retains an optional selected setting, observed history
 head and effective day without rewriting existing projection fingerprints. A future
 projection writer must revalidate them in its own writer transaction and keep
 `ESTIMATED` separate from computational quality. Downgrade refuses to remove history;
@@ -383,12 +383,51 @@ change even within the same transaction. Both return `OWNER_ESTIMATE_ONLY`, neve
 confirmed tax. Reasons are retained in the local audit; do not include passwords or
 provider credentials in them.
 
-These are internal primitives, not an HTTP authorization or idempotency boundary.
-A protected API must recheck session and CSRF and commit its idempotency receipt in
-the same transaction. No current projection, event revision, receipt, cash or FX is
-created or changed here, and no provider request or credential-file read is made.
-An economic writer still needs independent current recorded eligibility, event-state,
-fee/FX provenance, authentication and atomic reconciliation checks.
+These are internal primitives, not themselves an HTTP authorization or idempotency
+boundary. The protected API below rechecks session and CSRF and commits its idempotency
+receipt in the same transaction. No current projection, event revision, receipt, cash
+or FX is created or changed here, and no provider request or credential-file read is
+made. An economic writer still needs independent current recorded eligibility,
+event-state, fee/FX provenance, authentication and atomic reconciliation checks.
+
+## Protected tax-estimate API
+
+The owner-scoped base path is
+`/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings`.
+All responses are private and `Cache-Control: no-store`.
+
+- `GET` requires an explicit `effective_on` date. It returns the current physical
+  event revision, account/portfolio/broker scope, the complete setting-history head,
+  and the selected `MISSING`, `UNKNOWN` or `ESTIMATED` decision. It reports whether
+  a selected setting still matches the current account and broker versions; a changed
+  scope is not silently treated as a current estimate.
+- `GET /history` requires `revision_id` and `revision_no`; it returns bounded,
+  keyset-paginated decisions for that physical revision, including older revisions.
+  History is validated before pagination; a corrupt retained chain fails closed.
+- `POST` appends one estimate or explicit unknown. It requires the physical event
+  revision ID, portfolio and broker IDs, exact account/broker version strings,
+  observed setting head number and ID, `effective_from`, `rate`, and a reason.
+  Send `null` for an explicit unknown rate; send a decimal fraction such as
+  `"0.300000"` for an estimated 30% rate. Zero must be explicitly entered as
+  `"0.000000"`. Missing `rate` is invalid, not an implicit unknown.
+
+Account, broker and setting versions are canonical decimal strings up to signed
+INT64 limits; clients must preserve their digits without JavaScript `Number` conversion.
+`If-Match` pins the bounded event revision number, not the tax-setting head. The
+first head is `"0"` with a null ID; later writes must supply both exact observed head
+values. Writes require current session, trusted Origin, CSRF, an idempotency key and
+recent password reauthentication. The short writer transaction rechecks the session,
+reauthentication, event/source, account/broker versions and setting head, then commits
+the decision, audit, idempotency receipt and portfolio invalidation together.
+
+An unchanged completed retry returns its original decision after current session and
+reauthentication checks, even if later decisions or event revisions exist, provided
+the owner/account scope and retained history remain readable. A changed
+intent under the same key conflicts; stale observed versions return 412. Results are
+`OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`, not confirmed tax, ownership,
+eligibility or income. No endpoint contacts a provider or modifies prior projections,
+receipts, cash or locked FX. A general event API and browser tax workspace remain
+unfinished; this API alone does not provide a complete dividend workflow.
 
 ## Projection tax provenance
 
@@ -416,7 +455,7 @@ that projection's canonical audit fingerprint, while legacy fingerprints stay
 unchanged. The explicit day is not inferred from ex-date, receipt date or the server
 clock. These checks establish only consistency of retained owner assertions, not
 actual withholding, eligible shares or an economic grant. No production projection
-writer or tax-setting HTTP API is installed. Event publication remains fenced until
+writer is installed. Event publication remains fenced until
 an authenticated atomic rebuild and receipt reconciliation are implemented.
 
 ## Internal retained-projection history reader
@@ -1095,6 +1134,12 @@ selection, current source and account revalidation, zero versus unknown, histori
 replay, competing decisions and transaction failure rollback. Synthetic old receipts,
 locked FX and projection rows remain unchanged. These checks do not authenticate an
 HTTP caller or establish withholding, ownership or income.
+
+`uv run pytest tests/test_dividend_tax_api.py` exercises the installed owner-scoped
+HTTP routes, session/CSRF/reauthentication, exact INT64 strings, current and historical
+selection, competing writes, zero-write replay, corruption and atomic rollback. It
+also checks that existing receipts and locked FX remain unchanged. These synthetic
+tests do not confirm tax or establish eligibility.
 
 `uv run pytest tests/test_dividend_projection_tax.py tests/test_dividend_projection_tax_migration.py`
 checks legacy fingerprint preservation, private pre-upgrade backup, atomic migration

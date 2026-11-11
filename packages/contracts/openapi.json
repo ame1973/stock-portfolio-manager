@@ -4649,6 +4649,34 @@
         "title": "Page[SourceScheduleRecord]",
         "type": "object"
       },
+      "Page_TaxSettingRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TaxSettingRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[TaxSettingRecord]",
+        "type": "object"
+      },
       "Page_TradeHistoryReviewRecord_": {
         "additionalProperties": false,
         "properties": {
@@ -7429,6 +7457,368 @@
           "provider_ids"
         ],
         "title": "SyncDividendRequest",
+        "type": "object"
+      },
+      "TaxSettingRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "account_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Account Version",
+            "type": "string"
+          },
+          "broker_id": {
+            "format": "uuid",
+            "title": "Broker Id",
+            "type": "string"
+          },
+          "broker_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Broker Version",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "effective_from": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "previous_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Id"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "pattern": "^[^\\x00]+$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "OWNER_ESTIMATE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "setting_no": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Setting No",
+            "type": "string"
+          },
+          "tax_status": {
+            "enum": [
+              "ESTIMATED",
+              "UNKNOWN"
+            ],
+            "title": "Tax Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "revision_id",
+          "revision_no",
+          "account_id",
+          "portfolio_id",
+          "broker_id",
+          "account_version",
+          "broker_version",
+          "setting_no",
+          "previous_id",
+          "effective_from",
+          "tax_status",
+          "rate",
+          "reason",
+          "created_at",
+          "scope",
+          "current_use_scope"
+        ],
+        "title": "TaxSettingRecord",
+        "type": "object"
+      },
+      "TaxSettingSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "account_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Account Version",
+            "type": "string"
+          },
+          "broker_id": {
+            "format": "uuid",
+            "title": "Broker Id",
+            "type": "string"
+          },
+          "broker_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Broker Version",
+            "type": "string"
+          },
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "effective_on": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Effective On",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "head_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Id"
+          },
+          "head_no": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Head No",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "OWNER_ESTIMATE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxSettingRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected_scope": {
+            "enum": [
+              "NO_SELECTED_SETTING",
+              "ACCOUNT_SCOPE_MATCH",
+              "ACCOUNT_SCOPE_CHANGED"
+            ],
+            "title": "Selected Scope",
+            "type": "string"
+          },
+          "tax_status": {
+            "enum": [
+              "MISSING",
+              "UNKNOWN",
+              "ESTIMATED"
+            ],
+            "title": "Tax Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "revision_id",
+          "revision_no",
+          "account_id",
+          "portfolio_id",
+          "broker_id",
+          "account_version",
+          "broker_version",
+          "effective_on",
+          "head_no",
+          "head_id",
+          "tax_status",
+          "selected",
+          "selected_scope",
+          "scope",
+          "current_use_scope"
+        ],
+        "title": "TaxSettingSelection",
+        "type": "object"
+      },
+      "TaxSettingWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "account_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Account Version",
+            "type": "string"
+          },
+          "broker_id": {
+            "format": "uuid",
+            "title": "Broker Id",
+            "type": "string"
+          },
+          "broker_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Broker Version",
+            "type": "string"
+          },
+          "effective_from": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "expected_head_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Head Id"
+          },
+          "expected_head_no": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Expected Head No",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "pattern": "^[^\\x00]+$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id",
+          "portfolio_id",
+          "broker_id",
+          "account_version",
+          "broker_version",
+          "expected_head_no",
+          "expected_head_id",
+          "effective_from",
+          "rate",
+          "reason"
+        ],
+        "title": "TaxSettingWrite",
         "type": "object"
       },
       "TradeAuditOriginRecord": {
@@ -14814,6 +15204,473 @@
         "summary": "Revisions",
         "tags": [
           "Dividend candidate review"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
+      "get": {
+        "operationId": "get_dividend_tax_estimate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "effective_on",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+              "title": "Effective On",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxSettingSelection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Current Estimate",
+        "tags": [
+          "Dividend tax estimates"
+        ]
+      },
+      "post": {
+        "operationId": "save_dividend_tax_estimate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "maxLength": 12,
+              "pattern": "^\"[1-9][0-9]{0,9}\"$",
+              "title": "If-Match",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxSettingWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxSettingRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Save Estimate",
+        "tags": [
+          "Dividend tax estimates"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings/history": {
+      "get": {
+        "operationId": "list_dividend_tax_estimate_history",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision_no",
+            "required": true,
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "title": "Revision No",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_TaxSettingRecord_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Estimate History",
+        "tags": [
+          "Dividend tax estimates"
         ]
       }
     },
