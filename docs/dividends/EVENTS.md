@@ -175,7 +175,7 @@ The existing publication fence rejects **every** new revision when any prior rev
 has an entitlement or the event has projection history, until a future atomic rebuild
 and reconciliation workflow can preserve all receipt associations. Neither manual
 write calculates holdings, posts receipts or changes cash or locked FX. Protected
-acceptance, manual override and withdrawal are described below; rejection, projection
+acceptance, rejection, manual override and withdrawal are described below; projection
 rebuilding, receipt posting and the browser dividend workspace remain separate work.
 
 ## Protected candidate adoption
@@ -271,8 +271,8 @@ private and `no-store` and explicitly retain `OWNER_EVENT_DECISION_ONLY`,
 The existing publication fence rejects acceptance when any prior revision has an
 entitlement or the event has projection history. This decision does not calculate
 holdings, post receipts or alter cash or locked FX; tax estimates for an earlier
-physical revision are not inherited. A protected `REJECT_REVISION` decision is not
-implemented and must not be interpreted as withdrawal, zero income or replacement terms.
+physical revision are not inherited. A separate protected `REJECT_REVISION` decision
+is described below; rejection is not withdrawal, zero income or replacement terms.
 
 ## Protected manual override
 
@@ -722,9 +722,8 @@ the owner/account scope and retained history remain readable. A changed
 intent under the same key conflicts; stale observed versions return 412. Results are
 `OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`, not confirmed tax, ownership,
 eligibility or income. No endpoint contacts a provider or modifies prior projections,
-receipts, cash or locked FX. Verification rejection, projection rebuilding, receipt
-workflows and a browser tax workspace remain unfinished; these APIs alone do not
-provide a complete dividend workflow.
+receipts, cash or locked FX. Projection rebuilding, receipt workflows and a browser tax
+workspace remain unfinished; these APIs alone do not provide a complete dividend workflow.
 
 ## Projection tax provenance
 
@@ -777,11 +776,11 @@ event representation and its strong version ETag remain unchanged; historical
 projection reads do not become current-use approvals. Existing receipts and projections
 remain retained and require explicit later reconciliation, not silent deletion.
 
-The SQL guards do not authenticate a request or verify canonical audit content. There
-is still no protected rejection-decision API or production economic writer. Do
-not insert rejection rows or invoke internal writers on deployment data: where financial
-history exists, a resolution remains fenced until atomic projection/receipt
-reconciliation is implemented.
+The SQL guards do not authenticate a request or verify canonical audit content. The
+protected rejection decision below adds those HTTP checks, but there is still no
+production economic writer. Do not insert rejection rows or invoke internal writers
+on deployment data: where financial history exists, a resolution remains fenced
+until atomic projection/receipt reconciliation is implemented.
 
 ## Internal rejection-history reader and fence
 
@@ -828,9 +827,10 @@ another decision for the same revision does not silently replace the original.
 
 This internal writer does **not** authenticate a session, perform CSRF or password
 checks, establish complete holdings, verify cited documents, cancel income or itself
-resolve a rejection. It is not wired to an HTTP endpoint. Do not invoke it on deployment
-data: protected rejection and resolution, and any necessary atomic projection/receipt
-reconciliation, remain required before user-facing use.
+resolve a rejection. The protected HTTP decision below calls it only after those request
+security checks and the additional financial-history fence. Do not invoke this internal
+primitive directly on deployment data; necessary atomic projection/receipt reconciliation
+remains unfinished.
 
 ## Explicit internal rejection resolution
 
@@ -867,15 +867,13 @@ idempotent intent when supplied; absent and explicit null preserve the earlier
 request fingerprint, so old completed requests remain replayable without writes.
 The event ETag changes only when the successor is published, not when a rejection
 is recorded. The separate protected rejection reads described below expose retained
-pins; a protected rejection-decision endpoint is not installed. Do not insert
-rejections into deployment data to obtain a pin.
+pins; do not insert rejection rows directly into deployment data to obtain one.
 
 Both the application and SQL publication fences still prevent a successor whenever any
 prior revision has an entitlement or the event has projection history. They never detach,
 rewrite or reverse earlier receipts, cash or locked FX. The internal primitive does not
 authenticate an HTTP session, confirm ownership, validate eligibility or post income;
-a protected rejection-decision endpoint and atomic projection/receipt reconciliation
-remain unfinished.
+atomic projection/receipt reconciliation remains unfinished.
 
 ## Protected rejection-state and history reads
 
@@ -899,8 +897,41 @@ and have no event ETag. Recording a rejection leaves the ordinary event response
 strong ETag unchanged. The reads do not change dividend facts or contact providers;
 ordinary session activity may refresh the session's last-seen time.
 
-These resources expose retained decisions, not a way to create them. Protected rejection
-writes, atomic projection/receipt reconciliation and the dividend UI remain unfinished.
+These read resources expose retained decisions but do not themselves create or resolve
+one. Atomic projection/receipt reconciliation and the dividend UI remain unfinished.
+
+## Protected rejection decision
+
+`POST /api/v1/dividends/{event_id}/verify` accepts `decision=REJECT_REVISION` with the
+observed physical `revision_id`, quoted event version in `If-Match`, an owner citation,
+reason and optional `evidence_url`. It requires the active owner session, matching
+Origin, CSRF, an idempotency key and recent password confirmation, including on replay.
+The serialized writer rechecks those credentials and the exact current event revision.
+It can reject a retained decision even if its candidate was later dismissed, without
+asserting that candidate or its documents are current.
+
+The rejection and its canonical source/reference audit, a separate HTTP-intent audit,
+affected portfolio invalidations and the serialized idempotency response commit together.
+The intent audit binds the exact rejection and event identities, observed revision,
+request route, key digest and original unredacted intent digest. A completed unchanged
+retry verifies the complete event/rejection/resolution history and original intent,
+reauthenticates and returns its historical result without writing. A changed intent with
+the same key conflicts; stale event pins return 412; corrupt retained history fails
+closed. An uncertain savepoint or response failure leaves no partial decision or key.
+
+For source-contract compatibility the response is the **unchanged event representation**
+with its original event ETag, not a mutable rejection flag. Read the separate rejection
+state resource for its exact rejection ID before an explicit successor resolution. A
+rejection is not withdrawal, replacement terms, zero income, verified documents or an
+eligibility grant. It does not post or reverse receipts, cash or locked FX.
+
+Until atomic projection/receipt reconciliation is installed, a **new** rejection is
+refused with 409 `DIVIDEND_EVENT_PROJECTION_REQUIRED` when any historical event revision
+has an entitlement or the event has any projection history. It is also refused when the
+event version cannot advance. These fences avoid creating a rejected state that cannot
+currently be resolved safely. They do not prevent an unchanged historical replay after
+a later valid successor and subsequent receipt. A later workflow must implement the full
+atomic rebuild and reconciliation rather than silently dropping these safeguards.
 
 ## Internal retained-projection history reader
 
@@ -1606,7 +1637,10 @@ checks explicit pins, repeated rejection/resolution chains, historical zero-writ
 replays, late or corrupted audits, SQL and application fences, private migration backups,
 retained financial facts and caught-failure rollback. The existing event endpoints refuse
 an unpinned rejected revision while retaining the original event ETag. These tests do
-not provide a protected rejection-decision API or establish economic eligibility.
+not by themselves establish economic eligibility.
+`uv run pytest tests/test_dividend_rejection_decision_api.py` checks protected rejection,
+financial-history fences, unchanged event ETags, historical replay, authentication,
+atomic rollback and retained receipts and locked FX.
 `uv run pytest tests/test_dividend_rejection_read_api.py` checks owner-scoped current
 state, resolved and unresolved history, private URLs, bounded pages, complete-history
 failure, one-snapshot concurrent reads and unchanged financial facts.

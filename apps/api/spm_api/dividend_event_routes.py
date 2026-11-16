@@ -12,6 +12,8 @@ import spm_api.dividend_candidate_service as candidates
 import spm_api.dividend_event_models as models
 import spm_api.dividend_event_service as events
 import spm_api.dividend_event_writer as writer
+import spm_api.dividend_rejection_service as rejections
+import spm_api.dividend_rejection_writer as rejection_writer
 from spm_api.audit import audit, canonical, digest, now
 from spm_api.candidate_models import CandidateAssessment, CandidateEvidenceCheck
 from spm_api.db import unit_of_work
@@ -485,6 +487,157 @@ def _write_candidate(
         raise _unavailable() from None
 
 
+def _rejection_binding(
+    request: Request,
+    headers: WriteDep,
+    payload: dict[str, Any],
+    record: rejections.RejectionRecord,
+) -> dict[str, object]:
+    return {
+        "event_id": str(record.event_id),
+        "revision_id": str(record.revision_id),
+        "revision_no": record.revision_no,
+        "rejection_id": str(record.id),
+        "route": f"{request.method} {request.url.path}",
+        "key_sha256": digest(headers.key),
+        "intent_sha256": digest(canonical(payload)),
+    }
+
+
+def _check_rejection_intent(
+    con: Connection,
+    auth: Auth,
+    request: Request,
+    headers: WriteDep,
+    payload: dict[str, Any],
+    record: rejections.RejectionRecord,
+) -> None:
+    rows = con.execute(
+        text("""
+        SELECT owner_id,request_id,reason,before_sha256,after_sha256,created_at FROM audit_events
+        WHERE entity_type='dividend_rejection_http_intent' AND entity_id=:rejection
+          AND action='DIVIDEND_REJECTION_HTTP_INTENT'
+    """),
+        {"rejection": str(record.id)},
+    ).all()
+    expected = (
+        str(auth.owner.id),
+        str(record.request_id),
+        "",
+        None,
+        digest(canonical(_rejection_binding(request, headers, payload, record))),
+    )
+    if (
+        len(rows) != 1
+        or tuple(rows[0][:5]) != expected
+        or events._time(rows[0].created_at) < record.created_at
+    ):
+        raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+
+
+def _rejection_unavailable() -> ApiError:
+    return ApiError(
+        503, "DIVIDEND_REJECTION_HISTORY_UNAVAILABLE", "The rejection cannot be read safely"
+    )
+
+
+def _rejection_failure(error: rejections.RejectionError) -> ApiError:
+    code = str(error)
+    if code == "DIVIDEND_REJECTION_NOT_FOUND":
+        return ApiError(404, "NOT_FOUND", "Dividend event not found")
+    if code == "DIVIDEND_REJECTION_OWNER_UNAVAILABLE":
+        return ApiError(401, "UNAUTHORIZED", "Authentication is required")
+    if code == "DIVIDEND_REJECTION_VERSION_CONFLICT":
+        return ApiError(412, "PRECONDITION_FAILED", "The observed event changed; reload it")
+    if code in {
+        "DIVIDEND_REVISION_ALREADY_REJECTED",
+        "DIVIDEND_REJECTION_CONFLICT",
+        "DIVIDEND_REJECTION_TIME_CONFLICT",
+    }:
+        return ApiError(409, code, "The rejection decision cannot be accepted")
+    if code == "INVALID_DIVIDEND_REJECTION_SCOPE":
+        return ApiError(422, code, "The rejection decision is invalid")
+    return _rejection_unavailable()
+
+
+def _write_rejection(
+    request: Request,
+    headers: WriteDep,
+    body: models.RejectDividendRevision,
+    *,
+    identifier: UUID,
+    version: int,
+) -> models.DividendEventRecord:
+    payload = {"event_version": version, **body.model_dump(mode="json")}
+
+    def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
+        observed = _observed(con, auth.owner.id, identifier, version, body.revision_id)
+        # A rejected event must remain resolvable until atomic reconciliation exists.
+        if writer._has_financial_history(con, identifier):
+            raise events.EventError("DIVIDEND_EVENT_PROJECTION_REQUIRED")
+        intent = rejection_writer.RejectionIntent(
+            id=uuid4(),
+            event_id=identifier,
+            revision_id=observed.revision_id,
+            revision_no=version,
+            citation=body.citation,
+            source_url=body.evidence_url,
+            reason=body.reason,
+        )
+        saved = rejection_writer.save(
+            con, auth.owner.id, intent, request_id=UUID(request.state.request_id)
+        )
+        audit(
+            con,
+            str(auth.owner.id),
+            "dividend_rejection_http_intent",
+            str(saved.id),
+            "DIVIDEND_REJECTION_HTTP_INTENT",
+            request_id=str(saved.request_id),
+            after=_rejection_binding(request, headers, payload, saved),
+        )
+        _check_rejection_intent(con, auth, request, headers, payload, saved)
+        return _current(_owned(con, auth.owner.id, identifier, version=version))
+
+    def replay(con: Connection, auth: Auth, cached: models.DividendEventRecord) -> None:
+        if cached.id != identifier or cached.version != version:
+            raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+        historical = events.get(con, auth.owner.id, identifier, version=version)
+        retained = rejections.history(con, auth.owner.id, identifier)
+        if historical is None or retained is None or _current(historical) != cached:
+            raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+        matching = [item for item in retained if item.revision_id == body.revision_id]
+        if len(matching) != 1:
+            raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+        record = matching[0]
+        if (
+            historical.record.revision_id != body.revision_id
+            or record.revision_no != version
+            or record.citation != body.citation
+            or record.source_url != body.evidence_url
+            or record.reason != body.reason
+        ):
+            raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+        _check_rejection_intent(con, auth, request, headers, payload, record)
+
+    try:
+        return mutate(
+            request,
+            headers,
+            payload,
+            models.DividendEventRecord,
+            action,
+            reauth=True,
+            validate_replay=replay,
+        )
+    except rejections.RejectionError as error:
+        raise _rejection_failure(error) from None
+    except events.EventError as error:
+        raise _write_failure(error) from None
+    except (ValueError, TypeError, KeyError, OverflowError, PydanticSerializationError):
+        raise _rejection_unavailable() from None
+
+
 def _write_cited_decision(
     request: Request,
     headers: WriteDep,
@@ -652,6 +805,8 @@ def verify_dividend_event(
 ) -> models.DividendEventRecord:
     if isinstance(body, models.ManualDividendOverride):
         result = _write_manual(request, headers, body, identifier=event_id, version=version)
+    elif isinstance(body, models.RejectDividendRevision):
+        result = _write_rejection(request, headers, body, identifier=event_id, version=version)
     else:
         result = _write_cited_decision(request, headers, body, identifier=event_id, version=version)
     response.headers["ETag"] = f'"{result.version}"'

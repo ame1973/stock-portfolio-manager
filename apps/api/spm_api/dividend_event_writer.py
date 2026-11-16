@@ -78,6 +78,25 @@ def _writer(con: Connection, owner_id: UUID) -> None:
         raise events.EventError("DIVIDEND_EVENT_OWNER_UNAVAILABLE")
 
 
+def _has_financial_history(con: Connection, event_id: UUID) -> bool:
+    """Inspect retained revisions inside the caller's owner-scoped writer transaction."""
+    return (
+        con.execute(
+            text("""
+            SELECT 1 FROM dividend_entitlements ent
+            JOIN dividend_event_revisions r ON r.id=ent.revision_id
+            WHERE r.event_id=:id
+            UNION ALL
+            SELECT 1 FROM dividend_projection_versions projection
+            WHERE projection.event_id=:id
+            LIMIT 1
+        """),
+            {"id": str(event_id)},
+        ).first()
+        is not None
+    )
+
+
 def require_current_source(
     con: Connection,
     owner_id: UUID,
@@ -523,21 +542,7 @@ def _save(
         if at < previous.created_at:
             raise events.EventError("DIVIDEND_EVENT_TIME_CONFLICT")
         # ponytail: fence every existing snapshot until atomic projection rebuilding is installed.
-        if (
-            con.execute(
-                text("""
-                SELECT 1 FROM dividend_entitlements ent
-                JOIN dividend_event_revisions r ON r.id=ent.revision_id
-                WHERE r.event_id=:id
-                UNION ALL
-                SELECT 1 FROM dividend_projection_versions projection
-                WHERE projection.event_id=:id
-                LIMIT 1
-            """),
-                {"id": str(intent.event_id)},
-            ).first()
-            is not None
-        ):
+        if _has_financial_history(con, intent.event_id):
             raise events.EventError("DIVIDEND_EVENT_PROJECTION_REQUIRED")
         try:
             retained = rejections.history(con, owner_id, intent.event_id)

@@ -1212,3 +1212,52 @@ async def test_owner_can_withdraw_after_candidate_and_basis_change(
     assert result.json()["eligibility_scope"] == "NOT_ESTABLISHED"
     only_event_writes(before, database_snapshot(engine))
     safe(result)
+
+
+@pytest.mark.parametrize("dismiss_first", [False, True])
+async def test_owner_rejection_preserves_dismissed_candidate_history(
+    candidate_book: dict[str, Any],
+    selected: dict[str, Any],
+    client: httpx.AsyncClient,
+    engine: Engine,
+    dismiss_first: bool,
+) -> None:
+    adopted = await client.post(
+        f"{PATH}/from-candidate", json=create_body(selected), headers=write_headers(client)
+    )
+    assert adopted.status_code == 201, adopted.text
+    event = adopted.json()
+
+    async def dismiss() -> None:
+        result = await client.patch(
+            f"{CANDIDATES}/{selected['id']}",
+            json={**candidate_payload(candidate_book), "state": "DISMISSED", "matches": []},
+            headers=version_headers(client, 1),
+        )
+        assert result.status_code == 200, result.text
+
+    if dismiss_first:
+        await dismiss()
+    intent = {
+        "revision_id": event["current_revision_id"],
+        "decision": "REJECT_REVISION",
+        "citation": "Synthetic owner rejection reference",
+        "reason": REASON,
+    }
+    headers = version_headers(client, 1, key="synthetic-reject-dismissed-candidate")
+    result = await client.post(
+        f"/api/v1/dividends/{event['id']}/verify", json=intent, headers=headers
+    )
+    assert result.status_code == 200, result.text
+    assert result.json() == event and result.headers["etag"] == '"1"'
+    if not dismiss_first:
+        await dismiss()
+    before = database_snapshot(engine)
+    replay = await client.post(
+        f"/api/v1/dividends/{event['id']}/verify", json=intent, headers=headers
+    )
+    assert replay.status_code == 200 and replay.json() == event
+    state = await client.get(f"{PATH}/{event['id']}/rejection")
+    assert state.status_code == 200 and state.json()["state"] == "REJECTED"
+    assert state.json()["eligibility_scope"] == "NOT_ESTABLISHED"
+    assert database_snapshot(engine) == before

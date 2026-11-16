@@ -684,7 +684,11 @@ async def test_override_contract_exposes_discriminated_decisions_and_full_terms(
     operation = spec["paths"]["/api/v1/dividends/{event_id}/verify"]["post"]
     request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
     assert request_schema["discriminator"]["propertyName"] == "decision"
-    assert set(request_schema["discriminator"]["mapping"]) == {"ACCEPT_REVISION", "MANUAL_OVERRIDE"}
+    assert set(request_schema["discriminator"]["mapping"]) == {
+        "ACCEPT_REVISION",
+        "REJECT_REVISION",
+        "MANUAL_OVERRIDE",
+    }
     schema = spec["components"]["schemas"]["ManualDividendOverride"]
     assert {
         "decision",

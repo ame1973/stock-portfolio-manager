@@ -82,8 +82,17 @@ class AcceptDividendRevision(Model):
     reason: Reason = Field(repr=False)
 
 
+class RejectDividendRevision(Model):
+    revision_id: UUID = Field(repr=False)
+    decision: Literal["REJECT_REVISION"]
+    citation: CitationReference = Field(repr=False)
+    evidence_url: EvidenceUrl | None = Field(default=None, repr=False)
+    reason: Reason = Field(repr=False)
+
+
 VerificationDecision = Annotated[
-    AcceptDividendRevision | ManualDividendOverride, Field(discriminator="decision")
+    AcceptDividendRevision | RejectDividendRevision | ManualDividendOverride,
+    Field(discriminator="decision"),
 ]
 
 

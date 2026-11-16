@@ -4148,6 +4148,25 @@ export interface components {
             state: components["schemas"]["FetchState"];
             window: components["schemas"]["FetchWindow"];
         };
+        /** RejectDividendRevision */
+        RejectDividendRevision: {
+            /** Citation */
+            citation: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            decision: "REJECT_REVISION";
+            /** Evidence Url */
+            evidence_url?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+        };
         /** RejectionDecision */
         RejectionDecision: {
             /**
@@ -10845,7 +10864,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AcceptDividendRevision"] | components["schemas"]["ManualDividendOverride"];
+                "application/json": components["schemas"]["AcceptDividendRevision"] | components["schemas"]["RejectDividendRevision"] | components["schemas"]["ManualDividendOverride"];
             };
         };
         responses: {
