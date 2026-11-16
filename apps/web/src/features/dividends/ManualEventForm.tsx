@@ -6,11 +6,11 @@ import { api, type components } from "@spm/contracts";
 import { Field, FormFrame, SelectField } from "../../components/forms/fields";
 import { checked, mutationHeaders } from "../../lib/api";
 import { EditorCloseContext } from "../../lib/editor-lifecycle";
-import { date, evidenceUrl, optional, price, samePrice } from "../ledger/inputs";
+import { date, optional, price, samePrice } from "../ledger/inputs";
 import { SecurityName } from "../ledger/ReferenceName";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { useFormAction } from "../settings/data";
-import { normalizeDecisionText, validTarget, type RevisionTarget } from "./event-validation";
+import { decisionCitation, decisionReason, decisionUrl, validTarget, type RevisionTarget } from "./event-validation";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
@@ -18,17 +18,12 @@ type Input = Schemas["ManualEventCreate"];
 type FormProps = { onSaved: (record: Event) => void; onCancel: () => void; disabled?: boolean; onPendingChange?: (pending: boolean) => void };
 const eventTypes = ["UNKNOWN", "REGULAR", "SPECIAL", "INTERIM", "FINAL", "SUPPLEMENTAL", "ETF_DISTRIBUTION", "REIT_DISTRIBUTION"] as const;
 const typeLabels: Record<typeof eventTypes[number], string> = { UNKNOWN: "未知，不推定一般股息", REGULAR: "一般股息", SPECIAL: "特別股息", INTERIM: "中期股息", FINAL: "末期股息", SUPPLEMENTAL: "補充股息", ETF_DISTRIBUTION: "ETF 分派", REIT_DISTRIBUTION: "REIT 分派" };
-const normalizedText = z.string().transform(normalizeDecisionText);
 const schema = z.object({
   security_id: z.uuid("請選擇人工事件證券。"), event_type: z.enum(eventTypes), ex_date: date,
   announce_date: optional(date), record_date: optional(date), pay_date: optional(date),
   dps: price.max(50, "每股金額最多 50 個字元。"), currency: z.enum(["HKD", "USD"], { error: "請明確選擇事件股息幣別。" }),
   adjustment_basis: z.enum(["UNKNOWN", "AS_DECLARED", "SPLIT_ADJUSTED"]),
-  citation: normalizedText.pipe(z.string().min(1, "請提供事件引用參考。").max(300, "引用參考最多 300 個字元。")
-    .refine(value => Array.from(value).every(character => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127), "引用參考不能包含控制字元。")),
-  source_url: optional(evidenceUrl.refine(value => !value.includes("\x7f"), "引用網址不能包含控制字元。")),
-  reason: normalizedText.pipe(z.string().min(10, "請提供至少 10 個字元的具體依據。").max(1000, "依據最多 1000 個字元。")
-    .refine(value => !value.includes("\0"), "決定依據不能包含 NUL 字元。")),
+  citation: decisionCitation, source_url: decisionUrl, reason: decisionReason,
   acknowledged: z.boolean().refine(Boolean, "請先確認人工決定不證明文件或財務資格。"),
   confirm_unlock: z.boolean(), confirm_reopen: z.boolean(), confirm_rejection: z.boolean(), confirm_reference: z.boolean(),
 });

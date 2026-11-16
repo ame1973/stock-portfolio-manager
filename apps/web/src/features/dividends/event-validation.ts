@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { components } from "@spm/contracts";
+import { evidenceUrl, optional } from "../ledger/inputs";
 
 type Schemas = components["schemas"];
 export type RevisionTarget = { event: Schemas["DividendEventRecord"]; rejection: Schemas["RejectionDecision"] | null };
@@ -8,6 +9,13 @@ export type RevisionTarget = { event: Schemas["DividendEventRecord"]; rejection:
 // eslint-disable-next-line no-control-regex -- Python str.strip includes these information separators.
 const pythonStrip = /^[\p{White_Space}\u001c-\u001f]+|[\p{White_Space}\u001c-\u001f]+$/gu;
 export function normalizeDecisionText(value: string): string { return value.replace(pythonStrip, ""); }
+
+const normalizedText = z.string().transform(normalizeDecisionText);
+export const decisionCitation = normalizedText.pipe(z.string().min(1, "請提供引用參考。").max(300, "引用參考最多 300 個字元。")
+  .refine(value => Array.from(value).every(character => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127), "引用參考不能包含控制字元。"));
+export const decisionUrl = optional(evidenceUrl.refine(value => !value.includes("\x7f"), "引用網址不能包含控制字元。"));
+export const decisionReason = normalizedText.pipe(z.string().min(10, "請提供至少 10 個字元的具體依據。").max(1000, "依據最多 1000 個字元。")
+  .refine(value => !value.includes("\0"), "決定依據不能包含 NUL 字元。"));
 
 function citedRejection(rejection: Schemas["RejectionDecision"]): boolean {
   const reference = rejection.reference;

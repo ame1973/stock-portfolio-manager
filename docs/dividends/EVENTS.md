@@ -153,6 +153,29 @@ or projection history still blocks revision until atomic rebuilding and receipt
 reconciliation are implemented. Existing receipts, cash and historical FX are not
 rewritten by this workflow.
 
+### Rejection decision in the browser
+
+A separate rejection editor is offered only after a successful, unpaused and matching
+independent read reports that the observed physical revision is not rejected. A failed,
+pending, mismatched or inconsistent read cannot enable it, and a recorded rejection
+cannot be rejected again through the form. The owner must reauthenticate, supply a
+citation and reason, and explicitly confirm the rejection's limited scope. The sheet
+freezes the stable event ID, event version and physical revision ID; the server rechecks
+them inside its writer transaction, so a rejection or revision created after the read is
+not silently replaced. Existing entitlement or projection history also blocks a new
+rejection until atomic reconciliation exists.
+
+A successful rejection returns the unchanged event representation, not the rejection
+record. The browser checks that representation against the complete frozen event, then
+refreshes event and rejection reads independently. A same-key response may be a
+historical replay even after a later resolution; it does not establish the current
+rejection state. A dropped or inconsistent response retains the unchanged submitted
+body and idempotency key in the open form; changing a submitted intent rotates the key.
+Closing discards that local retry context, so inspect rejection history before making
+another decision. Password and decision requests prevent closing while pending. Neither
+this decision nor its citation proves a document, creates eligibility, withdraws an
+event or reverses a receipt. No cash or historical FX is rewritten.
+
 `npm run build && npm run test:e2e:dividend-events` runs the real API and built SPA
 with synthetic events in an exclusive temporary root. It checks responsive/keyboard
 behavior, no-store responses, a rejection without an ETag change, private URL
@@ -164,7 +187,11 @@ verifies that the replay remains historical and does not replace the latest vers
 The revision exercise also checks the explicit observed rejection pin,
 retained resolution and unchanged financial facts. A separate competing rejection
 created after an unrejected state was read leaves the ETag unchanged; an unpinned
-revision is rejected without writes and the form retains its input.
+revision is rejected without writes and the form retains its input. It also submits a
+browser rejection, drops the committed response, resolves that rejection with a later
+revision and verifies the unchanged-key replay is historical and zero-write. A competing
+rejection made after a clear read blocks a second browser decision without overwriting
+it or discarding the form.
 
 ## Protected event-decision read API
 
@@ -194,8 +221,8 @@ Citation URLs containing a query or fragment are withheld rather than returned w
 private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
 cash or historical FX. Protected candidate adoption, owner acceptance, explicit manual
-override, withdrawal and rejection are described below; their browser decision forms
-remain unfinished. The existing event revision fence is unchanged.
+override, withdrawal and rejection are described below; browser forms for adoption,
+acceptance, override and withdrawal remain unfinished. The existing event revision fence is unchanged.
 
 ## Protected manual event writes
 
