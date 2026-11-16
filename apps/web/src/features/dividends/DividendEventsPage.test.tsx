@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { api, type components } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
@@ -154,6 +154,75 @@ describe("dividend event workspace", () => {
     expect(responses).toBe(2);
   });
 
+  it("opens revision only from a fresh matching rejection read and freezes its observed pin", async () => {
+    reads({ "/api/v1/dividends/events/{event_id}/rejection": state(true) });
+    const patch = vi.spyOn(api, "PATCH");
+    renderPage();
+    const panel = await openEvent();
+    const revise = await within(panel).findByRole("button", { name: "修訂人工股息事件" });
+    fireEvent.click(revise);
+    const sheet = await screen.findByRole("dialog", { name: "修訂人工股息事件" });
+    expect(within(sheet).getByRole("form", { name: "重新驗證" })).toBeVisible();
+    expect(within(sheet).getByRole("form", { name: "修訂人工股息事件" })).toHaveTextContent(rejection.id);
+    expect(within(sheet).getByLabelText("事件每股金額")).toHaveValue(event.dps);
+    expect(within(sheet).getByLabelText("事件引用網址（選填）")).toHaveValue("");
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("does not offer a revision until rejection state has actually loaded", async () => {
+    const get = reads();
+    get.mockImplementation(async path => {
+      if (path === "/api/v1/dividends/events") return reply({ items: [event], next_cursor: null });
+      if (path === "/api/v1/dividends/events/{event_id}/rejection") return new Promise(() => {});
+      if (path === "/api/v1/securities/{id}") return reply({ id: event.security_id, display_ticker: "SYN", exchange_code: "NASDAQ" });
+      return reply(empty);
+    });
+    renderPage();
+    const panel = await openEvent();
+    expect(within(panel).getByRole("status")).toHaveTextContent("正在載入拒絕狀態");
+    expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
+  });
+
+  it("does not use a cached clear state while reopening triggers a fresh rejection read", async () => {
+    const get = reads();
+    let attempts = 0; let deliver!: () => void;
+    get.mockImplementation(async path => {
+      if (path === "/api/v1/dividends/events") return reply({ items: [event], next_cursor: null });
+      if (path === "/api/v1/dividends/events/{event_id}/rejection") {
+        if (++attempts === 1) return reply(state());
+        return new Promise(resolve => { deliver = () => resolve(reply(state(true))); });
+      }
+      if (path === "/api/v1/securities/{id}") return reply({ id: event.security_id, display_ticker: "SYN", exchange_code: "NASDAQ" });
+      return reply(empty);
+    });
+    renderPage();
+    let panel = await openEvent();
+    expect(await within(panel).findByRole("button", { name: "修訂人工股息事件" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "收合事件與拒絕狀態" }));
+    panel = await openEvent();
+    await waitFor(() => expect(attempts).toBe(2));
+    expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
+    await act(async () => deliver());
+    expect(await within(panel).findByText(/此版本已記錄拒絕/)).toBeVisible();
+    expect(within(panel).getByRole("button", { name: "修訂人工股息事件" })).toBeVisible();
+  });
+
+  it("does not authorize revision from cached rejection data when the network is paused", async () => {
+    reads();
+    renderPage();
+    let panel = await openEvent();
+    expect(await within(panel).findByRole("button", { name: "修訂人工股息事件" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "收合事件與拒絕狀態" }));
+    try {
+      await act(async () => onlineManager.setOnline(false));
+      panel = await openEvent();
+      expect(await within(panel).findByText(/連線已暫停/)).toBeVisible();
+      expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
+    } finally {
+      await act(async () => onlineManager.setOnline(true));
+    }
+  });
+
   it("does not assign a separately loaded rejection state to a different event version", async () => {
     reads({ "/api/v1/dividends/events/{event_id}/rejection": { ...state(true), revision_id: "55555555-5555-4555-8555-555555555555", revision_no: 3 } });
     renderPage();
@@ -161,6 +230,7 @@ describe("dividend event workspace", () => {
     expect(await within(panel).findByRole("alert")).toHaveTextContent("版本不一致");
     expect(within(panel).queryByText(/此版本已記錄拒絕|此版本未記錄拒絕/)).not.toBeInTheDocument();
     expect(within(panel).queryByText("Synthetic rejection reason")).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
   });
 
   it("fails closed for a rejection state with inconsistent physical identity", async () => {
@@ -181,6 +251,39 @@ describe("dividend event workspace", () => {
     const panel = await openEvent();
     expect(await within(panel).findByRole("alert")).toHaveTextContent("狀態無法核對");
     expect(within(panel).queryByText(/此版本已記錄拒絕|此版本未記錄拒絕/)).not.toBeInTheDocument();
+  });
+
+  it("refuses to open an exhausted event version even with a matching rejection read", async () => {
+    const exhausted = { ...event, version: 2_147_483_647 };
+    reads({ "/api/v1/dividends/events": { items: [exhausted], next_cursor: null },
+      "/api/v1/dividends/events/{event_id}/rejection": { ...state(), revision_no: exhausted.version } });
+    renderPage();
+    const panel = await openEvent();
+    expect(await within(panel).findByRole("alert")).toHaveTextContent("版本已達上限");
+    expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
+  });
+
+  it("refuses a rejection response with an altered scope even when physical pins match", async () => {
+    reads({ "/api/v1/dividends/events/{event_id}/rejection": { ...state(), eligibility_scope: "GRANTED" } });
+    renderPage();
+    const panel = await openEvent();
+    expect(await within(panel).findByRole("alert")).toHaveTextContent("狀態無法核對");
+    expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { ...rejection, reason: "" },
+    { ...rejection, reference: null },
+    { ...rejection, reference: { citation: "", url: null, url_withheld: false } },
+    { ...rejection, reference: { citation: "Synthetic citation", url: "https://example.test/?private=synthetic", url_withheld: false } },
+    { ...rejection, reference: { citation: "Synthetic citation", url: "https://example.test/notice\n", url_withheld: false } },
+  ])("does not offer rejection resolution when its cited decision is incomplete or private", async broken => {
+    reads({ "/api/v1/dividends/events/{event_id}/rejection": { ...state(true), rejection: broken } });
+    renderPage();
+    const panel = await openEvent();
+    expect(await within(panel).findByRole("alert")).toHaveTextContent("無法核對");
+    expect(within(panel).queryByText(/此版本已記錄拒絕|此版本未記錄拒絕/)).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
   });
 
   it("does not turn a failed rejection read into an absence and allows retry", async () => {
@@ -222,14 +325,15 @@ describe("dividend event workspace", () => {
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/dividends/events/{event_id}/rejections", expect.objectContaining({ params: { path: { event_id: event.id }, query: { cursor: "rejection-next", limit: 25 } } })));
   });
 
-  it("withholds a private citation URL even if a malformed response includes it", async () => {
-    reads({ "/api/v1/dividends/events/{event_id}/rejection": { ...state(true), rejection: { ...rejection, reference: { citation: "Synthetic private citation", url: "https://example.test/notice?token=synthetic-secret#page", url_withheld: false } } } });
+  it("withholds a private event citation URL even if a malformed response includes it", async () => {
+    reads({ "/api/v1/dividends/events": { items: [{ ...event, reference: { citation: "Synthetic private citation", url: "https://example.test/notice?token=synthetic-secret#page", url_withheld: false } }], next_cursor: null } });
     renderPage();
-    const panel = await openEvent();
-    expect(await within(panel).findByText("Synthetic private citation", { exact: false })).toBeVisible();
-    expect(within(panel).getByText(/引用包含查詢或片段，連結未提供/)).toBeVisible();
-    expect(within(panel).queryByRole("link", { name: /開啟拒絕引用/ })).not.toBeInTheDocument();
-    expect(panel).not.toHaveTextContent("synthetic-secret");
+    await openEvent();
+    const article = screen.getByRole("article", { name: `股息事件 ${event.id}` });
+    expect(within(article).getByText("Synthetic private citation", { exact: false })).toBeVisible();
+    expect(within(article).getByText(/引用包含查詢或片段，連結未提供/)).toBeVisible();
+    expect(within(article).queryByRole("link", { name: /開啟事件引用/ })).not.toBeInTheDocument();
+    expect(article).not.toHaveTextContent("synthetic-secret");
   });
 
   it("reports the recorded successor in rejection history without treating it as document proof", async () => {
@@ -260,6 +364,7 @@ describe("dividend event workspace", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "重新載入拒絕狀態" }));
     expect(await within(panel).findByRole("alert")).toHaveTextContent("以下保留上次載入內容，尚未確認最新狀態");
     expect(within(panel).getByText(/只表示該次讀取/)).toBeVisible();
+    expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
   });
 
   it("sends explicit date/status filters and server cursor without changing the browser URL", async () => {

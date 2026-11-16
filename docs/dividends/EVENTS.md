@@ -103,9 +103,9 @@ link is an explicit user action.
 `VERIFIED` is displayed as an owner acceptance, not document verification; a missing
 event or an unrejected decision does not establish ownership, eligibility, an accrued
 amount or a receipt. List and history reads do not calculate income, mutate financial
-facts, contact providers, or relax the event-revision fence. Event revisions, tax/fee
-controls, protected projections and receipt reconciliation remain separate unfinished
-work.
+facts, contact providers, or relax the event-revision fence. Other decision forms,
+tax/fee controls, protected projections and receipt reconciliation remain separate
+unfinished work.
 
 ### Manual event creation in the browser
 
@@ -130,12 +130,41 @@ sheet blocks closing while a password or decision request is pending and refresh
 server reads after closing or saving. Revision/rejection decisions and financial
 reconciliation are not performed by this creation form.
 
+### Manual event revision in the browser
+
+An owner can open a separate manual revision only after the independently loaded
+rejection state matches the event's stable ID, physical revision and version, and a
+rejection's cited decision has a valid, safely redacted reference and reason. A failed,
+paused, pending, mismatched or incomplete state does not enable revision. The editor freezes those
+observed pins when opened; its PATCH sends the original physical revision and event
+`If-Match`, together with the exact rejection ID when a rejection was observed. The
+server rechecks all of them in its writer transaction; the browser reads are not a
+single atomic snapshot or a financial grant.
+
+Existing terms are shown without converting the DPS to a JavaScript number. The
+security identity cannot be changed. Each applicable unlock, reopening and rejection
+resolution requires its own explicit confirmation. A new citation must be entered:
+previous URLs, including withheld private URLs, are never silently copied, and the
+owner must acknowledge that the new version uses only its newly entered reference.
+The same memory-only retry, reauthentication, pending-close and response-checking rules
+as creation apply. A stale response preserves the input and directs the owner to
+recheck history; a response may be a historical idempotent replay. Existing entitlement
+or projection history still blocks revision until atomic rebuilding and receipt
+reconciliation are implemented. Existing receipts, cash and historical FX are not
+rewritten by this workflow.
+
 `npm run build && npm run test:e2e:dividend-events` runs the real API and built SPA
 with synthetic events in an exclusive temporary root. It checks responsive/keyboard
 behavior, no-store responses, a rejection without an ETag change, private URL
 withholding and an unchanged complete database after the read-only views. It also
-reauthenticates, holds and drops a committed manual-creation response, checks the busy
-close guard, and retries the unchanged body/key with no additional database writes.
+reauthenticates, holds and drops committed manual-creation and revision responses,
+checks the busy close guard, and retries each unchanged body/key with no additional
+database writes. Before replaying the revision, the test appends a later successor and
+verifies that the replay remains historical and does not replace the latest version.
+The revision exercise also checks the explicit observed rejection pin,
+retained resolution and unchanged financial facts. A separate competing rejection
+created after an unrejected state was read leaves the ETag unchanged; an unpinned
+revision is rejected without writes and the form retains its input.
 
 ## Protected event-decision read API
 
@@ -165,7 +194,7 @@ Citation URLs containing a query or fragment are withheld rather than returned w
 private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
 cash or historical FX. Protected candidate adoption, owner acceptance, explicit manual
-override and withdrawal are described below; rejection and the dividend browser workspace
+override, withdrawal and rejection are described below; their browser decision forms
 remain unfinished. The existing event revision fence is unchanged.
 
 ## Protected manual event writes

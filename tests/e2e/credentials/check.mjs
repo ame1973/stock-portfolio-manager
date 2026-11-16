@@ -41,7 +41,7 @@ try {
   console.log(tradeOrigin
     ? "PASS isolated trade-origin browser fixture: actual recovery, exact wire integers, reauthentication and replay"
     : tradeReview ? "PASS isolated trade-review browser fixture: review, scope refresh, correction/void forms, reauthentication and replay"
-      : dividendEvents ? "PASS isolated dividend-event browser fixture: history, independent rejection, protected creation and unchanged retry"
+      : dividendEvents ? "PASS isolated dividend-event browser fixture: histories, protected decisions, rejection races and unchanged retries"
         : "PASS isolated credential browser fixture: actual onboarding, reauthentication, import, rotation, clear, replay, exact private files and zero provider work");
 } catch {
   // Only fixed stage labels are allowed; subprocess diagnostics and payloads remain private.

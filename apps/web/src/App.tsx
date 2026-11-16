@@ -157,7 +157,7 @@ function ServiceStatus() {
       <h2 id="status-title" className="text-lg font-semibold">服務連線</h2>
       {health.isPending ? <p role="status" className="my-5 text-secondary">正在檢查服務狀態…</p>
         : health.isError ? <div role="alert" className="my-5 text-danger"><p>暫時無法使用</p><p className="mt-2 text-sm leading-6">{health.error.message}</p></div>
-          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供交易、現金／費用、轉倉、企業行動、期初設定、來源診斷及人工股息事件建立；股息修訂／實收、估值與完整離線／備份功能仍在開發。</p></div>}
+          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供交易、現金／費用、轉倉、企業行動、期初設定、來源診斷及人工股息事件建立／修訂；股息審核／實收、估值與完整離線／備份功能仍在開發。</p></div>}
       <Button variant="outline" onClick={() => void health.refetch()} disabled={health.isFetching}>重新檢查</Button>
     </section>
   </div>;

@@ -15,7 +15,8 @@ import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { PasswordForm } from "../settings/SecuritySettingsPage";
 import { usePageState } from "../settings/data";
 import { SourceLink, SourceReadState, SourceValues } from "../sources/details";
-import { ManualEventCreateForm } from "./ManualEventCreateForm";
+import { ManualEventCreateForm, ManualEventRevisionForm } from "./ManualEventForm";
+import { validRejection, validTarget, type RevisionTarget } from "./event-validation";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
@@ -82,15 +83,19 @@ function RejectionDetails({ record }: { record: Rejection }) {
   ]} /><Citation reference={record.reference} label="開啟拒絕引用" /></div>;
 }
 
-function RejectionState({ record }: { record: Event }) {
+function RejectionState({ record, disabled, onRevise }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void }) {
   const result = useQuery({
     queryKey: ["dividends", "rejection", record.id, record.current_revision_id, record.version], staleTime: 0, refetchOnMount: "always",
     queryFn: async ({ signal }) => checked(await api.GET("/api/v1/dividends/events/{event_id}/rejection", { params: { path: { event_id: record.id } }, signal })),
   });
   const value = result.data;
   const matches = value && value.event_id === record.id && value.revision_id === record.current_revision_id && value.revision_no === record.version;
-  const consistent = value && (value.state === "NOT_REJECTED" ? value.rejection === null
-    : value.state === "REJECTED" && value.rejection !== null && value.rejection.event_id === value.event_id && value.rejection.revision_id === value.revision_id && value.rejection.revision_no === value.revision_no);
+  const consistent = value && value.scope === "OWNER_REJECTION_STATE_ONLY" && value.current_use_scope === "REVALIDATION_REQUIRED"
+    && value.document_verification === "NOT_ESTABLISHED" && value.eligibility_scope === "NOT_ESTABLISHED"
+    && (value.state === "NOT_REJECTED" ? value.rejection === null
+      : value.state === "REJECTED" && value.rejection !== null && validRejection(value.rejection, record));
+  const target = value && matches && consistent ? { event: record, rejection: value.rejection } : null;
+  const ready = target && !result.isError && !result.isFetching && !result.isPaused;
   return <section aria-label="獨立拒絕狀態" className="grid min-w-0 gap-4 rounded-md border border-border p-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">獨立拒絕狀態</h3><Button variant="outline" disabled={result.isFetching} onClick={() => void result.refetch()}>重新載入拒絕狀態</Button></div>
     <p className="text-sm leading-7 text-secondary">事件與拒絕狀態兩者分開讀取，不是同一快照；即使事件版本不變，拒絕狀態也可能改變。使用前必須重新核對。</p>
@@ -99,6 +104,10 @@ function RejectionState({ record }: { record: Event }) {
       : !consistent ? <p role="alert" className="text-sm text-danger">拒絕狀態無法核對；請重新載入，不能據此判斷。</p>
         : <><p className="text-sm leading-7">{value.state === "REJECTED" ? "此版本已記錄拒絕；不代表撤回事件、實收沖銷或文件驗證。" : "此版本未記錄拒絕；這不是接受決定或財務資格。"}</p>
           {value.rejection && <RejectionDetails record={value.rejection} />}</>)}
+    {ready && target && (validTarget(target) ? <div><Button variant="outline" disabled={disabled} onClick={() => onRevise({
+      event: { ...record, reference: record.reference ? { ...record.reference } : null },
+      rejection: target.rejection ? { ...target.rejection, reference: { ...target.rejection.reference } } : null,
+    })}>修訂人工股息事件</Button></div> : <p role="alert" className="text-sm text-danger">事件或拒絕範圍無法核對，或版本已達上限；不能開始修訂，請重新載入。</p>)}
     {value && <p className="text-xs leading-6 text-secondary">拒絕狀態最後載入：{new Date(result.dataUpdatedAt).toLocaleString("zh-HK", { hour12: false })}；只表示該次讀取。</p>}
   </section>;
 }
@@ -132,7 +141,7 @@ function RejectionHistory({ record }: { record: Event }) {
     </article>}</RecordList></section>;
 }
 
-function EventCard({ record }: { record: Event }) {
+function EventCard({ record, disabled, onRevise }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void }) {
   const desktop = useDesktop();
   const [open, setOpen] = useState(false);
   const [revisions, setRevisions] = useState(false);
@@ -144,7 +153,7 @@ function EventCard({ record }: { record: Event }) {
     {!desktop && <Button variant="outline" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? "收合事件與拒絕狀態" : "查看事件與拒絕狀態"}</Button>}
     {(desktop || open) && <div className="grid min-w-0 gap-5"><p className="text-sm leading-7 text-secondary">這是已記錄的事件決定，不是文件驗證、持倉資格、應收或實收。</p>
       <SourceValues values={[["穩定事件識別碼", record.id], ["本次清單的版本／實體修訂", `${record.version} / ${record.current_revision_id}`]]} />
-      <EventTerms record={record} /><RejectionState record={record} />
+      <EventTerms record={record} /><RejectionState record={record} disabled={disabled} onRevise={onRevise} />
       <div className="flex flex-wrap gap-3"><Button variant="outline" aria-expanded={revisions} onClick={() => setRevisions(value => !value)}>{revisions ? "收合事件修訂歷史" : "查看事件修訂歷史"}</Button>
         <Button variant="outline" aria-expanded={rejections} onClick={() => setRejections(value => !value)}>{rejections ? "收合拒絕歷史" : "查看拒絕歷史"}</Button></div>
       {revisions && <RevisionHistory record={record} />}{rejections && <RejectionHistory record={record} />}
@@ -153,12 +162,13 @@ function EventCard({ record }: { record: Event }) {
   </article>;
 }
 
-function EventCreateEditor({ onCancel, onSaved }: { onCancel: () => void; onSaved: (record: Event) => void }) {
+function EventEditor({ onCancel, onSaved, target }: { onCancel: () => void; onSaved: (record: Event) => void; target?: RevisionTarget }) {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [decisionBusy, setDecisionBusy] = useState(false);
-  return <EditorSheet title="新增人工股息事件" onClose={onCancel}>
+  return <EditorSheet title={target ? "修訂人工股息事件" : "新增人工股息事件"} onClose={onCancel}>
     <div className="mb-6"><PasswordForm disabled={decisionBusy} onPendingChange={setPasswordBusy} /></div>
-    <ManualEventCreateForm onCancel={onCancel} onSaved={onSaved} disabled={passwordBusy} onPendingChange={setDecisionBusy} />
+    {target ? <ManualEventRevisionForm target={target} onCancel={onCancel} onSaved={onSaved} disabled={passwordBusy} onPendingChange={setDecisionBusy} />
+      : <ManualEventCreateForm onCancel={onCancel} onSaved={onSaved} disabled={passwordBusy} onPendingChange={setDecisionBusy} />}
   </EditorSheet>;
 }
 
@@ -166,6 +176,7 @@ const initialFilters = { security_id: "", workflow_status: "" as "" | Event["wor
 export function DividendEventsPage() {
   const cache = useQueryClient();
   const [creating, setCreating] = useState(false);
+  const [revisionTarget, setRevisionTarget] = useState<RevisionTarget | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const page = usePageState("dividends:events");
   const [filters, setFilters] = useViewState("filters:dividends:events", initialFilters);
@@ -179,9 +190,9 @@ export function DividendEventsPage() {
   return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 className="text-2xl font-semibold">股息事件</h1>
     <p className="mt-2 text-sm leading-7 text-secondary">查看已記錄的事件決定、來源與歷史；人工接受不是文件驗證或持倉資格，這裡不計算應收或實收。未知不會補零。</p>
     <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div>
-    <Button data-editor-create disabled={creating} onClick={() => { setCreatedId(null); setCreating(true); }}>新增人工股息事件</Button></header>
+    <Button data-editor-create disabled={creating || !!revisionTarget} onClick={() => { setCreatedId(null); setCreating(true); }}>新增人工股息事件</Button></header>
     {createdId && <p role="status" className="panel break-all text-sm leading-7">伺服器已確認事件決定 {createdId}；可能是原鍵回覆，請重新載入核對目前版本。這不是文件驗證、持倉資格或實收。</p>}
-    {creating && <EventCreateEditor onCancel={() => { setCreating(false); void cache.invalidateQueries({ queryKey: ["dividends"] }); }} onSaved={record => { setCreating(false); setCreatedId(record.id); void cache.invalidateQueries({ queryKey: ["dividends"] }); }} />}
+    {(creating || revisionTarget) && <EventEditor target={revisionTarget ?? undefined} onCancel={() => { setCreating(false); setRevisionTarget(null); void cache.invalidateQueries({ queryKey: ["dividends"] }); }} onSaved={record => { setCreating(false); setRevisionTarget(null); setCreatedId(record.id); void cache.invalidateQueries({ queryKey: ["dividends"] }); }} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選股息事件</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><ReferenceSelect kind="securities" activeOnly={false} label="事件證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
         <SelectField label="事件狀態" value={filters.workflow_status} onChange={event => filter({ workflow_status: event.target.value as typeof filters.workflow_status })}><option value="">全部事件狀態</option>{(Object.keys(statuses) as Event["workflow_status"][]).map(status => <option key={status} value={status}>{statuses[status]}</option>)}</SelectField>
@@ -196,6 +207,6 @@ export function DividendEventsPage() {
       { id: "dps", header: "每股事件金額，非收入", cell: ({ row }) => `${row.original.currency} ${row.original.dps}` },
       { id: "status", header: "事件決定，非拒絕狀態", cell: ({ row }) => statuses[row.original.workflow_status] },
       { id: "pay", header: "付款日", cell: ({ row }) => row.original.pay_date ?? "未知" },
-    ]}>{record => <EventCard record={record} />}</RecordList>
+    ]}>{record => <EventCard record={record} disabled={creating || !!revisionTarget} onRevise={target => { setCreatedId(null); setRevisionTarget(target); }} />}</RecordList>
   </div>;
 }

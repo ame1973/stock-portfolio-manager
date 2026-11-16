@@ -61,6 +61,8 @@ describe("financial workspace navigation", () => {
   }
 
   it("has eight working desktop destinations and exactly five mobile destinations with labelled collapsed icons", async () => {
+    // Load the real lazy route before measuring navigation, independently of Vite's cold transform time.
+    await import("./features/ledger/TradesPage");
     reads();
     renderApp();
     await screen.findByText("已連線，資料庫已就緒");

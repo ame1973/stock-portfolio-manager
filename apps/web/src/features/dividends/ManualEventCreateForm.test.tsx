@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { api, type components } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { ManualEventCreateForm } from "./ManualEventCreateForm";
+import { ManualEventCreateForm } from "./ManualEventForm";
 
 type Schemas = components["schemas"];
 const security: Schemas["Security"] = { id: "11111111-1111-4111-8111-111111111111", display_ticker: "0005", exchange_code: "HKG", name: "Synthetic historical security", quote_currency: "HKD", security_type: "EQUITY", status: "DELISTED", isin: null, verified: false, version: 1 };
