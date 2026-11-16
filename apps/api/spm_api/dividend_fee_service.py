@@ -1,15 +1,21 @@
-"""Select explicit fee assertions without authentication or economic authority."""
+"""Audit and select explicit fee assertions without granting economic authority."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
-from typing import Annotated, Literal, Self
+from datetime import UTC, date
+from typing import Annotated, Any, Literal, Self
 from uuid import UUID
 
 from pydantic import AwareDatetime, ConfigDict, Field, model_validator
 from pydantic_core import PydanticSerializationError
+from sqlalchemy import Connection, text
+from sqlalchemy.exc import SQLAlchemyError
 
-from spm_api.decimal_types import INT64_MAX, IsoDate, NonNegativeMoney
+import spm_api.dividend_event_service as events
+import spm_api.dividend_rejection_service as rejections
+from spm_api.audit import canonical, digest, stamp
+from spm_api.decimal_types import INT64_MAX, IsoDate, NonNegativeMoney, from_scaled, to_scaled
+from spm_api.dividend_account_scope import account, positive_version
 from spm_api.dividend_event_service import Reason, Version
 from spm_api.errors import Model
 from spm_api.master_models import Currency
@@ -139,4 +145,205 @@ def select(settings: Sequence[FeeSetting], effective_on: date) -> FeeSelection:
             status=chosen.fee_status if chosen else "MISSING",
         )
     except (ValueError, TypeError, KeyError, OverflowError, PydanticSerializationError):
+        raise FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE") from None
+
+
+_FIELDS = (
+    "id",
+    "owner_id",
+    "event_id",
+    "revision_id",
+    "revision_no",
+    "portfolio_id",
+    "account_id",
+    "broker_id",
+    "account_version",
+    "broker_version",
+    "setting_no",
+    "previous_id",
+    "effective_from",
+    "fee_status",
+    "fee_micro",
+    "fee_currency",
+    "request_id",
+    "created_at",
+)
+
+
+def _storage(record: FeeSetting) -> dict[str, Any]:
+    return {
+        "id": str(record.id),
+        "owner_id": str(record.owner_id),
+        "event_id": str(record.event_id),
+        "revision_id": str(record.revision_id),
+        "revision_no": record.revision_no,
+        "portfolio_id": str(record.portfolio_id),
+        "account_id": str(record.account_id),
+        "broker_id": str(record.broker_id),
+        "account_version": record.account_version,
+        "broker_version": record.broker_version,
+        "setting_no": record.setting_no,
+        "previous_id": str(record.previous_id) if record.previous_id is not None else None,
+        "effective_from": record.effective_from,
+        "fee_status": record.fee_status,
+        "fee_micro": to_scaled(record.fee, 6) if record.fee is not None else None,
+        "fee_currency": record.fee_currency,
+        "request_id": str(record.request_id),
+        "audit_id": str(record.audit_id),
+        "created_at": stamp(record.created_at.astimezone(UTC)),
+    }
+
+
+def _payload(values: Mapping[str, Any], reason: str) -> dict[str, Any]:
+    return {
+        **{key: values[key] for key in _FIELDS},
+        "reason_sha256": digest(canonical(reason)),
+        "scope": "OWNER_ESTIMATE_ONLY",
+    }
+
+
+def history(
+    con: Connection,
+    owner: UUID,
+    event_id: UUID,
+    revision_id: UUID,
+    revision_no: int,
+    account_id: UUID,
+) -> tuple[FeeSetting, ...] | None:
+    """Read complete audited history in one snapshot, not authentication or current authority."""
+    if (
+        not con.in_transaction()
+        or not all(isinstance(value, UUID) for value in (owner, event_id, revision_id, account_id))
+        or type(revision_no) is not int
+        or not 1 <= revision_no <= 2_147_483_647
+    ):
+        raise FeeSettingError("INVALID_DIVIDEND_FEE_SCOPE")
+    try:
+        head = events.get(con, owner, event_id)
+        owned_account = account(con, owner, account_id)
+        if head is None or owned_account is None:
+            return None
+        if rejections.history(con, owner, event_id) is None:
+            raise ValueError("Missing rejection history")
+        event = (
+            head
+            if head.record.revision_no == revision_no
+            else events.get(con, owner, event_id, version=revision_no)
+        )
+        if event is None or event.record.revision_id != revision_id:
+            return None
+        source_audits = con.execute(
+            text("""
+            SELECT created_at FROM audit_events WHERE entity_type='dividend_event_revision'
+              AND entity_id=:id AND action='DIVIDEND_EVENT_REVISED'
+        """),
+            {"id": str(revision_id)},
+        ).all()
+        if len(source_audits) != 1:
+            raise ValueError("Missing source audit")
+        source_time = events._time(source_audits[0].created_at)
+        rows = con.execute(
+            text("""
+            SELECT f.*,p.owner_id AS retained_portfolio_owner,
+                   b.owner_id AS retained_broker_owner,b.version AS retained_broker_version
+            FROM dividend_fee_settings f
+            LEFT JOIN portfolios p ON p.id=f.portfolio_id
+            LEFT JOIN brokers b ON b.id=f.broker_id
+            WHERE f.account_id=:account AND (f.revision_id=:revision OR
+                  (f.event_id=:event AND f.revision_no=:number))
+            ORDER BY f.setting_no
+        """),
+            {
+                "account": str(account_id),
+                "revision": str(revision_id),
+                "event": str(event_id),
+                "number": revision_no,
+            },
+        ).mappings()
+        result: list[FeeSetting] = []
+        # ponytail: verify each retained audit; batch verified history if chains become large.
+        for row in rows:
+            identifier = events._uuid(row["id"])
+            audits = (
+                con.execute(
+                    text(
+                        "SELECT * FROM audit_events WHERE entity_type='dividend_fee_setting' "
+                        "AND entity_id=:id"
+                    ),
+                    {"id": str(identifier)},
+                )
+                .mappings()
+                .all()
+            )
+            if len(audits) != 1:
+                raise ValueError("Missing or duplicate setting audit")
+            entry = audits[0]
+            amount = row["fee_micro"]
+            record = FeeSetting.model_validate(
+                {
+                    "id": identifier,
+                    "owner_id": events._uuid(row["owner_id"]),
+                    "event_id": events._uuid(row["event_id"]),
+                    "revision_id": events._uuid(row["revision_id"]),
+                    "revision_no": row["revision_no"],
+                    "portfolio_id": events._uuid(row["portfolio_id"]),
+                    "account_id": events._uuid(row["account_id"]),
+                    "broker_id": events._uuid(row["broker_id"]),
+                    "account_version": row["account_version"],
+                    "broker_version": row["broker_version"],
+                    "setting_no": row["setting_no"],
+                    "previous_id": (
+                        events._uuid(row["previous_id"]) if row["previous_id"] is not None else None
+                    ),
+                    "effective_from": row["effective_from"],
+                    "fee_status": row["fee_status"],
+                    "fee": from_scaled(amount, 6) if amount is not None else None,
+                    "fee_currency": row["fee_currency"],
+                    "request_id": events._uuid(row["request_id"]),
+                    "audit_id": events._uuid(row["audit_id"]),
+                    "created_at": events._time(row["created_at"]),
+                    "reason": entry["reason"],
+                }
+            )
+            previous = result[-1] if result else None
+            values = _storage(record)
+            if (
+                any(row[key] != value for key, value in values.items())
+                or record.owner_id != owner
+                or record.event_id != event_id
+                or record.revision_id != revision_id
+                or record.revision_no != revision_no
+                or record.account_id != account_id
+                or row["retained_portfolio_owner"] != str(owner)
+                or row["retained_broker_owner"] != str(owner)
+                or record.account_version > positive_version(owned_account["account_version"])
+                or record.broker_version > positive_version(row["retained_broker_version"])
+                or record.created_at < event.record.created_at
+                or record.created_at < source_time
+                or entry["id"] != str(record.audit_id)
+                or entry["owner_id"] != str(owner)
+                or entry["action"] != "DIVIDEND_FEE_SETTING_RECORDED"
+                or entry["request_id"] != str(record.request_id)
+                or entry["reason"] != record.reason
+                or events._time(entry["created_at"]) < record.created_at
+                or entry["before_sha256"]
+                != (
+                    digest(canonical(_payload(_storage(previous), previous.reason)))
+                    if previous
+                    else None
+                )
+                or entry["after_sha256"] != digest(canonical(_payload(values, record.reason)))
+            ):
+                raise ValueError("Inconsistent fee setting history")
+            result.append(record)
+        select(result, date.min)
+        return tuple(result)
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        OverflowError,
+        SQLAlchemyError,
+        PydanticSerializationError,
+    ):
         raise FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE") from None

@@ -16,6 +16,8 @@ import spm_api.dividend_event_writer as event_writer
 from spm_api.audit import audit, canonical, digest, stamp
 from spm_api.db import savepoint
 from spm_api.decimal_types import INT64_MAX, IsoDate, Rate, from_scaled, to_scaled
+from spm_api.dividend_account_scope import account as _account
+from spm_api.dividend_account_scope import positive_version as _integer
 from spm_api.errors import Model
 from spm_api.master_service import invalidate_portfolio
 
@@ -171,38 +173,6 @@ def _writer(con: Connection, owner: UUID) -> None:
         raise TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE") from None
     if active is None:
         raise TaxSettingError("DIVIDEND_TAX_OWNER_UNAVAILABLE")
-
-
-def _integer(value: object) -> int:
-    if type(value) is not int or not 1 <= value <= INT64_MAX:
-        raise ValueError("Expected a positive version")
-    return value
-
-
-def _account(con: Connection, owner: UUID, identifier: UUID) -> RowMapping | None:
-    row = (
-        con.execute(
-            text("""
-            SELECT a.id,a.portfolio_id,a.broker_id,a.version AS account_version,
-                   p.owner_id AS portfolio_owner,b.owner_id AS broker_owner,
-                   b.version AS broker_version
-            FROM accounts a LEFT JOIN portfolios p ON p.id=a.portfolio_id
-              LEFT JOIN brokers b ON b.id=a.broker_id WHERE a.id=:account
-        """),
-            {"account": str(identifier)},
-        )
-        .mappings()
-        .first()
-    )
-    if row is None or row["portfolio_owner"] != str(owner):
-        return None
-    if row["broker_owner"] != str(owner):
-        raise ValueError("Inconsistent owned account")
-    for key in ("id", "portfolio_id", "broker_id"):
-        events._uuid(row[key])
-    _integer(row["account_version"])
-    _integer(row["broker_version"])
-    return row
 
 
 def _matches_account(record: TaxSetting | SettingIntent, account: RowMapping) -> bool:

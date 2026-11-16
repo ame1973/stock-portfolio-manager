@@ -956,8 +956,8 @@ account/broker scope, an unrejected revision, a contiguous setting chain, valid 
 amount/currency and a correlated audit shape; updates, deletes and replacement writes are
 blocked. Database constraints and shaped hashes do not authenticate a caller, verify an
 audit's canonical contents, select an effective setting, prove actual broker charges or
-grant eligibility. Do not insert fee rows directly into deployment data: an audited
-history reader, protected writer and projection provenance are not installed yet.
+grant eligibility. Do not insert fee rows directly into deployment data: a protected
+writer and projection provenance are not installed yet.
 Before any economic projection, independently revalidate the exact event, source,
 rejection state, recorded eligibility, selected effective-day fee and observed history
 head, account/broker versions and any explicit fee-FX provenance. Later backdated
@@ -980,6 +980,29 @@ or broker associations, calculate fee FX, establish eligibility or authorize inc
 A caller using a historical prefix must have independently established its exact retained
 head; a future economic writer must revalidate current scope and the complete audited
 history in the same transaction.
+
+## Internal fee-estimate history reader
+
+`dividend_fee_service.history` reads a complete physical-revision/account fee chain
+inside an existing database transaction. It validates the retained event and
+rejection/resolution histories, exact setting scope and chronology, original
+portfolio/broker ownership and observed version bounds, unique correlated audits,
+canonical amounts and the entire predecessor chain. Its canonical audit fingerprint
+binds the physical identities, versions, effective day, explicit amount/currency,
+request and timestamp, a reason hash and the `OWNER_ESTIMATE_ONLY` label. The audit
+ID is correlated separately, and its canonical timestamp cannot precede the setting.
+A later inconsistent audit or setting fails the whole history even when an earlier
+effective day is selected.
+
+An owned scope with no settings returns an empty tuple; a missing or foreign event,
+account or requested physical revision returns `None`. Neither means an estimated
+zero. Rejected and subsequently resolved revisions can still be read historically,
+but the read does not clear a rejection or make an old fee usable. The account or
+broker may have changed since a setting; retained ownership and version bounds do not
+prove their historical association, authenticate the caller or verify a broker charge.
+No HTTP route, writer, FX calculation, eligibility or economic grant is installed.
+Current use requires revalidation of all relevant pins and the rejection/source state
+in the same writer transaction. No provider access or database mutation occurs.
 
 ## Internal retained-projection history reader
 
@@ -1659,6 +1682,10 @@ SQL-shaped synthetic assertions in these tests are not authenticated fee estimat
 `uv run pytest tests/test_dividend_fee_selection.py` checks supplied chain integrity,
 effective-day/prefix selection, missing versus unknown and explicit zero, exact INT64
 boundaries and private representations without asserting database authority.
+`uv run pytest tests/test_dividend_fee_history.py` checks complete audited event,
+rejection and fee history, snapshot isolation, explicit unknowns and zero,
+account changes, malformed audits and retained rows. Its synthetic history is not
+authentication or proof of an actual broker charge.
 
 `uv run pytest tests/test_dividend_tax_migration.py tests/test_dividend_tax_service.py`
 checks immutable setting storage, audited history, explicit effective-day/head
