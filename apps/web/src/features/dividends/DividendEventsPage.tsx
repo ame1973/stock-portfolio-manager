@@ -15,18 +15,18 @@ import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { PasswordForm } from "../settings/SecuritySettingsPage";
 import { usePageState } from "../settings/data";
 import { SourceLink, SourceReadState, SourceValues } from "../sources/details";
-import { AcceptEventForm } from "./AcceptEventForm";
+import { AcceptEventForm, WithdrawEventForm } from "./CitedEventDecisionForm";
 import { ManualEventCreateForm, ManualEventRevisionForm } from "./ManualEventForm";
 import { RejectEventForm } from "./RejectEventForm";
 import { basisLabels as basis, eventTypeLabels as eventTypes, statuses } from "./event-labels";
-import { validAcceptanceTarget, validRejection, validTarget, type RevisionTarget } from "./event-validation";
+import { validAcceptanceTarget, validCitedTarget, validRejection, validTarget, type RevisionTarget } from "./event-validation";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
 type Revision = Schemas["DividendEventRevisionRecord"];
 type Terms = Event | Revision;
 type Rejection = Schemas["RejectionDecision"];
-type Editor = { mode: "create" } | { mode: "revise" | "accept"; target: RevisionTarget } | { mode: "reject"; target: Event };
+type Editor = { mode: "create" } | { mode: "revise" | "accept" | "withdraw"; target: RevisionTarget } | { mode: "reject"; target: Event };
 
 const fields: Record<Schemas["EventEvidence"]["fields"][number], string> = {
   ex_date: "除淨日", announce_date: "宣告日", record_date: "記錄日", pay_date: "付款日", event_type: "事件類型",
@@ -76,7 +76,7 @@ function RejectionDetails({ record }: { record: Rejection }) {
   ]} /><Citation reference={record.reference} label="開啟拒絕引用" /></div>;
 }
 
-function RejectionState({ record, disabled, onRevise, onReject, onAccept }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void; onReject: (target: Event) => void; onAccept: (target: RevisionTarget) => void }) {
+function RejectionState({ record, disabled, onRevise, onReject, onAccept, onWithdraw }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void; onReject: (target: Event) => void; onAccept: (target: RevisionTarget) => void; onWithdraw: (target: RevisionTarget) => void }) {
   const result = useQuery({
     queryKey: ["dividends", "rejection", record.id, record.current_revision_id, record.version], staleTime: 0, refetchOnMount: "always",
     queryFn: async ({ signal }) => checked(await api.GET("/api/v1/dividends/events/{event_id}/rejection", { params: { path: { event_id: record.id } }, signal })),
@@ -102,7 +102,9 @@ function RejectionState({ record, disabled, onRevise, onReject, onAccept }: { re
       rejection: target.rejection ? { ...target.rejection, reference: { ...target.rejection.reference } } : null,
     })}>修訂人工股息事件</Button>
       {validAcceptanceTarget(target) && <Button variant="outline" disabled={disabled} onClick={() => onAccept(target)}>人工接受此版本</Button>}
-      {target.rejection === null && <Button variant="outline" disabled={disabled} onClick={() => onReject(record)}>拒絕此事件版本</Button>}</div> : <p role="alert" className="text-sm text-danger">事件或拒絕範圍無法核對，或版本已達上限；不能開始修訂、接受或拒絕，請重新載入。</p>)}
+      {target.rejection === null && <Button variant="outline" disabled={disabled} onClick={() => onReject(record)}>拒絕此事件版本</Button>}
+      {validCitedTarget(target) && <Button variant="outline" className="border-danger text-danger" disabled={disabled} onClick={() => onWithdraw(target)}>撤回此事件</Button>}</div> : <p role="alert" className="text-sm text-danger">事件或拒絕範圍無法核對，或版本已達上限；不能開始修訂、接受、拒絕或撤回，請重新載入。</p>)}
+    {ready && target && validTarget(target) && !validCitedTarget(target) && <p className="text-sm leading-7 text-secondary">事件已撤回或條款格式不符；不能開始撤回，請重新載入並核對。</p>}
     {ready && target && validTarget(target) && !validAcceptanceTarget(target) && <p className="text-sm leading-7 text-secondary">事件已撤回、條款格式不符或金額口徑未明確記錄為宣告條款；不能開始人工接受，請先核對事件與來源。</p>}
     {value && <p className="text-xs leading-6 text-secondary">拒絕狀態最後載入：{new Date(result.dataUpdatedAt).toLocaleString("zh-HK", { hour12: false })}；只表示該次讀取。</p>}
   </section>;
@@ -137,7 +139,7 @@ function RejectionHistory({ record }: { record: Event }) {
     </article>}</RecordList></section>;
 }
 
-function EventCard({ record, disabled, onRevise, onReject, onAccept }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void; onReject: (target: Event) => void; onAccept: (target: RevisionTarget) => void }) {
+function EventCard({ record, disabled, onRevise, onReject, onAccept, onWithdraw }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void; onReject: (target: Event) => void; onAccept: (target: RevisionTarget) => void; onWithdraw: (target: RevisionTarget) => void }) {
   const desktop = useDesktop();
   const [open, setOpen] = useState(false);
   const [revisions, setRevisions] = useState(false);
@@ -149,7 +151,7 @@ function EventCard({ record, disabled, onRevise, onReject, onAccept }: { record:
     {!desktop && <Button variant="outline" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? "收合事件與拒絕狀態" : "查看事件與拒絕狀態"}</Button>}
     {(desktop || open) && <div className="grid min-w-0 gap-5"><p className="text-sm leading-7 text-secondary">這是已記錄的事件決定，不是文件驗證、持倉資格、應收或實收。</p>
       <SourceValues values={[["穩定事件識別碼", record.id], ["本次清單的版本／實體修訂", `${record.version} / ${record.current_revision_id}`]]} />
-      <EventTerms record={record} /><RejectionState record={record} disabled={disabled} onRevise={onRevise} onReject={onReject} onAccept={onAccept} />
+      <EventTerms record={record} /><RejectionState record={record} disabled={disabled} onRevise={onRevise} onReject={onReject} onAccept={onAccept} onWithdraw={onWithdraw} />
       <div className="flex flex-wrap gap-3"><Button variant="outline" aria-expanded={revisions} onClick={() => setRevisions(value => !value)}>{revisions ? "收合事件修訂歷史" : "查看事件修訂歷史"}</Button>
         <Button variant="outline" aria-expanded={rejections} onClick={() => setRejections(value => !value)}>{rejections ? "收合拒絕歷史" : "查看拒絕歷史"}</Button></div>
       {revisions && <RevisionHistory record={record} />}{rejections && <RejectionHistory record={record} />}
@@ -161,14 +163,15 @@ function EventCard({ record, disabled, onRevise, onReject, onAccept }: { record:
 function EventEditor({ onCancel, onSaved, editor }: { onCancel: () => void; onSaved: (record: Event) => void; editor: Editor }) {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [decisionBusy, setDecisionBusy] = useState(false);
-  const title = { create: "新增人工股息事件", revise: "修訂人工股息事件", reject: "拒絕股息事件版本", accept: "人工接受股息事件版本" }[editor.mode];
+  const title = { create: "新增人工股息事件", revise: "修訂人工股息事件", reject: "拒絕股息事件版本", accept: "人工接受股息事件版本", withdraw: "撤回股息事件" }[editor.mode];
   const props = { onCancel, onSaved, disabled: passwordBusy, onPendingChange: setDecisionBusy };
   return <EditorSheet title={title} onClose={onCancel}>
     <div className="mb-6"><PasswordForm disabled={decisionBusy} onPendingChange={setPasswordBusy} /></div>
     {editor.mode === "reject" ? <RejectEventForm target={editor.target} {...props} />
       : editor.mode === "accept" ? <AcceptEventForm target={editor.target} {...props} />
-        : editor.mode === "revise" ? <ManualEventRevisionForm target={editor.target} {...props} />
-          : <ManualEventCreateForm {...props} />}
+        : editor.mode === "withdraw" ? <WithdrawEventForm target={editor.target} {...props} />
+          : editor.mode === "revise" ? <ManualEventRevisionForm target={editor.target} {...props} />
+            : <ManualEventCreateForm {...props} />}
   </EditorSheet>;
 }
 
@@ -192,7 +195,7 @@ export function DividendEventsPage() {
     <p className="mt-2 text-sm leading-7 text-secondary">查看已記錄的事件決定、來源與歷史；人工接受不是文件驗證或持倉資格，這裡不計算應收或實收。未知不會補零。</p>
     <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div>
     <Button data-editor-create disabled={editing} onClick={() => { setNotice(null); setEditor({ mode: "create" }); }}>新增人工股息事件</Button></header>
-    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.mode === "reject" ? "拒絕決定" : notice.mode === "accept" ? "人工接受決定" : "事件決定"} {notice.id}；可能是原鍵回覆，請重新載入核對目前版本及拒絕狀態。這不是文件驗證、持倉資格或實收。</p>}
+    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.mode === "reject" ? "拒絕決定" : notice.mode === "accept" ? "人工接受決定" : notice.mode === "withdraw" ? "撤回決定" : "事件決定"} {notice.id}；可能是原鍵回覆，請重新載入核對目前版本及拒絕狀態。這不是文件驗證、持倉資格或實收。</p>}
     {editor && <EventEditor editor={editor} onCancel={closeEditor} onSaved={record => { setNotice({ id: record.id, mode: editor.mode }); closeEditor(); }} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選股息事件</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><ReferenceSelect kind="securities" activeOnly={false} label="事件證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
@@ -208,6 +211,6 @@ export function DividendEventsPage() {
       { id: "dps", header: "每股事件金額，非收入", cell: ({ row }) => `${row.original.currency} ${row.original.dps}` },
       { id: "status", header: "事件決定，非拒絕狀態", cell: ({ row }) => statuses[row.original.workflow_status] },
       { id: "pay", header: "付款日", cell: ({ row }) => row.original.pay_date ?? "未知" },
-    ]}>{record => <EventCard record={record} disabled={editing} onRevise={target => { setNotice(null); setEditor({ mode: "revise", target }); }} onReject={target => { setNotice(null); setEditor({ mode: "reject", target }); }} onAccept={target => { setNotice(null); setEditor({ mode: "accept", target }); }} />}</RecordList>
+    ]}>{record => <EventCard record={record} disabled={editing} onRevise={target => { setNotice(null); setEditor({ mode: "revise", target }); }} onReject={target => { setNotice(null); setEditor({ mode: "reject", target }); }} onAccept={target => { setNotice(null); setEditor({ mode: "accept", target }); }} onWithdraw={target => { setNotice(null); setEditor({ mode: "withdraw", target }); }} />}</RecordList>
   </div>;
 }

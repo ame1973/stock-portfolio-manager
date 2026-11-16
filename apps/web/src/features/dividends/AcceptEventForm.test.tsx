@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { api, type components } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { AcceptEventForm } from "./AcceptEventForm";
+import { AcceptEventForm } from "./CitedEventDecisionForm";
 import type { RevisionTarget } from "./event-validation";
 
 type Schemas = components["schemas"];

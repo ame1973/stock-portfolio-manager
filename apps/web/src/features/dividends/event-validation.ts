@@ -63,12 +63,16 @@ export function validTarget(target: RevisionTarget): boolean {
     && (rejection === null || validRejection(rejection, event));
 }
 
-export function validAcceptanceTarget(target: RevisionTarget): boolean {
+export function validCitedTarget(target: RevisionTarget): boolean {
   if (!validTarget(target)) return false;
   const event = target.event;
-  return acceptableStatuses.has(event.workflow_status) && event.adjustment_basis === "AS_DECLARED"
+  return acceptableStatuses.has(event.workflow_status) && z.enum(["AS_DECLARED", "SPLIT_ADJUSTED", "UNKNOWN"]).safeParse(event.adjustment_basis).success
     && z.enum(eventTypes).safeParse(event.event_type).success && z.enum(["HKD", "USD"]).safeParse(event.currency).success
     && price.safeParse(event.dps).success && date.safeParse(event.ex_date).success
     && [event.announce_date, event.record_date, event.pay_date].every(value => value === null || date.safeParse(value).success)
     && typeof event.manual_locked === "boolean" && typeof event.manual_override === "boolean";
+}
+
+export function validAcceptanceTarget(target: RevisionTarget): boolean {
+  return validCitedTarget(target) && target.event.adjustment_basis === "AS_DECLARED";
 }

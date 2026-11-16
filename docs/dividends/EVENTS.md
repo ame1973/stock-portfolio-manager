@@ -197,6 +197,33 @@ another decision. Password and decision requests prevent closing while pending. 
 this decision nor its citation proves a document, creates eligibility, withdraws an
 event or reverses a receipt. No cash or historical FX is rewritten.
 
+### Event withdrawal in the browser
+
+A separate withdrawal editor requires a fresh rejection-state read matching the
+stable event, physical revision and version. It accepts a valid non-withdrawn event
+without converting an unknown or split-adjusted amount basis. The owner sees the
+frozen terms and any cited rejection, reauthenticates, supplies a new citation and
+reason, and explicitly confirms the withdrawal. A rejection observed at opening
+requires a separate confirmation and exact rejection ID; a rejection added later is
+not silently resolved. A previously withdrawn event must instead be reopened through
+the manual revision workflow with the required confirmations.
+
+The protected server rechecks the pins and appends a `WITHDRAW` revision with the
+same terms and prior manual-lock state. The browser validates that successor, including
+the exact DPS, citation redaction and no-grant labels. Existing entitlement or
+projection history blocks withdrawal until atomic reconciliation exists. Withdrawal
+is not a receipt reversal and does not rewrite cash, receipts or historical FX. A
+lost or inconsistent response keeps the unchanged memory-only request and key for
+retry; a replay may be historical even after a later explicit reopening.
+
+`npm run build && npm run test:e2e:dividend-withdrawal` uses a separate exclusive
+synthetic application root and real browser. It checks explicit rejection resolution,
+retained lock and terms, pending-close protection, a dropped committed response and
+zero-write historical replay after a later unlock/reopen, and a competing rejection
+that blocks an unpinned withdrawal. It does not use an existing installation, worker,
+provider or screenshot and does not establish document verification or financial
+eligibility.
+
 `npm run build && npm run test:e2e:dividend-events` runs the real API and built SPA
 with synthetic events in an exclusive temporary root. It checks responsive/keyboard
 behavior, no-store responses, a rejection without an ETag change, private URL
@@ -246,8 +273,8 @@ Citation URLs containing a query or fragment are withheld rather than returned w
 private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
 cash or historical FX. Protected candidate adoption, owner acceptance, explicit manual
-override, withdrawal and rejection are described below; browser forms for adoption,
-override and withdrawal remain unfinished. The existing event revision fence is unchanged.
+override, withdrawal and rejection are described below; browser forms for adoption
+and override remain unfinished. The existing event revision fence is unchanged.
 
 ## Protected manual event writes
 
