@@ -60,6 +60,8 @@ export function validTarget(target: RevisionTarget): boolean {
     && z.uuid().safeParse(event.security_id).success && Number.isInteger(event.version) && event.version >= 1 && event.version < 2_147_483_647
     && event.scope === "OWNER_EVENT_DECISION_ONLY" && event.current_use_scope === "REVALIDATION_REQUIRED"
     && event.document_verification === "NOT_ESTABLISHED" && event.eligibility_scope === "NOT_ESTABLISHED"
+    && (acceptableStatuses.has(event.workflow_status) || event.workflow_status === "WITHDRAWN")
+    && typeof event.manual_locked === "boolean" && typeof event.manual_override === "boolean"
     && (rejection === null || validRejection(rejection, event));
 }
 
@@ -69,8 +71,7 @@ export function validCitedTarget(target: RevisionTarget): boolean {
   return acceptableStatuses.has(event.workflow_status) && z.enum(["AS_DECLARED", "SPLIT_ADJUSTED", "UNKNOWN"]).safeParse(event.adjustment_basis).success
     && z.enum(eventTypes).safeParse(event.event_type).success && z.enum(["HKD", "USD"]).safeParse(event.currency).success
     && price.safeParse(event.dps).success && date.safeParse(event.ex_date).success
-    && [event.announce_date, event.record_date, event.pay_date].every(value => value === null || date.safeParse(value).success)
-    && typeof event.manual_locked === "boolean" && typeof event.manual_override === "boolean";
+    && [event.announce_date, event.record_date, event.pay_date].every(value => value === null || date.safeParse(value).success);
 }
 
 export function validAcceptanceTarget(target: RevisionTarget): boolean {

@@ -88,9 +88,11 @@ describe("manual dividend event revision", () => {
   ])("requires each applicable revision confirmation independently", async (label, message) => {
     reads(); const patch = vi.spyOn(api, "PATCH");
     renderForm(); await fill(); confirm();
-    fireEvent.click(screen.getByRole("checkbox", { name: label }));
+    const confirmation = screen.getByRole("checkbox", { name: label });
+    fireEvent.click(confirmation);
     fireEvent.click(screen.getByRole("button", { name: "儲存人工修訂" }));
     expect(await screen.findByText(message)).toBeVisible();
+    expect(confirmation).toHaveAttribute("aria-invalid", "true"); expect(confirmation).toHaveAccessibleDescription(message);
     expect(patch).not.toHaveBeenCalled();
   });
 
@@ -165,6 +167,16 @@ describe("manual dividend event revision", () => {
     fireEvent.click(screen.getByRole("button", { name: "儲存人工修訂" }));
     expect(await screen.findByText(/回覆與本次人工事件不符/)).toBeVisible();
     expect(onSaved).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "儲存人工修訂" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(revised));
+    expect(requests(patch)[1]![1]).toEqual(requests(patch)[0]![1]);
+  });
+
+  it.each([{ ...revised, manual_override: undefined }, { ...revised, manual_locked: 0 }])("rejects missing or non-boolean manual flags on an ordinary revision", async broken => {
+    reads(); const patch = vi.spyOn(api, "PATCH").mockResolvedValueOnce(reply(broken as unknown as Schemas["DividendEventRecord"])).mockResolvedValueOnce(reply(revised));
+    const { onSaved } = renderForm(); await fill(); confirm();
+    fireEvent.click(screen.getByRole("button", { name: "儲存人工修訂" }));
+    expect(await screen.findByText(/回覆與本次人工事件不符/)).toBeVisible(); expect(onSaved).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "儲存人工修訂" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(revised));
     expect(requests(patch)[1]![1]).toEqual(requests(patch)[0]![1]);

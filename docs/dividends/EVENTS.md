@@ -153,6 +153,32 @@ or projection history still blocks revision until atomic rebuilding and receipt
 reconciliation are implemented. Existing receipts, cash and historical FX are not
 rewritten by this workflow.
 
+### Manual override in the browser
+
+The event workspace offers a distinct, reauthenticated manual-override editor only
+when a separately loaded rejection state matches the displayed event and physical
+revision. It fixes the security and observed pins while the owner explicitly supplies
+replacement terms, citation and reason. A separate confirmation records the intent
+to create an override, in addition to each applicable unlock, reopening, rejection
+resolution and new-reference confirmation. The new cited URL is never copied from
+an older version, and missing amounts or currencies are not filled in automatically.
+
+The protected server appends a new `MANUAL` revision marked `manual_override=true`;
+older decisions remain unchanged. The browser checks the new identity, exact terms,
+reference redaction, explicit override marker and no-grant labels. An uncertain
+unchanged request retains its memory-only body/key across reauthentication, and a
+successful response can be a historical replay rather than the current version.
+Existing entitlement or projection history still blocks the new decision until atomic
+reconciliation exists; no receipts, cash or locked FX are rewritten. An override does
+not verify a document, establish ownership or create income.
+
+`npm run build && npm run test:e2e:dividend-override` uses a separate exclusive
+synthetic application and real browser to exercise a locked, withdrawn and rejected
+version, all explicit confirmations, a held/lost response and historical zero-write
+replay after a later revision. A competing rejection blocks an unpinned override without
+writes or loss of form input. No worker, provider, deployment data or screenshot is
+used.
+
 ### Owner acceptance in the browser
 
 A separate acceptance editor requires a successfully loaded rejection state matching
@@ -273,8 +299,8 @@ Citation URLs containing a query or fragment are withheld rather than returned w
 private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
 cash or historical FX. Protected candidate adoption, owner acceptance, explicit manual
-override, withdrawal and rejection are described below; browser forms for adoption
-and override remain unfinished. The existing event revision fence is unchanged.
+override, withdrawal and rejection are described below; the browser candidate-adoption
+form remains unfinished. The existing event revision fence is unchanged.
 
 ## Protected manual event writes
 
