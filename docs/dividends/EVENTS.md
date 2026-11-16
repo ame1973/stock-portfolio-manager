@@ -957,11 +957,29 @@ amount/currency and a correlated audit shape; updates, deletes and replacement w
 blocked. Database constraints and shaped hashes do not authenticate a caller, verify an
 audit's canonical contents, select an effective setting, prove actual broker charges or
 grant eligibility. Do not insert fee rows directly into deployment data: an audited
-history/selector, protected writer and projection provenance are not installed yet.
+history reader, protected writer and projection provenance are not installed yet.
 Before any economic projection, independently revalidate the exact event, source,
 rejection state, recorded eligibility, selected effective-day fee and observed history
 head, account/broker versions and any explicit fee-FX provenance. Later backdated
 assertions must not relabel retained snapshots.
+
+## Pure fee-estimate selection
+
+`dividend_fee_service.select` operates only on caller-supplied `FeeSetting` values
+and an explicit effective calendar day. It validates the complete supplied revision/account
+chain or explicitly supplied historical prefix, predecessor and sequence, unique setting,
+request and audit identities, chronology, scope and exact amounts before selecting the
+latest effective day and then latest setting number. It retains the observed head number
+and identity independently of the selected record, so a future or backdated assertion is
+not silently forgotten. `MISSING`, `UNKNOWN` and an explicitly estimated zero remain
+separate; an unknown amount may retain an explicitly known currency.
+
+This pure calculation returns `UNVERIFIED_FEE_SELECTION_ONLY`. It does not read the
+database, authenticate an owner, verify an audit or broker charge, check current account
+or broker associations, calculate fee FX, establish eligibility or authorize income.
+A caller using a historical prefix must have independently established its exact retained
+head; a future economic writer must revalidate current scope and the complete audited
+history in the same transaction.
 
 ## Internal retained-projection history reader
 
@@ -1638,6 +1656,9 @@ not establish that the supplied event, shares or settings are authentic.
 explicit zero versus unknown amount/currency, owned physical revision and account
 scope, rejection and append-only fences, exact private backups and failed-upgrade rollback.
 SQL-shaped synthetic assertions in these tests are not authenticated fee estimates.
+`uv run pytest tests/test_dividend_fee_selection.py` checks supplied chain integrity,
+effective-day/prefix selection, missing versus unknown and explicit zero, exact INT64
+boundaries and private representations without asserting database authority.
 
 `uv run pytest tests/test_dividend_tax_migration.py tests/test_dividend_tax_service.py`
 checks immutable setting storage, audited history, explicit effective-day/head
