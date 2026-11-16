@@ -153,6 +153,27 @@ or projection history still blocks revision until atomic rebuilding and receipt
 reconciliation are implemented. Existing receipts, cash and historical FX are not
 rewritten by this workflow.
 
+### Owner acceptance in the browser
+
+A separate acceptance editor requires a successfully loaded rejection state matching
+the displayed event and physical revision. It is available for valid, non-withdrawn
+events with an explicitly `AS_DECLARED` amount basis; unknown or split-adjusted basis
+is not silently converted. The owner sees the exact terms, reauthenticates, enters a
+new citation and reason, and confirms that the acceptance is an owner decision, not
+document verification or income. If the observed version is rejected, a separate
+confirmation binds its exact rejection ID; the rejected decision and its reference
+remain in history. A later rejection after a clear read is not silently resolved.
+
+The protected server rechecks the version, physical revision and current source or
+candidate, then appends a new locked `VERIFY` revision on identical terms. The browser
+validates the returned physical identity, exact decimal terms, status, reference
+redaction and no-grant labels. It never substitutes prior private URLs or treats
+conflicting evidence as independently verified. Historical entitlement or projection
+history still blocks the decision until atomic reconciliation exists. An uncertain
+unchanged retry retains its memory-only body/key even through reauthentication; the
+returned revision may be an old idempotent replay rather than the current version.
+The operation does not post or reverse a receipt or rewrite cash or historical FX.
+
 ### Rejection decision in the browser
 
 A separate rejection editor is offered only after a successful, unpaused and matching
@@ -191,7 +212,11 @@ revision is rejected without writes and the form retains its input. It also subm
 browser rejection, drops the committed response, resolves that rejection with a later
 revision and verifies the unchanged-key replay is historical and zero-write. A competing
 rejection made after a clear read blocks a second browser decision without overwriting
-it or discarding the form.
+it or discarding the form. The browser also accepts an explicitly pinned rejected
+revision, tests the separate resolution confirmation and drops its committed response;
+replaying after a later unlock and revision writes nothing and does not replace the
+current state. A rejection added after a clear acceptance read blocks the unpinned
+acceptance without writes.
 
 ## Protected event-decision read API
 
@@ -222,7 +247,7 @@ private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
 cash or historical FX. Protected candidate adoption, owner acceptance, explicit manual
 override, withdrawal and rejection are described below; browser forms for adoption,
-acceptance, override and withdrawal remain unfinished. The existing event revision fence is unchanged.
+override and withdrawal remain unfinished. The existing event revision fence is unchanged.
 
 ## Protected manual event writes
 

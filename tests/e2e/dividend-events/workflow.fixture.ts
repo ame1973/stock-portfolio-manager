@@ -313,10 +313,7 @@ test("isolated event UI separates retained decisions, rejection and protected cr
   await expect(competingState).toContainText("此版本未記錄拒絕");
   await competingState.getByRole("button", { name: "修訂人工股息事件" }).click();
   const staleSheet = page.getByRole("dialog", { name: "修訂人工股息事件" });
-  const stalePassword = staleSheet.getByRole("form", { name: "重新驗證" });
-  await stalePassword.getByLabel("目前密碼").fill(password);
-  await stalePassword.getByRole("button", { name: "確認目前密碼" }).click();
-  await expect(stalePassword).toContainText("已重新驗證");
+  // Reuse the real recent session established by the revision replay.
   const staleForm = staleSheet.getByRole("form", { name: "修訂人工股息事件" });
   await staleForm.getByLabel("事件引用參考").fill("Synthetic stale revision reference");
   await staleForm.getByLabel("事件決定依據").fill("Synthetic revision must not silently resolve a new rejection.");
@@ -436,10 +433,7 @@ test("isolated event UI separates retained decisions, rejection and protected cr
   await expect(newerPanel).toContainText("此版本未記錄拒絕");
   await newerPanel.getByRole("button", { name: "拒絕此事件版本" }).click();
   const raceSheet = page.getByRole("dialog", { name: "拒絕股息事件版本" });
-  const racePassword = raceSheet.getByRole("form", { name: "重新驗證" });
-  await racePassword.getByLabel("目前密碼").fill(password);
-  await racePassword.getByRole("button", { name: "確認目前密碼" }).click();
-  await expect(racePassword).toContainText("已重新驗證");
+  // Reuse the real recent session established by the rejection replay.
   const raceForm = raceSheet.getByRole("form", { name: "拒絕股息事件版本" });
   await raceForm.getByLabel("拒絕引用參考").fill("Synthetic stale rejection reference");
   await raceForm.getByLabel("拒絕決定依據").fill("Synthetic rejection must not replace a competing decision.");
@@ -457,6 +451,130 @@ test("isolated event UI separates retained decisions, rejection and protected cr
   await expect(raceForm.getByLabel("拒絕引用參考")).toHaveValue("Synthetic stale rejection reference");
   expect(database()).toEqual(beforeRaceDenied);
   expect((await readEvent(page, rejectEvent.id)).etag).toBe('"2"');
+  await raceSheet.getByRole("button", { name: "關閉編輯" }).click();
+  await expect(newerPanel).toContainText("此版本已記錄拒絕");
+  const currentRejectionResponse = await page.request.get(`/api/v1/dividends/events/${rejectEvent.id}/rejection`);
+  const currentRejection = await currentRejectionResponse.json() as components["schemas"]["RejectionState"];
+  expect(currentRejection.state).toBe("REJECTED");
+  const acceptOpener = newerPanel.getByRole("button", { name: "人工接受此版本" });
+  await acceptOpener.focus(); await page.keyboard.press("Enter");
+  const acceptSheet = page.getByRole("dialog", { name: "人工接受股息事件版本" });
+  await expect(acceptSheet.getByRole("button", { name: "關閉編輯" })).toBeFocused();
+  const acceptPassword = acceptSheet.getByRole("form", { name: "重新驗證" });
+  await acceptPassword.getByLabel("目前密碼").fill(password);
+  await acceptPassword.getByRole("button", { name: "確認目前密碼" }).click();
+  await expect(acceptPassword).toContainText("已重新驗證");
+  const acceptForm = acceptSheet.getByRole("form", { name: "人工接受股息事件版本" });
+  await expect(acceptForm).toContainText(currentRejection.rejection!.id);
+  await expect(acceptForm).toContainText("Synthetic concurrent rejection wins before the browser decision.");
+  await expect(acceptForm).toContainText("Synthetic competing rejection");
+  await expect(acceptForm).toContainText("一般股息");
+  await expect(acceptForm).toContainText("宣告：未知；記錄：未知；付款：未知");
+  await expect(acceptForm).toContainText("除淨日 2026-11-05；每股 USD 0.25000000");
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const box = (await acceptSheet.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 360, height: 900 });
+  await acceptForm.getByLabel("接受引用參考").fill("Synthetic browser acceptance reference");
+  await acceptForm.getByLabel("接受引用網址（選填）").fill("https://example.test/accept?private=synthetic-secret#page");
+  await acceptForm.getByLabel("接受決定依據").fill("Synthetic acceptance explicitly resolves the observed rejection.");
+  await acceptForm.getByRole("checkbox", { name: /我確認以人工決定接受所示事件條款/ }).check();
+  const beforeAcceptanceValidation = database();
+  await acceptForm.getByRole("button", { name: "記錄人工接受" }).click();
+  await expect(acceptForm.getByRole("alert")).toContainText("請確認明確處理所示拒絕");
+  expect(database()).toEqual(beforeAcceptanceValidation);
+  await acceptForm.getByRole("checkbox", { name: /我確認以本次接受決定明確處理所示拒絕/ }).check();
+  let releaseAccept!: () => void; let acceptCommitted!: () => void;
+  const heldAccept = new Promise<void>(resolve => { releaseAccept = resolve; });
+  const savedAccept = new Promise<void>(resolve => { acceptCommitted = resolve; });
+  let acceptBody = ""; let acceptKey = ""; let retryAcceptBody = ""; let retryAcceptKey = ""; let acceptMatch = ""; let acceptAttempts = 0;
+  let committedAcceptance!: Event;
+  const acceptPath = `**/api/v1/dividends/${rejectEvent.id}/verify`;
+  await page.route(acceptPath, async route => {
+    if (route.request().method() !== "POST") { await route.continue(); return; }
+    acceptAttempts++;
+    const body = route.request().postData()!; const requestHeaders = route.request().headers();
+    const response = await route.fetch(); expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
+    if (acceptAttempts === 1) { acceptBody = body; acceptKey = requestHeaders["idempotency-key"]!; acceptMatch = requestHeaders["if-match"]!; acceptCommitted(); await heldAccept; await route.abort("failed"); }
+    else { retryAcceptBody = body; retryAcceptKey = requestHeaders["idempotency-key"]!; await route.fulfill({ response }); }
+  });
+  stage("COMMIT_HELD");
+  try {
+    await acceptForm.getByRole("button", { name: "記錄人工接受" }).click(); await savedAccept;
+    const current = await readEvent(page, rejectEvent.id);
+    expect(current.etag).toBe('"3"'); expect(current.data.workflow_status).toBe("VERIFIED"); expect(current.data.manual_locked).toBe(true);
+    expect(current.data.dps).toBe("0.25000000"); expect(current.data.document_verification).toBe("NOT_ESTABLISHED");
+    committedAcceptance = current.data;
+    const afterAcceptance = database();
+    expect(afterAcceptance.dividend_rejection_resolutions).toHaveLength(beforeRaceDenied.dividend_rejection_resolutions!.length + 1);
+    for (const table of ["dividend_receipts", "dividend_entitlements", "dividend_projection_versions", "cash_ledger_entries", "trades", "upstream_attempts", "jobs"]) expect(afterAcceptance[table]).toEqual(beforeRaceDenied[table]);
+    await page.keyboard.press("Escape"); await acceptSheet.getByRole("button", { name: "關閉編輯" }).click();
+    await expect(acceptSheet).toBeVisible();
+    await expect(acceptForm.getByLabel("接受引用參考")).toHaveValue("Synthetic browser acceptance reference");
+  } finally { releaseAccept(); }
+  stage("ACCEPT_LOST");
+  await expect(acceptForm.getByRole("alert")).toContainText("網絡連線中斷");
+  await acceptPassword.getByLabel("目前密碼").fill(password);
+  const acceptanceReauthentication = page.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/auth/reauth" && response.request().method() === "POST");
+  await acceptPassword.getByRole("button", { name: "確認目前密碼" }).click();
+  const acceptanceReauthenticationResult = await acceptanceReauthentication;
+  stage(acceptanceReauthenticationResult.status() === 429 ? "ACCEPT_RATE_LIMITED" : "ACCEPT_REAUTH");
+  expect(acceptanceReauthenticationResult.status()).toBe(200);
+  await expect(acceptPassword).toContainText("已重新驗證");
+  const afterAcceptanceRevision = await page.request.patch(`/api/v1/dividends/events/${rejectEvent.id}`, { headers: await headers(page, 3), data: {
+    security_id: security.id, revision_id: committedAcceptance.current_revision_id, resolve_rejection_id: null,
+    event_type: "REGULAR", ex_date: "2026-11-05", announce_date: null, record_date: null, pay_date: null,
+    dps: "0.26000000", currency: "USD", adjustment_basis: "AS_DECLARED", citation: "Synthetic later revision reference", source_url: null,
+    reason: "Synthetic later revision after the acceptance response was lost.", confirm_unlock: true, confirm_reopen: false,
+  } });
+  expect(afterAcceptanceRevision.status()).toBe(200);
+  const beforeAcceptReplay = database();
+  for (const table of ["dividend_receipts", "dividend_entitlements", "dividend_projection_versions", "cash_ledger_entries", "trades", "upstream_attempts", "jobs"]) expect(beforeAcceptReplay[table]).toEqual(beforeRaceDenied[table]);
+  stage("REPLAY");
+  await acceptForm.getByRole("button", { name: "記錄人工接受" }).click();
+  await expect(acceptSheet).toHaveCount(0);
+  await page.unroute(acceptPath);
+  expect(acceptAttempts).toBe(2); expect(retryAcceptKey).toBe(acceptKey); expect(retryAcceptBody).toBe(acceptBody); expect(acceptMatch).toBe('"2"');
+  expect(JSON.parse(acceptBody)).toMatchObject({ revision_id: successorEvent.current_revision_id, resolve_rejection_id: currentRejection.rejection!.id,
+    decision: "ACCEPT_REVISION", citation: "Synthetic browser acceptance reference" });
+  expect(database()).toEqual(beforeAcceptReplay);
+  const afterAcceptReplay = await readEvent(page, rejectEvent.id);
+  expect(afterAcceptReplay.etag).toBe('"4"'); expect(afterAcceptReplay.data.workflow_status).toBe("PROVISIONAL");
+  await expect(page.getByRole("status").filter({ hasText: "伺服器已回覆人工接受決定" })).toContainText("可能是原鍵回覆");
+
+  stage("CHANGED_EVIDENCE");
+  await page.goto("/dividends");
+  const acceptanceRaceArticle = page.getByRole("article", { name: `股息事件 ${rejectEvent.id}` });
+  await acceptanceRaceArticle.getByRole("button", { name: "查看事件與拒絕狀態" }).click();
+  const acceptanceRacePanel = acceptanceRaceArticle.getByRole("region", { name: "獨立拒絕狀態" });
+  await expect(acceptanceRacePanel).toContainText("此版本未記錄拒絕");
+  await acceptanceRacePanel.getByRole("button", { name: "人工接受此版本" }).click();
+  const acceptanceRaceSheet = page.getByRole("dialog", { name: "人工接受股息事件版本" });
+  const acceptanceRacePassword = acceptanceRaceSheet.getByRole("form", { name: "重新驗證" });
+  await acceptanceRacePassword.getByLabel("目前密碼").fill(password);
+  await acceptanceRacePassword.getByRole("button", { name: "確認目前密碼" }).click();
+  await expect(acceptanceRacePassword).toContainText("已重新驗證");
+  const acceptanceRaceForm = acceptanceRaceSheet.getByRole("form", { name: "人工接受股息事件版本" });
+  await acceptanceRaceForm.getByLabel("接受引用參考").fill("Synthetic stale acceptance reference");
+  await acceptanceRaceForm.getByLabel("接受決定依據").fill("Synthetic acceptance cannot silently resolve a later rejection.");
+  await acceptanceRaceForm.getByRole("checkbox", { name: /我確認以人工決定接受所示事件條款/ }).check();
+  await expect(acceptanceRaceForm.getByRole("checkbox", { name: /明確處理所示拒絕/ })).toHaveCount(0);
+  const rejectionBeforeAcceptance = await page.request.post(`/api/v1/dividends/${rejectEvent.id}/verify`, { headers: await headers(page, 4), data: {
+    revision_id: afterAcceptReplay.data.current_revision_id, decision: "REJECT_REVISION", citation: "Synthetic later competing rejection",
+    reason: "Synthetic rejection created after a clear acceptance read.",
+  } });
+  expect(rejectionBeforeAcceptance.status()).toBe(200);
+  const beforeAcceptanceDenied = database();
+  const acceptanceDenied = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/dividends/${rejectEvent.id}/verify` && response.request().method() === "POST");
+  await acceptanceRaceForm.getByRole("button", { name: "記錄人工接受" }).click();
+  expect((await acceptanceDenied).status()).toBe(409);
+  await expect(acceptanceRaceForm.getByRole("alert")).toContainText("已有拒絕");
+  await expect(acceptanceRaceForm.getByLabel("接受引用參考")).toHaveValue("Synthetic stale acceptance reference");
+  expect(database()).toEqual(beforeAcceptanceDenied);
+  expect((await readEvent(page, rejectEvent.id)).etag).toBe('"4"');
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
   expect(await page.evaluate(() => caches.keys())).toEqual([]);
   stage("FINAL");

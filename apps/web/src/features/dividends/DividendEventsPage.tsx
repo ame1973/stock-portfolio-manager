@@ -15,30 +15,22 @@ import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { PasswordForm } from "../settings/SecuritySettingsPage";
 import { usePageState } from "../settings/data";
 import { SourceLink, SourceReadState, SourceValues } from "../sources/details";
+import { AcceptEventForm } from "./AcceptEventForm";
 import { ManualEventCreateForm, ManualEventRevisionForm } from "./ManualEventForm";
 import { RejectEventForm } from "./RejectEventForm";
-import { validRejection, validTarget, type RevisionTarget } from "./event-validation";
+import { basisLabels as basis, eventTypeLabels as eventTypes, statuses } from "./event-labels";
+import { validAcceptanceTarget, validRejection, validTarget, type RevisionTarget } from "./event-validation";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
 type Revision = Schemas["DividendEventRevisionRecord"];
 type Terms = Event | Revision;
 type Rejection = Schemas["RejectionDecision"];
+type Editor = { mode: "create" } | { mode: "revise" | "accept"; target: RevisionTarget } | { mode: "reject"; target: Event };
 
-const statuses: Record<Event["workflow_status"], string> = {
-  PROVISIONAL: "暫定，待核對", CORROBORATED: "來源條款相符，非文件驗證", VERIFIED: "人工接受（非文件驗證）",
-  CONFLICT: "來源條款有衝突", INCOMPLETE: "條款不完整", WITHDRAWN: "已撤回，歷史保留",
-};
-const eventTypes: Record<Event["event_type"], string> = {
-  REGULAR: "一般股息", SPECIAL: "特別股息", INTERIM: "中期股息", FINAL: "末期股息", SUPPLEMENTAL: "補充股息",
-  ETF_DISTRIBUTION: "ETF 分派", REIT_DISTRIBUTION: "REIT 分派", UNKNOWN: "類型未知",
-};
 const fields: Record<Schemas["EventEvidence"]["fields"][number], string> = {
   ex_date: "除淨日", announce_date: "宣告日", record_date: "記錄日", pay_date: "付款日", event_type: "事件類型",
   currency: "幣別", dps: "每股金額", adjustment_basis: "調整基準",
-};
-const basis: Record<Event["adjustment_basis"], string> = {
-  AS_DECLARED: "記錄為宣告口徑，不代表已驗證", SPLIT_ADJUSTED: "拆股調整後，不能直接當作宣告金額", UNKNOWN: "未知，不會猜測",
 };
 const decisions: Record<Event["decision_kind"], string> = {
   CANDIDATE: "明確關聯候選資料", MANUAL: "人工條款", VERIFY: "人工接受", WITHDRAW: "人工撤回",
@@ -84,7 +76,7 @@ function RejectionDetails({ record }: { record: Rejection }) {
   ]} /><Citation reference={record.reference} label="開啟拒絕引用" /></div>;
 }
 
-function RejectionState({ record, disabled, onRevise, onReject }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void; onReject: (target: Event) => void }) {
+function RejectionState({ record, disabled, onRevise, onReject, onAccept }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void; onReject: (target: Event) => void; onAccept: (target: RevisionTarget) => void }) {
   const result = useQuery({
     queryKey: ["dividends", "rejection", record.id, record.current_revision_id, record.version], staleTime: 0, refetchOnMount: "always",
     queryFn: async ({ signal }) => checked(await api.GET("/api/v1/dividends/events/{event_id}/rejection", { params: { path: { event_id: record.id } }, signal })),
@@ -109,7 +101,9 @@ function RejectionState({ record, disabled, onRevise, onReject }: { record: Even
       event: { ...record, reference: record.reference ? { ...record.reference } : null },
       rejection: target.rejection ? { ...target.rejection, reference: { ...target.rejection.reference } } : null,
     })}>修訂人工股息事件</Button>
-      {target.rejection === null && <Button variant="outline" disabled={disabled} onClick={() => onReject(record)}>拒絕此事件版本</Button>}</div> : <p role="alert" className="text-sm text-danger">事件或拒絕範圍無法核對，或版本已達上限；不能開始修訂或拒絕，請重新載入。</p>)}
+      {validAcceptanceTarget(target) && <Button variant="outline" disabled={disabled} onClick={() => onAccept(target)}>人工接受此版本</Button>}
+      {target.rejection === null && <Button variant="outline" disabled={disabled} onClick={() => onReject(record)}>拒絕此事件版本</Button>}</div> : <p role="alert" className="text-sm text-danger">事件或拒絕範圍無法核對，或版本已達上限；不能開始修訂、接受或拒絕，請重新載入。</p>)}
+    {ready && target && validTarget(target) && !validAcceptanceTarget(target) && <p className="text-sm leading-7 text-secondary">事件已撤回、條款格式不符或金額口徑未明確記錄為宣告條款；不能開始人工接受，請先核對事件與來源。</p>}
     {value && <p className="text-xs leading-6 text-secondary">拒絕狀態最後載入：{new Date(result.dataUpdatedAt).toLocaleString("zh-HK", { hour12: false })}；只表示該次讀取。</p>}
   </section>;
 }
@@ -143,7 +137,7 @@ function RejectionHistory({ record }: { record: Event }) {
     </article>}</RecordList></section>;
 }
 
-function EventCard({ record, disabled, onRevise, onReject }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void; onReject: (target: Event) => void }) {
+function EventCard({ record, disabled, onRevise, onReject, onAccept }: { record: Event; disabled: boolean; onRevise: (target: RevisionTarget) => void; onReject: (target: Event) => void; onAccept: (target: RevisionTarget) => void }) {
   const desktop = useDesktop();
   const [open, setOpen] = useState(false);
   const [revisions, setRevisions] = useState(false);
@@ -155,7 +149,7 @@ function EventCard({ record, disabled, onRevise, onReject }: { record: Event; di
     {!desktop && <Button variant="outline" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? "收合事件與拒絕狀態" : "查看事件與拒絕狀態"}</Button>}
     {(desktop || open) && <div className="grid min-w-0 gap-5"><p className="text-sm leading-7 text-secondary">這是已記錄的事件決定，不是文件驗證、持倉資格、應收或實收。</p>
       <SourceValues values={[["穩定事件識別碼", record.id], ["本次清單的版本／實體修訂", `${record.version} / ${record.current_revision_id}`]]} />
-      <EventTerms record={record} /><RejectionState record={record} disabled={disabled} onRevise={onRevise} onReject={onReject} />
+      <EventTerms record={record} /><RejectionState record={record} disabled={disabled} onRevise={onRevise} onReject={onReject} onAccept={onAccept} />
       <div className="flex flex-wrap gap-3"><Button variant="outline" aria-expanded={revisions} onClick={() => setRevisions(value => !value)}>{revisions ? "收合事件修訂歷史" : "查看事件修訂歷史"}</Button>
         <Button variant="outline" aria-expanded={rejections} onClick={() => setRejections(value => !value)}>{rejections ? "收合拒絕歷史" : "查看拒絕歷史"}</Button></div>
       {revisions && <RevisionHistory record={record} />}{rejections && <RejectionHistory record={record} />}
@@ -164,25 +158,25 @@ function EventCard({ record, disabled, onRevise, onReject }: { record: Event; di
   </article>;
 }
 
-function EventEditor({ onCancel, onSaved, target, rejectionTarget }: { onCancel: () => void; onSaved: (record: Event) => void; target?: RevisionTarget; rejectionTarget?: Event }) {
+function EventEditor({ onCancel, onSaved, editor }: { onCancel: () => void; onSaved: (record: Event) => void; editor: Editor }) {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [decisionBusy, setDecisionBusy] = useState(false);
-  const title = rejectionTarget ? "拒絕股息事件版本" : target ? "修訂人工股息事件" : "新增人工股息事件";
+  const title = { create: "新增人工股息事件", revise: "修訂人工股息事件", reject: "拒絕股息事件版本", accept: "人工接受股息事件版本" }[editor.mode];
+  const props = { onCancel, onSaved, disabled: passwordBusy, onPendingChange: setDecisionBusy };
   return <EditorSheet title={title} onClose={onCancel}>
     <div className="mb-6"><PasswordForm disabled={decisionBusy} onPendingChange={setPasswordBusy} /></div>
-    {rejectionTarget ? <RejectEventForm target={rejectionTarget} onCancel={onCancel} onSaved={onSaved} disabled={passwordBusy} onPendingChange={setDecisionBusy} />
-      : target ? <ManualEventRevisionForm target={target} onCancel={onCancel} onSaved={onSaved} disabled={passwordBusy} onPendingChange={setDecisionBusy} />
-        : <ManualEventCreateForm onCancel={onCancel} onSaved={onSaved} disabled={passwordBusy} onPendingChange={setDecisionBusy} />}
+    {editor.mode === "reject" ? <RejectEventForm target={editor.target} {...props} />
+      : editor.mode === "accept" ? <AcceptEventForm target={editor.target} {...props} />
+        : editor.mode === "revise" ? <ManualEventRevisionForm target={editor.target} {...props} />
+          : <ManualEventCreateForm {...props} />}
   </EditorSheet>;
 }
 
 const initialFilters = { security_id: "", workflow_status: "" as "" | Event["workflow_status"], from_date: "", to_date: "" };
 export function DividendEventsPage() {
   const cache = useQueryClient();
-  const [creating, setCreating] = useState(false);
-  const [revisionTarget, setRevisionTarget] = useState<RevisionTarget | null>(null);
-  const [rejectionTarget, setRejectionTarget] = useState<Event | null>(null);
-  const [notice, setNotice] = useState<{ id: string; rejection: boolean } | null>(null);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [notice, setNotice] = useState<{ id: string; mode: Editor["mode"] } | null>(null);
   const page = usePageState("dividends:events");
   const [filters, setFilters] = useViewState("filters:dividends:events", initialFilters);
   const result = useQuery({ queryKey: ["dividends", "events", filters, page.q, page.cursor], staleTime: 0,
@@ -192,14 +186,14 @@ export function DividendEventsPage() {
     } }, signal })),
   });
   function filter(change: Partial<typeof initialFilters>) { setFilters(previous => ({ ...previous, ...change })); page.search(page.q); }
-  const editing = creating || !!revisionTarget || !!rejectionTarget;
-  function closeEditor() { setCreating(false); setRevisionTarget(null); setRejectionTarget(null); void cache.invalidateQueries({ queryKey: ["dividends"] }); }
+  const editing = editor !== null;
+  function closeEditor() { setEditor(null); void cache.invalidateQueries({ queryKey: ["dividends"] }); }
   return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 className="text-2xl font-semibold">股息事件</h1>
     <p className="mt-2 text-sm leading-7 text-secondary">查看已記錄的事件決定、來源與歷史；人工接受不是文件驗證或持倉資格，這裡不計算應收或實收。未知不會補零。</p>
     <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div>
-    <Button data-editor-create disabled={editing} onClick={() => { setNotice(null); setCreating(true); }}>新增人工股息事件</Button></header>
-    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.rejection ? "拒絕決定" : "事件決定"} {notice.id}；可能是原鍵回覆，請重新載入核對目前版本及拒絕狀態。這不是文件驗證、持倉資格或實收。</p>}
-    {editing && <EventEditor target={revisionTarget ?? undefined} rejectionTarget={rejectionTarget ?? undefined} onCancel={closeEditor} onSaved={record => { setNotice({ id: record.id, rejection: !!rejectionTarget }); closeEditor(); }} />}
+    <Button data-editor-create disabled={editing} onClick={() => { setNotice(null); setEditor({ mode: "create" }); }}>新增人工股息事件</Button></header>
+    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.mode === "reject" ? "拒絕決定" : notice.mode === "accept" ? "人工接受決定" : "事件決定"} {notice.id}；可能是原鍵回覆，請重新載入核對目前版本及拒絕狀態。這不是文件驗證、持倉資格或實收。</p>}
+    {editor && <EventEditor editor={editor} onCancel={closeEditor} onSaved={record => { setNotice({ id: record.id, mode: editor.mode }); closeEditor(); }} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選股息事件</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><ReferenceSelect kind="securities" activeOnly={false} label="事件證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
         <SelectField label="事件狀態" value={filters.workflow_status} onChange={event => filter({ workflow_status: event.target.value as typeof filters.workflow_status })}><option value="">全部事件狀態</option>{(Object.keys(statuses) as Event["workflow_status"][]).map(status => <option key={status} value={status}>{statuses[status]}</option>)}</SelectField>
@@ -214,6 +208,6 @@ export function DividendEventsPage() {
       { id: "dps", header: "每股事件金額，非收入", cell: ({ row }) => `${row.original.currency} ${row.original.dps}` },
       { id: "status", header: "事件決定，非拒絕狀態", cell: ({ row }) => statuses[row.original.workflow_status] },
       { id: "pay", header: "付款日", cell: ({ row }) => row.original.pay_date ?? "未知" },
-    ]}>{record => <EventCard record={record} disabled={editing} onRevise={target => { setNotice(null); setRevisionTarget(target); }} onReject={target => { setNotice(null); setRejectionTarget(target); }} />}</RecordList>
+    ]}>{record => <EventCard record={record} disabled={editing} onRevise={target => { setNotice(null); setEditor({ mode: "revise", target }); }} onReject={target => { setNotice(null); setEditor({ mode: "reject", target }); }} onAccept={target => { setNotice(null); setEditor({ mode: "accept", target }); }} />}</RecordList>
   </div>;
 }

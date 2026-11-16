@@ -45,7 +45,7 @@ try {
         : "PASS isolated credential browser fixture: actual onboarding, reauthentication, import, rotation, clear, replay, exact private files and zero provider work");
 } catch {
   // Only fixed stage labels are allowed; subprocess diagnostics and payloads remain private.
-  const stages = new Set(["SETUP", "MASTER", "SEED", "NAVIGATE", "OPEN", "RESIZE", "FILL", "PASSWORD", "PASSWORD_HELD", "COMMIT", "COMMIT_HELD", "LOST", "REAUTH", "REPLAY", "COMPARE", "SECOND", "REVIEW_ACK", "REVIEW_WITHDRAW", "CHANGED_EVIDENCE", "FINAL", "CORRECTION_REACK", "CORRECTION_REVISE", "CORRECTION_HELD", "CORRECTION_LOST", "CORRECTION_WITHDRAW", "CORRECTION_VOID"]);
+  const stages = new Set(["SETUP", "MASTER", "SEED", "NAVIGATE", "OPEN", "RESIZE", "FILL", "PASSWORD", "PASSWORD_HELD", "COMMIT", "COMMIT_HELD", "LOST", "REAUTH", "REPLAY", "COMPARE", "SECOND", "REVIEW_ACK", "REVIEW_WITHDRAW", "CHANGED_EVIDENCE", "FINAL", "CORRECTION_REACK", "CORRECTION_REVISE", "CORRECTION_HELD", "CORRECTION_LOST", "CORRECTION_WITHDRAW", "CORRECTION_VOID", "ACCEPT_LOST", "ACCEPT_RATE_LIMITED", "ACCEPT_REAUTH"]);
   const stage = tradeOrigin || tradeReview || dividendEvents ? await readFile(join(root, "stage"), "utf8").catch(() => "") : "";
   console.error(`FAIL isolated browser fixture${stages.has(stage) ? ` at ${stage}` : ""} (private diagnostics suppressed)`); process.exitCode = 1;
 } finally {

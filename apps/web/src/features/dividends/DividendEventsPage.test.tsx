@@ -174,6 +174,38 @@ describe("dividend event workspace", () => {
     expect(within(panel).queryByRole("button", { name: "拒絕此事件版本" })).not.toBeInTheDocument();
   });
 
+  it("opens a password-confirmed acceptance for a fresh matching clear state", async () => {
+    reads(); const post = vi.spyOn(api, "POST"); renderPage();
+    const panel = await openEvent();
+    const accept = await within(panel).findByRole("button", { name: "人工接受此版本" });
+    accept.focus(); fireEvent.click(accept);
+    const sheet = await screen.findByRole("dialog", { name: "人工接受股息事件版本" });
+    expect(within(sheet).getByRole("form", { name: "重新驗證" })).toBeVisible();
+    expect(within(sheet).getByRole("form", { name: "人工接受股息事件版本" })).toHaveTextContent(event.current_revision_id);
+    expect(within(sheet).getByRole("button", { name: "關閉編輯" })).toHaveFocus();
+    expect(within(sheet).queryByRole("checkbox", { name: /明確處理所示拒絕/ })).not.toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("offers acceptance with the exact observed rejection pin and separate confirmation", async () => {
+    reads({ "/api/v1/dividends/events/{event_id}/rejection": state(true) }); renderPage();
+    const panel = await openEvent();
+    fireEvent.click(await within(panel).findByRole("button", { name: "人工接受此版本" }));
+    const sheet = await screen.findByRole("dialog", { name: "人工接受股息事件版本" });
+    expect(within(sheet).getByRole("form", { name: "人工接受股息事件版本" })).toHaveTextContent(rejection.id);
+    expect(within(sheet).getByRole("checkbox", { name: /明確處理所示拒絕/ })).not.toBeChecked();
+  });
+
+  it.each([
+    { ...event, adjustment_basis: "UNKNOWN" }, { ...event, adjustment_basis: "SPLIT_ADJUSTED" },
+    { ...event, workflow_status: "WITHDRAWN" }, { ...event, dps: "1e2" }, { ...event, currency: "CNY" },
+  ])("does not offer acceptance for withdrawn, unresolved or malformed event terms", async broken => {
+    reads({ "/api/v1/dividends/events": { items: [broken], next_cursor: null } }); renderPage();
+    const panel = await openEvent();
+    expect(await within(panel).findByText(/不能開始人工接受/)).toBeVisible();
+    expect(within(panel).queryByRole("button", { name: "人工接受此版本" })).not.toBeInTheDocument();
+  });
+
   it("opens revision only from a fresh matching rejection read and freezes its observed pin", async () => {
     reads({ "/api/v1/dividends/events/{event_id}/rejection": state(true) });
     const patch = vi.spyOn(api, "PATCH");
@@ -202,6 +234,7 @@ describe("dividend event workspace", () => {
     expect(within(panel).getByRole("status")).toHaveTextContent("正在載入拒絕狀態");
     expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "拒絕此事件版本" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "人工接受此版本" })).not.toBeInTheDocument();
   });
 
   it("does not use a cached clear state while reopening triggers a fresh rejection read", async () => {
@@ -224,6 +257,7 @@ describe("dividend event workspace", () => {
     await waitFor(() => expect(attempts).toBe(2));
     expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "拒絕此事件版本" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "人工接受此版本" })).not.toBeInTheDocument();
     await act(async () => deliver());
     expect(await within(panel).findByText(/此版本已記錄拒絕/)).toBeVisible();
     expect(within(panel).getByRole("button", { name: "修訂人工股息事件" })).toBeVisible();
@@ -241,6 +275,7 @@ describe("dividend event workspace", () => {
       expect(await within(panel).findByText(/連線已暫停/)).toBeVisible();
       expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
       expect(within(panel).queryByRole("button", { name: "拒絕此事件版本" })).not.toBeInTheDocument();
+      expect(within(panel).queryByRole("button", { name: "人工接受此版本" })).not.toBeInTheDocument();
     } finally {
       await act(async () => onlineManager.setOnline(true));
     }
@@ -255,6 +290,7 @@ describe("dividend event workspace", () => {
     expect(within(panel).queryByText("Synthetic rejection reason")).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "拒絕此事件版本" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "人工接受此版本" })).not.toBeInTheDocument();
   });
 
   it("fails closed for a rejection state with inconsistent physical identity", async () => {
@@ -286,6 +322,7 @@ describe("dividend event workspace", () => {
     expect(await within(panel).findByRole("alert")).toHaveTextContent("版本已達上限");
     expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "拒絕此事件版本" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "人工接受此版本" })).not.toBeInTheDocument();
   });
 
   it("refuses a rejection response with an altered scope even when physical pins match", async () => {
@@ -295,6 +332,7 @@ describe("dividend event workspace", () => {
     expect(await within(panel).findByRole("alert")).toHaveTextContent("狀態無法核對");
     expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "拒絕此事件版本" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "人工接受此版本" })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -311,6 +349,7 @@ describe("dividend event workspace", () => {
     expect(within(panel).queryByText(/此版本已記錄拒絕|此版本未記錄拒絕/)).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "拒絕此事件版本" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "人工接受此版本" })).not.toBeInTheDocument();
   });
 
   it("does not turn a failed rejection read into an absence and allows retry", async () => {
@@ -393,6 +432,7 @@ describe("dividend event workspace", () => {
     expect(within(panel).getByText(/只表示該次讀取/)).toBeVisible();
     expect(within(panel).queryByRole("button", { name: "修訂人工股息事件" })).not.toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "拒絕此事件版本" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "人工接受此版本" })).not.toBeInTheDocument();
   });
 
   it("sends explicit date/status filters and server cursor without changing the browser URL", async () => {

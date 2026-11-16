@@ -10,13 +10,12 @@ import { date, optional, price, samePrice } from "../ledger/inputs";
 import { SecurityName } from "../ledger/ReferenceName";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { useFormAction } from "../settings/data";
-import { decisionCitation, decisionReason, decisionUrl, validTarget, type RevisionTarget } from "./event-validation";
+import { decisionCitation, decisionReason, decisionUrl, eventTypes, matchesDecisionReference, validTarget, type RevisionTarget } from "./event-validation";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
 type Input = Schemas["ManualEventCreate"];
 type FormProps = { onSaved: (record: Event) => void; onCancel: () => void; disabled?: boolean; onPendingChange?: (pending: boolean) => void };
-const eventTypes = ["UNKNOWN", "REGULAR", "SPECIAL", "INTERIM", "FINAL", "SUPPLEMENTAL", "ETF_DISTRIBUTION", "REIT_DISTRIBUTION"] as const;
 const typeLabels: Record<typeof eventTypes[number], string> = { UNKNOWN: "未知，不推定一般股息", REGULAR: "一般股息", SPECIAL: "特別股息", INTERIM: "中期股息", FINAL: "末期股息", SUPPLEMENTAL: "補充股息", ETF_DISTRIBUTION: "ETF 分派", REIT_DISTRIBUTION: "REIT 分派" };
 const schema = z.object({
   security_id: z.uuid("請選擇人工事件證券。"), event_type: z.enum(eventTypes), ex_date: date,
@@ -38,10 +37,6 @@ function decisionSchema(target?: RevisionTarget) {
 
 function checkedDecision(record: Event, body: Input, target?: RevisionTarget): Event {
   if (!record || typeof record !== "object") throw new Error("伺服器回覆與本次人工事件不符；請保留輸入並核對歷史，不會假定未儲存。");
-  const reference = record.reference;
-  const source = body.source_url ?? null;
-  const sourceUrl = source ? new URL(source) : null;
-  const withheld = !!(sourceUrl?.search || sourceUrl?.hash);
   const identity = target ? record.id === target.event.id && record.version === target.event.version + 1 && record.current_revision_id !== target.event.current_revision_id : record.version === 1;
   const valid = z.uuid().safeParse(record.id).success && z.uuid().safeParse(record.current_revision_id).success
     && identity && record.security_id === body.security_id && record.event_type === body.event_type
@@ -51,8 +46,7 @@ function checkedDecision(record: Event, body: Input, target?: RevisionTarget): E
     && record.workflow_status === (body.adjustment_basis === "AS_DECLARED" ? "PROVISIONAL" : "INCOMPLETE")
     && record.decision_kind === "MANUAL" && !record.manual_locked && !record.manual_override
     && record.candidate_revision_id === null && record.independent_origin_groups === null && record.assessment === null && Array.isArray(record.evidence) && record.evidence.length === 0
-    && record.reason === body.reason && reference?.citation === body.citation
-    && reference.url_withheld === withheld && reference.url === (withheld ? null : source)
+    && record.reason === body.reason && matchesDecisionReference(record.reference, body.citation, body.source_url ?? null)
     && record.scope === "OWNER_EVENT_DECISION_ONLY" && record.current_use_scope === "REVALIDATION_REQUIRED"
     && record.document_verification === "NOT_ESTABLISHED" && record.eligibility_scope === "NOT_ESTABLISHED";
   if (!valid) throw new Error("伺服器回覆與本次人工事件不符；請保留輸入並核對歷史，不會假定未儲存。");
