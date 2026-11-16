@@ -1158,11 +1158,43 @@ do not advance their own input `data_revision` or enqueue a new rebuild, which w
 instantly stale the snapshot; a future authenticated client must invalidate its own
 query caches and independently revalidate current facts before economic use.
 
-This is an internal primitive, not a session/Origin/CSRF/reauthenticated API, a complete
-projection-usage fence, receipt reconciliation or a dividend UI. Do not invoke it on
-deployment data. Existing receipts and locked FX are preserved; creating a snapshot
-also retains the existing event-revision publication fence until authenticated atomic
-rebuilding and receipt reconciliation are installed.
+This is an internal primitive, not a session/Origin/CSRF/reauthenticated API, receipt
+reconciliation or a dividend UI. The separate current-recorded-input fence below does
+not grant income or authenticate a caller. Do not invoke these primitives on deployment
+data. Existing receipts and locked FX are preserved; creating a snapshot also retains
+the event-revision publication fence until authenticated atomic rebuilding and receipt
+reconciliation are installed.
+
+## Internal current-recorded-projection fence
+
+`dividend_projection_current.require_current` revalidates one supplied projection ID
+and exact projection number for one owned event/account and explicitly supplied `as_of`
+day in an existing active-owner `BEGIN IMMEDIATE` transaction. It reads the complete
+retained projection history and requires the supplied projection to be the latest
+physical version; a different as-of day or stale head is not silently substituted.
+Legacy projections without both versioned tax and fee provenance remain unavailable for
+this check rather than inheriting guessed settings.
+
+The fence rechecks current event/candidate/basis and rejection scope, account/portfolio/
+broker identities and versions, portfolio data revision, both full effective-day setting
+chains and the original observed heads. It replays relevant recorded trades, transfers
+and actions, checks the retained evidence and invalidation chronology, and recomputes the
+projection state and components against the stored snapshot. This catches changed
+shares or later source/review evidence even if `data_revision` alone appears unchanged.
+Fee-to-event and HKD valuation FX remain independent retained assertions; the fence
+does not refresh them or verify a market rate. A concurrent writer cannot commit an
+input change while the fence holds its writer transaction. A caller that changes any
+relevant input within that transaction must repeat the check before using the result.
+
+The operation makes no writes. The returned record still has
+`history_completeness=UNVERIFIED` and `scope=UNVERIFIED_PROJECTION_HISTORY_ONLY`.
+This is not proof that the original writer was authenticated, that the owner actually
+held all shares, that a cited source or tax/fee estimate is true, or that a receipt
+may be posted. It reconstructs current calculation inputs from the retained snapshot;
+it does not recover or authenticate the original writer's private request intent.
+Callers must separately enforce session/Origin/CSRF/reauthentication, ex-date recognition,
+receipt reconciliation and all other economic checks. No protected projection API or
+receipt workflow is installed by this internal fence.
 
 ## Internal retained-projection history reader
 
@@ -1927,6 +1959,12 @@ unverified states, independent foreign-fee and valuation FX, audit chronology,
 concurrent heads, rollback, historical replay and retained receipt/cash/FX. These
 isolated synthetic tests do not establish session authentication, verified ownership,
 actual broker charges, current-use authority, live FX or receipt reconciliation.
+
+`uv run pytest tests/test_dividend_projection_current*.py` checks exact projection
+heads and as-of days, current source/setting/account/ledger revalidation, later source
+audits without a portfolio revision change, independently missing FX, stale and legacy
+snapshots, same-transaction changes and a concurrent fee writer. It does not establish
+session authorization, complete ownership, live market FX or a receipt grant.
 
 `uv run pytest tests/test_dividend_projection_history.py` checks complete retained
 chains, canonical fingerprints, private fixed errors, exact component arithmetic,

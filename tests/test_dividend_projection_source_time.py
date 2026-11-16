@@ -25,9 +25,9 @@ from tests.test_provider_persistence import save as capture_source
 pytestmark = pytest.mark.anyio
 
 
-async def test_projection_cannot_predate_a_later_verified_historical_candidate_audit(
+async def prepared_source(
     engine: Engine, book: dict[str, Any]
-) -> None:
+) -> tuple[dict[str, Any], candidates.CandidateDecision, datetime]:
     receipt = capture_source(engine, book, await fetched(book))
     owner = UUID(book["owner"]["id"])
     source_id = UUID(receipt.observation_ids[0])
@@ -89,12 +89,6 @@ async def test_projection_cannot_predate_a_later_verified_historical_candidate_a
             "FROM accounts a JOIN brokers b ON b.id=a.broker_id WHERE a.id=?",
             (account["id"],),
         ).one()
-    earlier += timedelta(microseconds=1)
-    newer = candidate.model_copy(update={"id": uuid4(), "revision_no": 2})
-    with unit_of_work(engine, write=True) as con:
-        candidates.save(
-            con, owner, newer, at=datetime(2026, 11, 10, 13, tzinfo=UTC), request_id=uuid4()
-        )
     scope = {
         "owner": owner,
         "event": manual,
@@ -104,6 +98,24 @@ async def test_projection_cannot_predate_a_later_verified_historical_candidate_a
         "account_version": account_row.account_version,
         "broker_version": account_row.broker_version,
     }
+    return scope, candidate, earlier + timedelta(microseconds=1)
+
+
+def add_candidate_revision(
+    engine: Engine, owner: UUID, candidate: candidates.CandidateDecision
+) -> None:
+    newer = candidate.model_copy(update={"id": uuid4(), "revision_no": 2})
+    with unit_of_work(engine, write=True) as con:
+        candidates.save(
+            con, owner, newer, at=datetime(2026, 11, 10, 13, tzinfo=UTC), request_id=uuid4()
+        )
+
+
+async def test_projection_cannot_predate_a_later_verified_historical_candidate_audit(
+    engine: Engine, book: dict[str, Any]
+) -> None:
+    scope, candidate, earlier = await prepared_source(engine, book)
+    add_candidate_revision(engine, scope["owner"], candidate)
     value = intent(engine, scope)
     before = database_snapshot(engine)
     with (
