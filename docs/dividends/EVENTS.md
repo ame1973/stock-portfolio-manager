@@ -776,13 +776,37 @@ reads do not become current-use approvals. Existing receipts and projections rem
 retained and require explicit later reconciliation, not silent deletion.
 
 This migration is **storage and a conservative database fence only**. There is no
-protected rejection writer, owner-scoped rejection reader, rejection-aware
-current-use check, portfolio invalidation or supported resolution workflow yet.
-Do not insert rejection rows manually: the resulting publication fence cannot be
-cleared through the application. Before enabling the workflow, authenticate and
-audit the request, recheck the event and rejection state in the same writer, bind
-explicit resolution to the observed rejection, preserve historical idempotency
-replays, and implement any required atomic projection/receipt reconciliation.
+protected rejection writer or HTTP reader, production-integrated rejection check,
+portfolio invalidation or supported resolution workflow yet. Do not insert rejection
+rows manually: the resulting publication fence cannot be cleared through the
+application. Before enabling the workflow, authenticate and audit the request,
+recheck the event and rejection state in the same writer, bind explicit resolution
+to the observed rejection, preserve historical idempotency replays, and implement any
+required atomic projection/receipt reconciliation.
+
+## Internal rejection-history reader and fence
+
+`dividend_rejection_service.history` reads the supplied owner's event and its current
+rejection scope in one database snapshot. It validates the entire audited event chain,
+exact physical revision, canonical timestamps and the rejection's unique correlated
+audit. Its fingerprint binds the event and rejection identities, explicit decision,
+creation time, reason hash and a hash of the unredacted citation and URL. For an
+explicit manual override, its predecessor fingerprint also retains the override label.
+An empty owned history means no rejection is recorded, not that the dividend is
+verified or eligible. A missing or foreign event returns `None`; malformed or
+inconsistent history fails closed with a fixed error. The reader performs no writes,
+provider calls or session authentication.
+
+`require_clear` runs only in an active-owner writer transaction and rechecks the exact
+observed event revision and rejection history. It rejects a recorded rejection rather
+than interpreting it as zero or withdrawal. This check covers rejection state **only**:
+it does not revalidate a dismissed candidate, basis/actions, ownership completeness,
+eligibility, fees, tax or FX, and it is not a financial grant. Callers must perform all
+other current-source and authorization checks separately and repeat this fence after
+any relevant same-transaction change. A historical WAL read cannot be promoted into
+a current writer. The present schema prevents a successor after rejection; supporting
+resolved historical rejections requires a deliberate schema and reader update.
+No production economic writer or HTTP endpoint consumes this internal fence yet.
 
 ## Internal retained-projection history reader
 
@@ -1467,6 +1491,11 @@ HTTP routes, session/CSRF/reauthentication, exact INT64 strings, current and his
 selection, competing writes, zero-write replay, corruption and atomic rollback. It
 also checks that existing receipts and locked FX remain unchanged. These synthetic
 tests do not confirm tax or establish eligibility.
+
+`uv run pytest tests/test_dividend_rejection_service.py` checks complete current
+rejection-scope audits, private references, override provenance, stale physical pins,
+WAL snapshot isolation and fail-closed corruption. Its internal fence is not session
+authentication, a current-source check or an economic grant.
 
 `uv run pytest tests/test_dividend_rejection_migration.py` checks an isolated upgrade,
 private backup, retained receipts and locked FX, rejection scope and audit shapes,
