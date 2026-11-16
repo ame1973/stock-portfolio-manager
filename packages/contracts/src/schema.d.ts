@@ -555,6 +555,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/rejection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current Rejection */
+        get: operations["get_dividend_rejection_state"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dividends/events/{event_id}/rejections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rejection History */
+        get: operations["list_dividend_rejections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/revisions": {
         parameters: {
             query?: never;
@@ -3613,6 +3647,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[RejectionHistoryItem] */
+        Page_RejectionHistoryItem_: {
+            /** Items */
+            items: components["schemas"]["RejectionHistoryItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[SecurityTransfer] */
         Page_SecurityTransfer_: {
             /** Items */
@@ -4106,6 +4147,115 @@ export interface components {
             started_at: string;
             state: components["schemas"]["FetchState"];
             window: components["schemas"]["FetchWindow"];
+        };
+        /** RejectionDecision */
+        RejectionDecision: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Decision
+             * @constant
+             */
+            decision: "REJECT_REVISION";
+            /**
+             * Document Verification
+             * @constant
+             */
+            document_verification: "NOT_ESTABLISHED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason: string;
+            reference: components["schemas"]["EventReference"];
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "OWNER_REVISION_REJECTION_ONLY";
+        };
+        /** RejectionHistoryItem */
+        RejectionHistoryItem: {
+            decision: components["schemas"]["RejectionDecision"];
+            resolution: components["schemas"]["RejectionResolution"] | null;
+        };
+        /** RejectionResolution */
+        RejectionResolution: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Successor Revision Id
+             * Format: uuid
+             */
+            successor_revision_id: string;
+            /** Successor Revision No */
+            successor_revision_no: number;
+        };
+        /** RejectionState */
+        RejectionState: {
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Document Verification
+             * @constant
+             */
+            document_verification: "NOT_ESTABLISHED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            rejection: components["schemas"]["RejectionDecision"] | null;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "OWNER_REJECTION_STATE_ONLY";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "NOT_REJECTED" | "REJECTED";
         };
         /** Security */
         Security: {
@@ -10197,6 +10347,144 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_dividend_rejection_state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RejectionState"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_dividend_rejections: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_RejectionHistoryItem_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

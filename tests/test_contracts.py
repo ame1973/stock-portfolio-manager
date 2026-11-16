@@ -70,6 +70,14 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "get",
         ): "list_dividend_event_revisions",
         (
+            "/api/v1/dividends/events/{event_id}/rejection",
+            "get",
+        ): "get_dividend_rejection_state",
+        (
+            "/api/v1/dividends/events/{event_id}/rejections",
+            "get",
+        ): "list_dividend_rejections",
+        (
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings",
             "get",
         ): "get_dividend_tax_estimate",

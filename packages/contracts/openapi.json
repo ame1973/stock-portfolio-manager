@@ -5793,6 +5793,34 @@
         "title": "Page[ProviderSymbol]",
         "type": "object"
       },
+      "Page_RejectionHistoryItem_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RejectionHistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[RejectionHistoryItem]",
+        "type": "object"
+      },
       "Page_SecurityTransfer_": {
         "additionalProperties": false,
         "properties": {
@@ -7119,6 +7147,206 @@
           "source_url"
         ],
         "title": "RecordedSourcePage",
+        "type": "object"
+      },
+      "RejectionDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "const": "REJECT_REVISION",
+            "title": "Decision",
+            "type": "string"
+          },
+          "document_verification": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Document Verification",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "pattern": "^[^\\x00]+$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/EventReference"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "OWNER_REVISION_REJECTION_ONLY",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "revision_id",
+          "revision_no",
+          "decision",
+          "reference",
+          "reason",
+          "created_at",
+          "scope",
+          "document_verification",
+          "eligibility_scope"
+        ],
+        "title": "RejectionDecision",
+        "type": "object"
+      },
+      "RejectionHistoryItem": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/RejectionDecision"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RejectionResolution"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "decision",
+          "resolution"
+        ],
+        "title": "RejectionHistoryItem",
+        "type": "object"
+      },
+      "RejectionResolution": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "successor_revision_id": {
+            "format": "uuid",
+            "title": "Successor Revision Id",
+            "type": "string"
+          },
+          "successor_revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Successor Revision No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "successor_revision_id",
+          "successor_revision_no"
+        ],
+        "title": "RejectionResolution",
+        "type": "object"
+      },
+      "RejectionState": {
+        "additionalProperties": false,
+        "properties": {
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "document_verification": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Document Verification",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "rejection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RejectionDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "OWNER_REJECTION_STATE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "NOT_REJECTED",
+              "REJECTED"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "revision_id",
+          "revision_no",
+          "state",
+          "rejection",
+          "scope",
+          "current_use_scope",
+          "document_verification",
+          "eligibility_scope"
+        ],
+        "title": "RejectionState",
         "type": "object"
       },
       "Security": {
@@ -17824,6 +18052,222 @@
         "summary": "Revise From Candidate",
         "tags": [
           "Dividend event decisions"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/rejection": {
+      "get": {
+        "operationId": "get_dividend_rejection_state",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RejectionState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Current Rejection",
+        "tags": [
+          "Dividend rejection decisions"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/rejections": {
+      "get": {
+        "operationId": "list_dividend_rejections",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_RejectionHistoryItem_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Rejection History",
+        "tags": [
+          "Dividend rejection decisions"
         ]
       }
     },

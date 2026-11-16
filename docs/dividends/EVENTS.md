@@ -778,7 +778,7 @@ projection reads do not become current-use approvals. Existing receipts and proj
 remain retained and require explicit later reconciliation, not silent deletion.
 
 The SQL guards do not authenticate a request or verify canonical audit content. There
-is still no protected rejection or resolution API or production economic writer. Do
+is still no protected rejection-decision API or production economic writer. Do
 not insert rejection rows or invoke internal writers on deployment data: where financial
 history exists, a resolution remains fenced until atomic projection/receipt
 reconciliation is implemented.
@@ -866,15 +866,41 @@ An absent pin for a rejected current revision returns 409; a mismatched pin retu
 idempotent intent when supplied; absent and explicit null preserve the earlier
 request fingerprint, so old completed requests remain replayable without writes.
 The event ETag changes only when the successor is published, not when a rejection
-is recorded. No protected rejection-read or decision API is installed yet; do not
-insert rejections into deployment data to obtain a pin.
+is recorded. The separate protected rejection reads described below expose retained
+pins; a protected rejection-decision endpoint is not installed. Do not insert
+rejections into deployment data to obtain a pin.
 
 Both the application and SQL publication fences still prevent a successor whenever any
 prior revision has an entitlement or the event has projection history. They never detach,
 rewrite or reverse earlier receipts, cash or locked FX. The internal primitive does not
 authenticate an HTTP session, confirm ownership, validate eligibility or post income;
-protected rejection read/write endpoints and atomic projection/receipt reconciliation
+a protected rejection-decision endpoint and atomic projection/receipt reconciliation
 remain unfinished.
+
+## Protected rejection-state and history reads
+
+An authenticated owner can read `GET /api/v1/dividends/events/{event_id}/rejection`
+for the current physical event revision and its separate `NOT_REJECTED` or `REJECTED`
+state. A rejected response includes its immutable decision ID, cited reference and
+reason. `NOT_REJECTED` means only that this revision has no retained rejection; it
+is not proof of verified documents, complete holdings, eligibility or current economic
+use. The response explicitly labels those boundaries. It does not replace the writer's
+same-transaction source, eligibility or rejection checks.
+
+`GET /api/v1/dividends/events/{event_id}/rejections` returns bounded, descending
+revision-keyset pages of retained decisions. A resolved item identifies its audited
+immediate successor and resolution; an unresolved current decision has no resolution.
+Search covers only rejection IDs and revision numbers, not private citations or reasons.
+Both reads validate the complete retained event, rejection and resolution history in one
+SQLite snapshot, including records outside a requested page. Missing or foreign events
+return 404 and inconsistent histories fail closed with 503. URL query strings and
+fragments are withheld from responses; private decisions use `Cache-Control: no-store`
+and have no event ETag. Recording a rejection leaves the ordinary event response and its
+strong ETag unchanged. The reads do not change dividend facts or contact providers;
+ordinary session activity may refresh the session's last-seen time.
+
+These resources expose retained decisions, not a way to create them. Protected rejection
+writes, atomic projection/receipt reconciliation and the dividend UI remain unfinished.
 
 ## Internal retained-projection history reader
 
@@ -1580,7 +1606,10 @@ checks explicit pins, repeated rejection/resolution chains, historical zero-writ
 replays, late or corrupted audits, SQL and application fences, private migration backups,
 retained financial facts and caught-failure rollback. The existing event endpoints refuse
 an unpinned rejected revision while retaining the original event ETag. These tests do
-not provide a protected rejection-read/decision API or establish economic eligibility.
+not provide a protected rejection-decision API or establish economic eligibility.
+`uv run pytest tests/test_dividend_rejection_read_api.py` checks owner-scoped current
+state, resolved and unresolved history, private URLs, bounded pages, complete-history
+failure, one-snapshot concurrent reads and unchanged financial facts.
 `uv run pytest tests/test_dividend_resolution_pins_api.py tests/test_dividend_resolution_pins_financial_api.py tests/test_dividend_candidate_resolution_api.py tests/test_dividend_candidate_resolution_safety_api.py`
 checks the protected event operations' explicit pins, compatibility with old request
 fingerprints, historical replays, current-candidate checks, concurrent requests and
