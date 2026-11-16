@@ -777,7 +777,7 @@ retained and require explicit later reconciliation, not silent deletion.
 
 This migration is **storage and a conservative database fence only**. There is no
 protected rejection writer or HTTP reader, production-integrated rejection check,
-portfolio invalidation or supported resolution workflow yet. Do not insert rejection
+production rejection invalidation or supported resolution workflow yet. Do not insert rejection
 rows manually: the resulting publication fence cannot be cleared through the
 application. Before enabling the workflow, authenticate and audit the request,
 recheck the event and rejection state in the same writer, bind explicit resolution
@@ -807,6 +807,32 @@ any relevant same-transaction change. A historical WAL read cannot be promoted i
 a current writer. The present schema prevents a successor after rejection; supporting
 resolved historical rejections requires a deliberate schema and reader update.
 No production economic writer or HTTP endpoint consumes this internal fence yet.
+
+## Internal rejection-decision writer
+
+`dividend_rejection_writer.save` accepts an explicitly supplied rejection identity,
+owner, event and observed physical revision, cited reference, reason and request ID in
+an active-owner writer transaction. It verifies the complete retained event and
+rejection history, exact physical pins and source-audit chronology; a reused identity,
+conflicting retained decision, orphan audit or inconsistent history fails closed. An
+explicit rejection may refer to the retained event even after a candidate is dismissed;
+this does not restore that candidate or assert its source is current.
+
+The writer appends the rejection and its canonical source/reference audit and
+invalidates affected portfolios from the event's ex-date in one savepoint. A caught
+body failure rolls back the whole rejection operation; an uncertain savepoint outcome
+aborts the enclosing transaction. Existing entitlements, projections, receipts, cash,
+locked FX and prior decisions are not rewritten. An exact internal retry with the same
+rejection identity, request and unredacted intent returns the audited historical result
+without another write, even if the candidate is later dismissed. A changed intent or
+another decision for the same revision does not silently replace the original.
+
+This internal writer does **not** authenticate a session, perform CSRF or password
+checks, establish complete holdings, verify cited documents, cancel income or resolve a
+rejection. It is not wired to an HTTP endpoint. Do not invoke it on deployment data:
+the present schema fences the revision and has no supported resolution workflow.
+Protected write/replay semantics, explicit resolution and any necessary atomic
+projection/receipt reconciliation remain required before user-facing rejection.
 
 ## Internal retained-projection history reader
 
@@ -1496,6 +1522,11 @@ tests do not confirm tax or establish eligibility.
 rejection-scope audits, private references, override provenance, stale physical pins,
 WAL snapshot isolation and fail-closed corruption. Its internal fence is not session
 authentication, a current-source check or an economic grant.
+
+`uv run pytest tests/test_dividend_rejection_writer.py` checks exact intent/replay,
+retained receipts, projections and FX, owner-scoped invalidation, override origin,
+competing writes and savepoint failure rollback. These synthetic internal writes are
+not authenticated decisions or permission to use the writer on deployment data.
 
 `uv run pytest tests/test_dividend_rejection_migration.py` checks an isolated upgrade,
 private backup, retained receipts and locked FX, rejection scope and audit shapes,

@@ -1,5 +1,6 @@
 """Read owned rejection history without authenticating or granting financial use."""
 
+from collections.abc import Mapping
 from datetime import UTC
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -82,20 +83,20 @@ def _storage(record: RejectionRecord) -> dict[str, Any]:
     }
 
 
-def _payload(record: RejectionRecord) -> dict[str, object]:
+def _payload(values: Mapping[str, Any]) -> dict[str, object]:
     return {
-        "rejection_id": str(record.id),
-        "decision": record.decision,
-        "owner_id": str(record.owner_id),
-        "event_id": str(record.event_id),
-        "revision_id": str(record.revision_id),
-        "revision_no": record.revision_no,
+        "rejection_id": values["id"],
+        "decision": "REJECT_REVISION",
+        "owner_id": values["owner_id"],
+        "event_id": values["event_id"],
+        "revision_id": values["revision_id"],
+        "revision_no": values["revision_no"],
         "reference_sha256": digest(
-            canonical({"citation": record.citation, "source_url": record.source_url})
+            canonical({"citation": values["citation"], "source_url": values["source_url"]})
         ),
-        "reason_sha256": digest(canonical(record.reason)),
-        "created_at": stamp(record.created_at.astimezone(UTC)),
-        "scope": record.scope,
+        "reason_sha256": digest(canonical(values["reason"])),
+        "created_at": values["created_at"],
+        "scope": "OWNER_REVISION_REJECTION_ONLY",
     }
 
 
@@ -177,7 +178,7 @@ def history(con: Connection, owner: UUID, event_id: UUID) -> tuple[RejectionReco
             or entry["reason"] != record.reason
             or events._time(entry["created_at"]) < record.created_at
             or entry["before_sha256"] != digest(canonical(_source_values(reviewed)))
-            or entry["after_sha256"] != digest(canonical(_payload(record)))
+            or entry["after_sha256"] != digest(canonical(_payload(_storage(record))))
         ):
             raise ValueError("Inconsistent rejection history")
         return (record,)
