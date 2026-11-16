@@ -154,6 +154,54 @@ describe("dividend event workspace", () => {
     expect(responses).toBe(2);
   });
 
+  it("opens candidate association only for a fresh unlocked event and matching rejection state", async () => {
+    const unlocked = { ...event, workflow_status: "PROVISIONAL", manual_locked: false };
+    reads({ "/api/v1/dividends/events": { items: [unlocked], next_cursor: null }, "/api/v1/dividends/candidates": empty,
+      "/api/v1/dividends/events/{event_id}/rejection": state(true) });
+    const post = vi.spyOn(api, "POST"); renderPage();
+    const panel = await openEvent();
+    const match = await within(panel).findByRole("button", { name: "關聯候選至此事件" });
+    match.focus(); fireEvent.click(match);
+    const sheet = await screen.findByRole("dialog", { name: "關聯候選至現有事件" });
+    expect(within(sheet).getByRole("form", { name: "重新驗證" })).toBeVisible();
+    expect(sheet).toHaveTextContent(event.current_revision_id); expect(sheet).toHaveTextContent(rejection.id);
+    expect(within(sheet).getByRole("button", { name: "關閉編輯" })).toHaveFocus(); expect(post).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { ...event, manual_locked: true }, { ...event, manual_locked: false, workflow_status: "WITHDRAWN" },
+    { ...event, manual_locked: false, dps: "1e2" },
+  ])("does not offer candidate association to a locked, withdrawn or malformed event", async broken => {
+    reads({ "/api/v1/dividends/events": { items: [broken], next_cursor: null } }); renderPage();
+    const panel = await openEvent(); await within(panel).findByText(/此版本未記錄拒絕/);
+    expect(within(panel).queryByRole("button", { name: "關聯候選至此事件" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer candidate association for a mismatched rejection read", async () => {
+    const unlocked = { ...event, workflow_status: "PROVISIONAL", manual_locked: false };
+    reads({ "/api/v1/dividends/events": { items: [unlocked], next_cursor: null },
+      "/api/v1/dividends/events/{event_id}/rejection": { ...state(), revision_no: event.version + 1 } });
+    renderPage(); const panel = await openEvent();
+    expect(await within(panel).findByRole("alert")).toHaveTextContent("版本不一致");
+    expect(within(panel).queryByRole("button", { name: "關聯候選至此事件" })).not.toBeInTheDocument();
+  });
+
+  it("does not allow candidate association from a stale event-list read", async () => {
+    const unlocked = { ...event, workflow_status: "PROVISIONAL", manual_locked: false };
+    const get = reads(); let attempts = 0;
+    get.mockImplementation(async path => {
+      if (path === "/api/v1/dividends/events") return ++attempts === 1 ? reply({ items: [unlocked], next_cursor: null })
+        : { error: { code: "DIVIDEND_EVENT_HISTORY_UNAVAILABLE", message: "private synthetic" }, response: new Response(null, { status: 503 }) };
+      if (path === "/api/v1/dividends/events/{event_id}/rejection") return reply(state());
+      if (path === "/api/v1/securities/{id}") return reply({ id: event.security_id, display_ticker: "SYN", exchange_code: "NASDAQ" });
+      return reply(empty);
+    });
+    renderPage(); const panel = await openEvent();
+    const match = await within(panel).findByRole("button", { name: "關聯候選至此事件" }); expect(match).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新載入股息事件" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("股息事件歷史無法安全核對"); expect(match).toBeDisabled();
+  });
+
   it("offers a password-confirmed rejection only after a fresh clear state", async () => {
     reads(); const post = vi.spyOn(api, "POST");
     renderPage();

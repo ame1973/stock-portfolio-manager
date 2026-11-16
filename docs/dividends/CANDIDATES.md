@@ -288,6 +288,48 @@ zero-write historical replay after dismissal, an already-associated candidate's
 tables start and remain empty; no worker, network provider, deployment data or
 screenshot is used.
 
+## Associate a candidate with an existing event
+
+In `/dividends`, an unlocked, non-withdrawn event with valid terms and a separately
+loaded matching rejection state offers an explicit candidate-association sheet.
+A failed, paused or refreshing event-list read prevents starting this action. The
+sheet freezes the event ID, physical revision, version and any observed rejection;
+it then loads bounded pages of `OPEN` candidates for the same security. A candidate
+is never selected automatically. Each choice shows its exact terms and physical
+identity, with expandable source UUID/hash/basis/reason and historical comparison.
+The response-only `NOT_ADOPTED` label is not a linkage lookup. Incomplete candidates
+and inconsistent source/comparison graphs cannot be selected. A failed, paused or
+refreshing candidate read disables selection. Event, rejection and candidate are
+separate reads, not one snapshot; the server rechecks all relevant scopes on write.
+
+After a choice, the sheet freezes the selected candidate and shows old and new
+terms. The owner supplies a reason and independently confirms the association, the
+no-grant boundary and, if applicable, explicit resolution of the displayed rejection.
+The request pins the event revision and `If-Match` version, candidate stable and
+physical IDs and version, and the observed rejection ID or null. It uses the
+protected recent-password, CSRF and idempotency workflow. The returned event must
+match the same stable event, a new physical revision, the exact candidate terms,
+source comparison and no-grant labels. The new revision uses candidate source
+associations instead of copying the old event citation; the earlier citation remains
+in history. Locked or withdrawn events cannot be replaced this way. A later rejection,
+candidate change or existing entitlement/projection history can block the decision;
+input remains available and financial history is not rewritten.
+
+An unconfirmed response keeps the original body and key in memory for an unchanged
+retry. A successful replay can be historical even after later candidate or event
+revisions; read the event and independent rejection again for current state. No
+password, association input or key is placed in browser storage or mutation caches.
+This records an owner decision, not document verification, proof of ownership,
+confirmed income or a receipt.
+
+`npm run test:e2e:candidate-event-match` uses an isolated synthetic application,
+manually cited source and real Chromium to exercise explicit source review,
+reauthentication, physical event/candidate/rejection pins, held/lost response and
+historical zero-write replay after later revisions. It also checks a competing
+rejection 409, a competing candidate revision 412, input retention, busy-close,
+responsive widths and synthetic financial/reference-FX tables that start and remain
+empty. No network provider, worker, deployment data or screenshot is used.
+
 ## Checks and remaining work
 
 `uv run pytest tests/test_dividend_candidates.py tests/test_dividend_evidence.py`
@@ -314,6 +356,6 @@ let the owner create a distinct event or explicitly associate the current candid
 with one selected existing event. Both candidate identity and physical revision are
 pinned and revalidated; the review response's `NOT_ADOPTED` label is still not a
 linkage query. Adoption records an owner decision, not verified market history,
-eligible shares, confirmed income or a receipt. Browser association with an existing
-event, a guided observation/basis picker, atomic entitlement rebuilding, verification
-and the actual receipt workflow remain unfinished.
+eligible shares, confirmed income or a receipt. A guided observation/basis picker,
+atomic entitlement rebuilding, verification and the actual receipt workflow remain
+unfinished.

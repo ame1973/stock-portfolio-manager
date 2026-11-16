@@ -1,5 +1,4 @@
 import { useContext, useId, useRef, useState } from "react";
-import { replaceEqualDeep } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router";
@@ -8,10 +7,9 @@ import { api, type components } from "@spm/contracts";
 import { Field, FormFrame } from "../../components/forms/fields";
 import { checked, mutationHeaders } from "../../lib/api";
 import { EditorCloseContext } from "../../lib/editor-lifecycle";
-import { samePrice } from "../ledger/inputs";
 import { SecurityName } from "../ledger/ReferenceName";
 import { useFormAction } from "../settings/data";
-import { candidateReason, validCandidateForEvent } from "./candidate-validation";
+import { candidateReason, checkedCandidateEvent, validCandidateForEvent } from "./candidate-validation";
 import { basisLabels, eventTypeLabels } from "./event-labels";
 
 type Schemas = components["schemas"];
@@ -21,24 +19,6 @@ type Props = { target: Candidate; onSaved: (record: Event) => void; onCancel: ()
 const schema = z.object({ reason: candidateReason,
   confirm_distinct: z.boolean().refine(Boolean, "請確認建立獨立事件。"),
   acknowledged: z.boolean().refine(Boolean, "請確認這不是文件驗證或財務資格。") });
-
-function checkedDecision(record: Event, target: Candidate, reason: string): Event {
-  const terms = target.terms;
-  const evidence = target.assessment.checks.map(check => ({ observation_id: check.observation_id, fields: check.supporting_fields }));
-  const valid = validCandidateForEvent(target) && record && typeof record === "object" && z.uuid().safeParse(record.id).success
-    && z.uuid().safeParse(record.current_revision_id).success && record.version === 1 && record.security_id === terms.security_id
-    && record.event_type === terms.event_type && record.ex_date === terms.ex_date && record.announce_date === (terms.announce_date ?? null)
-    && record.record_date === (terms.record_date ?? null) && record.pay_date === (terms.pay_date ?? null)
-    && terms.dps != null && samePrice(record.dps, terms.dps) && record.currency === terms.currency && record.adjustment_basis === terms.adjustment_basis
-    && record.workflow_status === target.assessment.status && record.decision_kind === "CANDIDATE" && record.candidate_revision_id === target.revision_id
-    && record.manual_locked === false && record.manual_override === false && record.reference === null && record.reason === reason
-    && record.independent_origin_groups === target.assessment.independent_origins.length
-    && replaceEqualDeep(target.assessment, record.assessment) === target.assessment && replaceEqualDeep(evidence, record.evidence) === evidence
-    && record.scope === "OWNER_EVENT_DECISION_ONLY" && record.current_use_scope === "REVALIDATION_REQUIRED"
-    && record.document_verification === "NOT_ESTABLISHED" && record.eligibility_scope === "NOT_ESTABLISHED";
-  if (!valid) throw new Error("伺服器回覆與固定候選不符；請保留輸入並核對事件歷史，不會假定未儲存。");
-  return record;
-}
 
 export function CandidateEventCreateForm({ target: observed, onSaved, onCancel, disabled = false, onPendingChange }: Props) {
   const [target] = useState(() => structuredClone(observed));
@@ -65,7 +45,7 @@ export function CandidateEventCreateForm({ target: observed, onSaved, onCancel, 
           if (!validCandidateForEvent(target)) throw new Error("固定候選無法核對；請關閉並重新載入。");
           const header = await mutationHeaders(key);
           const result = checked(await api.POST("/api/v1/dividends/events/from-candidate", { params: { header }, body }));
-          return checkedDecision(result, target, values.reason);
+          return checkedCandidateEvent(result, target, values.reason);
         });
       })(event).finally(() => onPendingChange?.(false));
     }}>

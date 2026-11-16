@@ -77,3 +77,7 @@ export function validCitedTarget(target: RevisionTarget): boolean {
 export function validAcceptanceTarget(target: RevisionTarget): boolean {
   return validCitedTarget(target) && target.event.adjustment_basis === "AS_DECLARED";
 }
+
+export function validCandidateEventTarget(target: RevisionTarget): boolean {
+  return validCitedTarget(target) && !target.event.manual_locked;
+}
