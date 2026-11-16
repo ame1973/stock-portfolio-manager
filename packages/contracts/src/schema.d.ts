@@ -503,6 +503,41 @@ export interface paths {
         patch: operations["revise_dividend_event"];
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current Estimate */
+        get: operations["get_dividend_fee_estimate"];
+        put?: never;
+        /** Save Estimate */
+        post: operations["save_dividend_fee_estimate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estimate History */
+        get: operations["list_dividend_fee_estimate_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
         parameters: {
             query?: never;
@@ -3144,6 +3179,191 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** FeeSettingRecord */
+        FeeSettingRecord: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Account Version */
+            account_version: string;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Fee */
+            fee: string | null;
+            /** Fee Currency */
+            fee_currency: ("HKD" | "USD") | null;
+            /**
+             * Fee Status
+             * @enum {string}
+             */
+            fee_status: "ESTIMATED" | "UNKNOWN";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Previous Id */
+            previous_id: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "OWNER_ESTIMATE_ONLY";
+            /** Setting No */
+            setting_no: string;
+        };
+        /** FeeSettingSelection */
+        FeeSettingSelection: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Account Version */
+            account_version: string;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Effective On
+             * Format: date
+             */
+            effective_on: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Fee Status
+             * @enum {string}
+             */
+            fee_status: "MISSING" | "UNKNOWN" | "ESTIMATED";
+            /** Head Id */
+            head_id: string | null;
+            /** Head No */
+            head_no: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Revision Rejection
+             * @enum {string}
+             */
+            revision_rejection: "NOT_REJECTED" | "REJECTED";
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "OWNER_ESTIMATE_ONLY";
+            selected: components["schemas"]["FeeSettingRecord"] | null;
+            /**
+             * Selected Scope
+             * @enum {string}
+             */
+            selected_scope: "NO_SELECTED_SETTING" | "ACCOUNT_SCOPE_MATCH" | "ACCOUNT_SCOPE_CHANGED";
+        };
+        /** FeeSettingWrite */
+        FeeSettingWrite: {
+            /** Account Version */
+            account_version: string;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Expected Head Id */
+            expected_head_id: string | null;
+            /** Expected Head No */
+            expected_head_no: string;
+            /** Fee */
+            fee: string | null;
+            /** Fee Currency */
+            fee_currency: ("HKD" | "USD") | null;
+            /**
+             * Fee Status
+             * @enum {string}
+             */
+            fee_status: "ESTIMATED" | "UNKNOWN";
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+        };
         /**
          * FetchState
          * @enum {string}
@@ -3602,6 +3822,13 @@ export interface components {
         Page_Expense_: {
             /** Items */
             items: components["schemas"]["Expense"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[FeeSettingRecord] */
+        Page_FeeSettingRecord_: {
+            /** Items */
+            items: components["schemas"]["FeeSettingRecord"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -9959,6 +10186,280 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DividendEventRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_dividend_fee_estimate: {
+        parameters: {
+            query: {
+                effective_on: string;
+            };
+            header?: never;
+            path: {
+                event_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeSettingSelection"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    save_dividend_fee_estimate: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                event_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeSettingWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeSettingRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_dividend_fee_estimate_history: {
+        parameters: {
+            query: {
+                revision_id: string;
+                revision_no: number;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                event_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FeeSettingRecord_"];
                 };
             };
             /** @description Unauthorized */

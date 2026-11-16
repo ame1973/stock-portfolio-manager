@@ -956,8 +956,8 @@ account/broker scope, an unrejected revision, a contiguous setting chain, valid 
 amount/currency and a correlated audit shape; updates, deletes and replacement writes are
 blocked. Database constraints and shaped hashes do not authenticate a caller, verify an
 audit's canonical contents, select an effective setting, prove actual broker charges or
-grant eligibility. Do not insert fee rows directly into deployment data: a protected
-writer and projection provenance are not installed yet.
+grant eligibility. Do not insert fee rows directly into deployment data; use the
+protected owner API below. Projection fee provenance is not installed yet.
 Before any economic projection, independently revalidate the exact event, source,
 rejection state, recorded eligibility, selected effective-day fee and observed history
 head, account/broker versions and any explicit fee-FX provenance. Later backdated
@@ -1000,9 +1000,10 @@ zero. Rejected and subsequently resolved revisions can still be read historicall
 but the read does not clear a rejection or make an old fee usable. The account or
 broker may have changed since a setting; retained ownership and version bounds do not
 prove their historical association, authenticate the caller or verify a broker charge.
-No HTTP route, FX calculation, eligibility or economic grant is installed.
-Current use requires revalidation of all relevant pins and the rejection/source state
-in the same writer transaction. No provider access or database mutation occurs.
+The reader itself does not authenticate, calculate FX, establish eligibility or grant
+income. Current use requires revalidation of all relevant pins and the rejection/source
+state in the same writer transaction. The reader makes no provider access or database
+mutation.
 
 ## Internal fee-estimate controller
 
@@ -1025,8 +1026,54 @@ head and caller-observed portfolio/broker identities and versions, including whe
 setting is selected. A selected assertion must still match the current account scope.
 The result remains `UNVERIFIED_FEE_SELECTION_ONLY`; in particular, `MISSING` or
 `UNKNOWN` is not zero. Callers must separately authenticate, establish eligibility and
-verify all other tax, fee-FX, valuation and projection requirements. There is no protected
-fee endpoint, confirmed charge, economic projection or receipt writer.
+verify all other tax, fee-FX, valuation and projection requirements. There is no confirmed
+charge, economic projection or receipt writer.
+
+## Protected fee-estimate API
+
+For an authenticated owner and an explicit calendar day, `GET
+/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings?effective_on=YYYY-MM-DD`
+returns the current physical event revision, exact-string account/broker versions,
+fee-history head number and ID, selected estimate and its account-scope label. An
+unselected chain reports `MISSING`, not zero. The independent `revision_rejection` is
+`REJECTED` or `NOT_REJECTED`; neither state proves document authenticity, current source
+validity, eligibility or a charge. An earlier setting may be shown as
+`ACCOUNT_SCOPE_CHANGED` after the account or broker changes. Every selection and setting
+is labeled `OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`.
+
+`GET .../fee-settings/history?revision_id={uuid}&revision_no={n}` returns bounded
+keyset-paginated historical settings for the exact physical revision. Search matches
+only setting ID or number, not private reasons. History remains readable after a later
+rejection or successor, but validates the complete retained event/rejection/fee chain
+in one snapshot. Missing or foreign scopes return 404; inconsistent history returns a
+fixed 503. Reads are private and `Cache-Control: no-store`. Ordinary authentication may
+refresh an idle session's `last_seen_at`; the fee read itself does not write financial
+facts or contact a provider.
+
+`POST .../fee-settings` requires the owner session, an allowed Origin, CSRF token,
+Idempotency-Key, recent reauthentication and `If-Match` containing the observed event
+version. Its JSON body includes the physical `revision_id`, `portfolio_id`, `broker_id`,
+canonical decimal-string `account_version`, `broker_version`, `expected_head_no` and
+explicit `expected_head_id` (`null` only for head `"0"`), plus `effective_from`,
+`fee_status`, `fee`, `fee_currency` and a reason. For example, an explicitly unknown
+amount with a known currency uses `"fee_status":"UNKNOWN"`, `"fee":null` and
+`"fee_currency":"USD"`; an `ESTIMATED` amount is a nonnegative decimal string with
+at most six fractional places and a required HKD/USD currency. An explicit `"0"` is an
+estimate, not missing or unknown. Unsupported currencies and invalid precision are
+rejected, not converted or rounded. INT64 versions and head numbers stay strings on the
+wire so JavaScript does not lose digits.
+
+The write rechecks session/CSRF/reauthentication, event version and physical revision,
+source, rejection, account/broker versions and exact fee head inside the writer. The
+fee assertion, canonical setting audit, separate HTTP-intent audit, invalidation and
+idempotency response commit together. The HTTP audit binds the route, idempotency-key
+digest, original normalized intent and physical setting identity; replay verifies the
+complete history and binding before returning the original response without new writes.
+A replay after a rejection or event successor is only a historical receipt, not renewed
+current authority. Changed inputs on a reused key conflict; stale event/head pins return
+412, source/rejection/account conflicts return 409, invalid inputs return 422, and
+corrupt history fails closed with 503. Neither the write nor its replay verifies broker
+charges or creates a dividend entitlement, projection, receipt, cash movement or FX rate.
 
 ## Internal retained-projection history reader
 
@@ -1714,6 +1761,12 @@ authentication or proof of an actual broker charge.
 checks exact current pins even for missing fees, source/rejection changes, backdated
 settings, audit and savepoint rollback, concurrent decisions, historical replay and
 preservation of synthetic receipts and locked FX. It is not an authenticated HTTP test.
+`uv run pytest tests/test_dividend_fee_api.py tests/test_dividend_fee_api_safety.py tests/test_dividend_fee_candidate_api.py`
+checks private authenticated reads, exact-string pins, CSRF/reauthentication, source
+and rejection fences, HTTP-intent binding, replay, rollback and synthetic retained
+receipt/FX preservation. `uv run pytest tests/test_dividend_fee_race_api.py` checks a
+concurrent protected rejection and fee write. None verifies a live broker charge or
+economic eligibility.
 
 `uv run pytest tests/test_dividend_tax_migration.py tests/test_dividend_tax_service.py`
 checks immutable setting storage, audited history, explicit effective-day/head

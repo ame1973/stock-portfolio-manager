@@ -78,6 +78,18 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "get",
         ): "list_dividend_rejections",
         (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings",
+            "get",
+        ): "get_dividend_fee_estimate",
+        (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings",
+            "post",
+        ): "save_dividend_fee_estimate",
+        (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings/history",
+            "get",
+        ): "list_dividend_fee_estimate_history",
+        (
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings",
             "get",
         ): "get_dividend_tax_estimate",
