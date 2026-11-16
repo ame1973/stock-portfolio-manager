@@ -37,7 +37,7 @@ async function readEvent(page: Page, eventId: string) {
   return { data: await response.json() as Event, etag: response.headers().etag };
 }
 
-test("isolated event UI separates retained decisions from rejection and financial use", async ({ page }) => {
+test("isolated event UI separates retained decisions, rejection and protected creation", async ({ page }) => {
   stage("SETUP");
   const password = `synthetic-dividend-browser-${randomUUID()}`;
   await page.goto("/");
@@ -123,8 +123,86 @@ test("isolated event UI separates retained decisions from rejection and financia
   await expect(page.getByRole("heading", { name: "交易紀錄", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "核對企業行動" }).click();
   await expect(page.getByRole("heading", { name: "企業行動", exact: true })).toBeVisible();
-  stage("FINAL");
+  stage("COMPARE");
   expect(database()).toEqual(snapshot);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
   expect(await page.evaluate(() => caches.keys())).toEqual([]);
+
+  stage("OPEN");
+  await page.getByRole("navigation", { name: "手機主要導覽" }).getByRole("link", { name: "股息事件" }).click();
+  const createButton = page.getByRole("button", { name: "新增人工股息事件", exact: true });
+  await createButton.focus(); await page.keyboard.press("Enter");
+  const sheet = page.getByRole("dialog", { name: "新增人工股息事件" });
+  await expect(sheet.getByRole("button", { name: "關閉編輯" })).toBeFocused();
+  const passwordForm = sheet.getByRole("form", { name: "重新驗證" });
+  await passwordForm.getByLabel("目前密碼").fill(password);
+  await passwordForm.getByRole("button", { name: "確認目前密碼" }).click();
+  await expect(passwordForm).toContainText("已重新驗證");
+  await expect(passwordForm.getByLabel("目前密碼")).toHaveValue("");
+  const form = sheet.getByRole("form", { name: "新增人工股息事件" });
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = (await sheet.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    for (const label of ["事件除淨日", "事件每股金額", "事件決定依據"]) {
+      const input = (await form.getByLabel(label).boundingBox())!;
+      expect(input.height).toBeGreaterThanOrEqual(44); expect(input.height).toBeLessThanOrEqual(56);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 360, height: 900 });
+  await form.getByLabel("人工事件證券", { exact: true }).selectOption(security.id);
+  await form.getByLabel("事件類型").selectOption("INTERIM");
+  await form.getByLabel("事件除淨日").fill("2026-11-04");
+  await form.getByLabel("事件每股金額").fill("0000.00000001");
+  await form.getByLabel("事件股息幣別").selectOption("HKD");
+  await form.getByLabel("事件金額口徑").selectOption("AS_DECLARED");
+  await form.getByLabel("事件引用參考").fill("\u0085Synthetic manual event reference\u0085");
+  await form.getByLabel("事件引用網址（選填）").fill("https://example.test/manual?private=synthetic-secret#part");
+  await form.getByLabel("事件決定依據").fill("\u0085Synthetic manual event and unchanged retry evidence.\u0085");
+  await form.getByRole("checkbox", { name: /我明白這只記錄人工決定/ }).check();
+  stage("COMMIT_HELD");
+  let release!: () => void; let committed!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const saved = new Promise<void>(resolve => { committed = resolve; });
+  let firstBody = ""; let firstKey = ""; let replayBody = ""; let replayKey = ""; let attempts = 0;
+  await page.route("**/api/v1/dividends/events", async route => {
+    if (route.request().method() !== "POST") { await route.continue(); return; }
+    attempts++;
+    const body = route.request().postData()!; const key = route.request().headers()["idempotency-key"]!;
+    const response = await route.fetch(); expect(response.status()).toBe(201);
+    if (attempts === 1) { firstBody = body; firstKey = key; committed(); await held; await route.abort("failed"); }
+    else { replayBody = body; replayKey = key; await route.fulfill({ response }); }
+  });
+  try {
+    await form.getByRole("button", { name: "儲存人工事件" }).click(); await saved;
+    const afterWrite = database();
+    expect(afterWrite.dividend_events).toHaveLength(2);
+    for (const table of ["dividend_receipts", "dividend_entitlements", "dividend_projection_versions", "cash_ledger_entries", "trades", "upstream_attempts", "jobs"]) expect(afterWrite[table]).toEqual(snapshot[table]);
+    await page.keyboard.press("Escape"); await sheet.getByRole("button", { name: "關閉編輯" }).click();
+    await expect(sheet).toBeVisible();
+    await expect(form.getByLabel("事件每股金額")).toHaveValue("0000.00000001");
+    await expect(form.getByRole("button", { name: "取消" })).toBeDisabled();
+  } finally { release(); }
+  stage("LOST");
+  await expect(form.getByRole("alert")).toContainText("網絡連線中斷");
+  await passwordForm.getByLabel("目前密碼").fill(password);
+  await passwordForm.getByRole("button", { name: "確認目前密碼" }).click();
+  await expect(passwordForm).toContainText("已重新驗證");
+  const beforeReplay = database();
+  stage("REPLAY");
+  await form.getByRole("button", { name: "儲存人工事件" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(createButton).toBeFocused();
+  await page.unroute("**/api/v1/dividends/events");
+  expect(attempts).toBe(2); expect(replayKey).toBe(firstKey); expect(replayBody).toBe(firstBody);
+  expect(JSON.parse(firstBody)).toEqual({ security_id: security.id, event_type: "INTERIM", ex_date: "2026-11-04", announce_date: null, record_date: null, pay_date: null,
+    dps: "0000.00000001", currency: "HKD", adjustment_basis: "AS_DECLARED", citation: "Synthetic manual event reference",
+    source_url: "https://example.test/manual?private=synthetic-secret#part", reason: "Synthetic manual event and unchanged retry evidence." });
+  expect(database()).toEqual(beforeReplay);
+  await expect(page.getByRole("status").filter({ hasText: "可能是原鍵回覆" })).toBeVisible();
+  await expect(page.getByText("HKD 0.00000001", { exact: false })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  expect(await page.evaluate(() => caches.keys())).toEqual([]);
+  stage("FINAL");
 });

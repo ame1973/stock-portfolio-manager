@@ -61,10 +61,15 @@ async function fillSync() {
 }
 
 describe("source references enforce an inert HTTP(S)-only boundary", () => {
-  it.each(["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "file:///private/document.pdf", "ftp://example.test/evidence", "//example.test/evidence", "not an absolute URL", "https://user:synthetic-password@example.test/evidence", `https://example.test/${"a".repeat(2049)}`])("does not render an actionable unsafe reference: %s", url => {
+  it.each(["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "file:///private/document.pdf", "ftp://example.test/evidence", "//example.test/evidence", "not an absolute URL", "https://user:synthetic-password@example.test/evidence", `https://example.test/${"a".repeat(2049)}`, `https://example.test/${"a".repeat(1500)}${"𠮷".repeat(600)}`, `https://example.test/${"𠮷".repeat(2049)}`])("does not render an actionable unsafe reference: %s", url => {
     renderUI(<SourceLink url={url} label="來源文件" />);
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText(/連結未通過安全檢查/)).toBeVisible();
+  });
+  it("retains a Unicode URL within the server's code-point limit", () => {
+    const url = `https://example.test/${"𠮷".repeat(1100)}`;
+    renderUI(<SourceLink url={url} label="來源文件" />);
+    expect(screen.getByRole("link")).toHaveAttribute("href", new URL(url).href);
   });
   it.each(["https://example.test/evidence.pdf", "http://example.test/evidence.pdf"])("retains a safe explicit reference without fetching it: %s", url => {
     const get = vi.spyOn(api, "GET");

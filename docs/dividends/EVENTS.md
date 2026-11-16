@@ -80,7 +80,7 @@ basis/action scope. The protected DTOs described below authenticate the caller a
 withhold private URL details. The internal reader performs no writes, provider
 requests, credential-file access, entitlement calculation or receipt posting.
 
-## Read-only event workspace
+## Event workspace
 
 The signed-in `/dividends` page lists owned event decisions by ex-date using the
 protected, server-paginated event API. Owners can filter by security, recorded event
@@ -100,15 +100,42 @@ resolution links are shown as retained decisions, not verified documents. Privat
 citation URLs with a query or fragment are withheld, and opening an allowed external
 link is an explicit user action.
 
-This screen is read-only. `VERIFIED` is displayed as an owner acceptance, not document
-verification; a missing event or an unrejected decision does not establish ownership,
-eligibility, an accrued amount or a receipt. It does not calculate income, mutate
-financial facts, contact providers, or relax the event-revision fence. Event decision
-forms, tax/fee controls, protected projections and receipt reconciliation remain
-separate unfinished work. `npm run build && npm run test:e2e:dividend-events` runs the
-real API and built SPA with synthetic events in an exclusive temporary root; it checks
-responsive/keyboard behavior, no-store responses, a rejection without an ETag change,
-private URL withholding and an unchanged complete database after the read-only views.
+`VERIFIED` is displayed as an owner acceptance, not document verification; a missing
+event or an unrejected decision does not establish ownership, eligibility, an accrued
+amount or a receipt. List and history reads do not calculate income, mutate financial
+facts, contact providers, or relax the event-revision fence. Event revisions, tax/fee
+controls, protected projections and receipt reconciliation remain separate unfinished
+work.
+
+### Manual event creation in the browser
+
+The event workspace offers a separate manual creation sheet with password
+reauthentication; the server requires a recent password authentication. The
+owner explicitly selects the stable security, ex-date, DPS and dividend currency; the
+form never derives the dividend currency from a security quote or account. A blank
+amount cannot become zero, while explicitly entered zero remains zero. Other dates
+and the URL may remain unknown; event type and adjustment basis begin as `UNKNOWN`.
+The owner supplies a citation, a decision reason and a separate acknowledgment that
+this is not verified documentation, ownership or income. A new creation is a distinct
+stable event, even when another event has the same security and ex-date.
+
+Inputs remain in the open form rather than persistent storage or mutation caches. A
+lost or invalid response retains the same body and idempotency key for an unchanged
+retry, including after password reauthentication; a changed submitted intent gets a
+new key. Closing the form discards that local retry context, so the owner must inspect
+history before another creation. The response is checked against the submitted scope,
+exact scaled DPS, status, citation, redaction and explicit no-grant labels. A matching
+response may be a historical replay, not proof that it is the latest event state. The
+sheet blocks closing while a password or decision request is pending and refreshes
+server reads after closing or saving. Revision/rejection decisions and financial
+reconciliation are not performed by this creation form.
+
+`npm run build && npm run test:e2e:dividend-events` runs the real API and built SPA
+with synthetic events in an exclusive temporary root. It checks responsive/keyboard
+behavior, no-store responses, a rejection without an ETag change, private URL
+withholding and an unchanged complete database after the read-only views. It also
+reauthenticates, holds and drops a committed manual-creation response, checks the busy
+close guard, and retries the unchanged body/key with no additional database writes.
 
 ## Protected event-decision read API
 

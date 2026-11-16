@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { date, fx, money, price, quantity, ratio, sameMoney, signedMoney } from "./inputs";
+import { date, fx, money, price, quantity, ratio, sameMoney, samePrice, signedMoney } from "./inputs";
 
 describe("exact string-only financial input", () => {
   it.each(["1\n", "1\r\n"])("rejects line endings without throwing or trimming: %j", value => {
@@ -25,6 +25,14 @@ describe("exact string-only financial input", () => {
     expect(sameMoney("9007199254.740992", "9007199254.740993")).toBe(false);
     expect(sameMoney("1e3", "1000")).toBe(false);
     expect(sameMoney("1.0000001", "1")).toBe(false);
+  });
+
+  it("compares eight-place prices exactly without converting them to Number", () => {
+    expect(samePrice("0001.23", "1.23000000")).toBe(true);
+    expect(samePrice("92233720368.54775807", "92233720368.54775806")).toBe(false);
+    expect(samePrice("0", "0.00000000")).toBe(true);
+    expect(samePrice("1e0", "1")).toBe(false);
+    expect(samePrice("92233720368.54775808", "92233720368.54775808")).toBe(false);
   });
 
   it.each([0.1, 1, true, null, "", "NaN", "Infinity", "1e3", " 1", "1 ", "1,000", "+1", ".1", "1.", "0.0000001", "-1", "9223372036854.775808", "0".repeat(81)])("rejects money %s without rounding or coercion", value => {

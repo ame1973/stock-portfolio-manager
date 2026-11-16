@@ -53,7 +53,23 @@ async function openEvent() {
   return await screen.findByRole("region", { name: "獨立拒絕狀態" });
 }
 
-describe("read-only dividend event workspace", () => {
+describe("dividend event workspace", () => {
+  it("opens a distinct password-confirmed creation sheet without writing on open or cancel", async () => {
+    reads(); const post = vi.spyOn(api, "POST");
+    renderPage();
+    const opener = screen.getByRole("button", { name: "新增人工股息事件" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = await screen.findByRole("dialog", { name: "新增人工股息事件" });
+    expect(within(dialog).getByRole("form", { name: "重新驗證" })).toBeVisible();
+    expect(within(dialog).getByRole("form", { name: "新增人工股息事件" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "關閉編輯" })).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole("button", { name: "關閉編輯" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("shows a safe empty state without treating missing events as zero income", async () => {
     const get = reads({ "/api/v1/dividends/events": empty });
     const post = vi.spyOn(api, "POST");

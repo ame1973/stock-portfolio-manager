@@ -1,18 +1,21 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, type components } from "@spm/contracts";
 import { Field, SelectField } from "../../components/forms/fields";
 import { FilterChips } from "../../components/forms/filter-chips";
 import { Button } from "../../components/ui/button";
+import { EditorSheet } from "../../components/ui/editor-sheet";
 import { checked } from "../../lib/api";
 import { useDesktop } from "../../lib/use-desktop";
 import { useViewState } from "../../lib/view-state";
 import { SecurityName } from "../ledger/ReferenceName";
 import { RecordList } from "../settings/RecordList";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
+import { PasswordForm } from "../settings/SecuritySettingsPage";
 import { usePageState } from "../settings/data";
 import { SourceLink, SourceReadState, SourceValues } from "../sources/details";
+import { ManualEventCreateForm } from "./ManualEventCreateForm";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
@@ -150,8 +153,20 @@ function EventCard({ record }: { record: Event }) {
   </article>;
 }
 
+function EventCreateEditor({ onCancel, onSaved }: { onCancel: () => void; onSaved: (record: Event) => void }) {
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [decisionBusy, setDecisionBusy] = useState(false);
+  return <EditorSheet title="新增人工股息事件" onClose={onCancel}>
+    <div className="mb-6"><PasswordForm disabled={decisionBusy} onPendingChange={setPasswordBusy} /></div>
+    <ManualEventCreateForm onCancel={onCancel} onSaved={onSaved} disabled={passwordBusy} onPendingChange={setDecisionBusy} />
+  </EditorSheet>;
+}
+
 const initialFilters = { security_id: "", workflow_status: "" as "" | Event["workflow_status"], from_date: "", to_date: "" };
 export function DividendEventsPage() {
+  const cache = useQueryClient();
+  const [creating, setCreating] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
   const page = usePageState("dividends:events");
   const [filters, setFilters] = useViewState("filters:dividends:events", initialFilters);
   const result = useQuery({ queryKey: ["dividends", "events", filters, page.q, page.cursor], staleTime: 0,
@@ -161,9 +176,12 @@ export function DividendEventsPage() {
     } }, signal })),
   });
   function filter(change: Partial<typeof initialFilters>) { setFilters(previous => ({ ...previous, ...change })); page.search(page.q); }
-  return <div className="grid min-w-0 gap-6"><header className="max-w-3xl"><h1 className="text-2xl font-semibold">股息事件</h1>
+  return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 className="text-2xl font-semibold">股息事件</h1>
     <p className="mt-2 text-sm leading-7 text-secondary">查看已記錄的事件決定、來源與歷史；人工接受不是文件驗證或持倉資格，這裡不計算應收或實收。未知不會補零。</p>
-    <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></header>
+    <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div>
+    <Button data-editor-create disabled={creating} onClick={() => { setCreatedId(null); setCreating(true); }}>新增人工股息事件</Button></header>
+    {createdId && <p role="status" className="panel break-all text-sm leading-7">伺服器已確認事件決定 {createdId}；可能是原鍵回覆，請重新載入核對目前版本。這不是文件驗證、持倉資格或實收。</p>}
+    {creating && <EventCreateEditor onCancel={() => { setCreating(false); void cache.invalidateQueries({ queryKey: ["dividends"] }); }} onSaved={record => { setCreating(false); setCreatedId(record.id); void cache.invalidateQueries({ queryKey: ["dividends"] }); }} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選股息事件</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><ReferenceSelect kind="securities" activeOnly={false} label="事件證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
         <SelectField label="事件狀態" value={filters.workflow_status} onChange={event => filter({ workflow_status: event.target.value as typeof filters.workflow_status })}><option value="">全部事件狀態</option>{(Object.keys(statuses) as Event["workflow_status"][]).map(status => <option key={status} value={status}>{statuses[status]}</option>)}</SelectField>

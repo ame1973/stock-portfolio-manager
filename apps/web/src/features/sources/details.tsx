@@ -19,7 +19,7 @@ export function SourceValues({ values }: { values: [string, ReactNode][] }) {
 }
 export function SourceLink({ url, label }: { url: string | null; label: string }) {
   let parsed: URL | null = null;
-  try { if (url && url.length <= 2048) parsed = new URL(url); } catch { parsed = null; }
+  try { if (url && url.length <= 4096 && Array.from(url).length <= 2048) parsed = new URL(url); } catch { parsed = null; }
   const href = parsed && (parsed.protocol === "https:" || parsed.protocol === "http:") && !parsed.username && !parsed.password ? parsed.href : null;
   return href ? <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 max-w-full items-center break-all text-primary underline">{label}（另開視窗，應用程式未抓取）</a> : <span>{url ? "來源連結未通過安全檢查，不會開啟或抓取" : "未提供，不會猜測或抓取"}</span>;
 }

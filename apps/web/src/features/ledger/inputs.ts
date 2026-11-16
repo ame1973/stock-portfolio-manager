@@ -31,6 +31,9 @@ export const ratio = z.string().max(19, "比例必須符合正數 INT64 範圍�
   .refine(value => /^[0-9]{1,19}$/.test(value) && BigInt(value) >= 1n && BigInt(value) <= MAX, "比例必須介乎 1 與 9223372036854775807。");
 export const quantity = decimal(8, 1n);
 export const price = decimal(8, 0n);
+export function samePrice(left: string, right: string) {
+  return price.safeParse(left).success && price.safeParse(right).success && scaled(left, 8) === scaled(right, 8);
+}
 export const fx = decimal(12, 1n);
 export const optional = <T extends z.ZodType<string>>(schema: T) => z.union([schema, z.literal("")]);
 export const evidenceUrl = z.string().max(2048).refine(value => {
