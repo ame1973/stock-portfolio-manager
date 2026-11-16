@@ -1000,9 +1000,33 @@ zero. Rejected and subsequently resolved revisions can still be read historicall
 but the read does not clear a rejection or make an old fee usable. The account or
 broker may have changed since a setting; retained ownership and version bounds do not
 prove their historical association, authenticate the caller or verify a broker charge.
-No HTTP route, writer, FX calculation, eligibility or economic grant is installed.
+No HTTP route, FX calculation, eligibility or economic grant is installed.
 Current use requires revalidation of all relevant pins and the rejection/source state
 in the same writer transaction. No provider access or database mutation occurs.
+
+## Internal fee-estimate controller
+
+`dividend_fee_writer.save` accepts an explicit owner assertion and its observed physical
+revision, account, portfolio, broker, account/broker versions and exact fee-history
+head number and ID. In a serialized writer it validates the complete retained history,
+current event source and rejection state before appending the setting, correlated audit
+and affected portfolio invalidation in one safe savepoint. An estimated amount requires
+an explicit supported currency; unknown has no amount and may retain a known currency.
+A new setting cannot predate the preceding setting or its correlated audit. A caught
+failure rolls back the whole decision; uncertain savepoint failures abort the outer
+writer. No HTTP or provider configuration is accessed inside the transaction.
+
+An identical internal request and intent may replay its original historical setting
+without writing, even after a later rejection, successor or account change. Such replay
+is not a grant to use the setting now. Changed requests, reused identities, orphan audits,
+stale heads and corrupt histories fail closed. `require_current` independently rechecks
+the current event source, rejection state, complete fee chain, explicit effective day,
+head and caller-observed portfolio/broker identities and versions, including when no
+setting is selected. A selected assertion must still match the current account scope.
+The result remains `UNVERIFIED_FEE_SELECTION_ONLY`; in particular, `MISSING` or
+`UNKNOWN` is not zero. Callers must separately authenticate, establish eligibility and
+verify all other tax, fee-FX, valuation and projection requirements. There is no protected
+fee endpoint, confirmed charge, economic projection or receipt writer.
 
 ## Internal retained-projection history reader
 
@@ -1686,6 +1710,10 @@ boundaries and private representations without asserting database authority.
 rejection and fee history, snapshot isolation, explicit unknowns and zero,
 account changes, malformed audits and retained rows. Its synthetic history is not
 authentication or proof of an actual broker charge.
+`uv run pytest tests/test_dividend_fee_writer.py tests/test_dividend_fee_writer_safety.py`
+checks exact current pins even for missing fees, source/rejection changes, backdated
+settings, audit and savepoint rollback, concurrent decisions, historical replay and
+preservation of synthetic receipts and locked FX. It is not an authenticated HTTP test.
 
 `uv run pytest tests/test_dividend_tax_migration.py tests/test_dividend_tax_service.py`
 checks immutable setting storage, audited history, explicit effective-day/head
