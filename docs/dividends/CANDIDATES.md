@@ -182,6 +182,37 @@ payloads, private URLs, owner/request IDs, provider credentials and raw associat
 JSON are not returned. A malformed or unaudited retained candidate fails safely
 with 503 rather than silently falling back or repairing history.
 
+## Read-only candidate workspace
+
+The authenticated `/dividends/candidates` workspace is linked from `/dividends`.
+It reads the owner's latest candidate revisions with server-side search, security
+and state filters, and bounded keyset pages. Selecting a candidate exposes its
+stable candidate ID, distinct physical revision ID, proposed terms, explicit
+source/hash associations and historical field-level comparison. A separate,
+on-demand paginated read shows retained revisions. Both the list and history
+validate the returned identities, value shapes and review-scope markers before
+rendering; a history response for a different candidate or security is refused.
+History is a separate read and may include a revision newer than the list; it is
+not a single snapshot or a current-use authorization.
+
+Unknown date, currency and DPS remain unknown; an explicit zero remains zero.
+The list is not a document-verification, ownership, income or linkage lookup.
+In particular, `NOT_ADOPTED` describes only the review response and cannot be
+used to conclude that a candidate has never been associated with an event. Reads
+are private and no-store; search and filters remain in login-session memory, not
+browser storage or the URL. This screen does not create or revise candidates,
+select sources, adopt events, calculate eligibility or write receipts.
+
+The isolated `npm run test:e2e:dividend-candidates` fixture uses a new synthetic
+application root, a synthetic manually cited source and real browser to check
+both entry and deep link, no-store reads, filters, exact maximum DPS, unknowns,
+explicit historical zero, source association/hash, physical revision history,
+keyboard use, mobile/tablet/desktop widths and an unchanged complete database
+after viewing. The fixture links the original candidate revision to an event,
+then revises the candidate and confirms that its response still carries the
+response-only `NOT_ADOPTED` marker. It does not use a deployment database,
+network provider, worker or screenshot.
+
 ## Checks and remaining work
 
 `uv run pytest tests/test_dividend_candidates.py tests/test_dividend_evidence.py`
@@ -208,5 +239,6 @@ let the owner create a distinct event or explicitly associate the current candid
 with one selected existing event. Both candidate identity and physical revision are
 pinned and revalidated; the review response's `NOT_ADOPTED` label is still not a
 linkage query. Adoption records an owner decision, not verified market history,
-eligible shares, confirmed income or a receipt. The candidate review UI, atomic
-entitlement rebuilding, verification and actual receipt workflow remain unfinished.
+eligible shares, confirmed income or a receipt. Candidate creation/revision and
+adoption in the browser, atomic entitlement rebuilding, verification and actual
+receipt workflow remain unfinished.

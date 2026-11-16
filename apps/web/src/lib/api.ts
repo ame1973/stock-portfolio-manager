@@ -63,6 +63,7 @@ const messages: Record<string, string> = {
   DIVIDEND_EVENT_WITHDRAWN: "此事件已撤回，不能直接接受；請重新載入並核對歷史。",
   DIVIDEND_EVENT_UNRESOLVED_BASIS: "事件金額口徑尚未明確記錄為宣告條款，不能人工接受；請先核對來源。",
   DIVIDEND_EVENT_SOURCE_CHANGED: "事件來源或候選依據已變更；請重新載入並核對來源，不能沿用舊決定。",
+  CANDIDATE_HISTORY_UNAVAILABLE: "候選歷史無法安全核對；請重新載入或檢查伺服器狀態及有效備份。",
   CANDIDATE_DISMISSED: "已關聯的候選資料已撤銷；請重新載入並核對來源。",
   CANDIDATE_BASIS_CHANGED: "候選資料的調整口徑已變更；請重新載入並核對來源。",
   CANDIDATE_SOURCE_CHANGED: "候選資料的來源已變更；請重新載入並核對來源。",

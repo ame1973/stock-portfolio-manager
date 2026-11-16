@@ -95,6 +95,19 @@ describe("financial workspace navigation", () => {
     expect(await screen.findByRole("heading", { name: "企業行動" })).toBeVisible();
   });
 
+  it("opens the secondary candidate workspace without adding a mobile destination", async () => {
+    await import("./features/dividends/DividendEventsPage");
+    await import("./features/dividends/DividendCandidatesPage");
+    reads(); renderApp("/dividends");
+    fireEvent.click(await screen.findByRole("link", { name: "查看股息候選資料" }));
+    expect(await screen.findByRole("heading", { name: "股息候選資料" })).toBeVisible();
+    const mobile = screen.getByRole("navigation", { name: "手機主要導覽" });
+    expect(within(mobile).getAllByRole("link")).toHaveLength(5);
+    expect(within(mobile).getByRole("link", { name: "股息事件" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("link", { name: "返回股息事件" }));
+    expect(await screen.findByRole("heading", { name: "股息事件" })).toBeVisible();
+  });
+
   it("reaches the data center from settings on mobile and isolates dividend/split memory filters", async () => {
     reads();
     renderApp("/settings/portfolios");

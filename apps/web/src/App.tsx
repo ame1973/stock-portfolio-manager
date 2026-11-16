@@ -20,6 +20,7 @@ const AccountCashPage = lazy(() => import("./features/ledger/AccountCashPage").t
 const TransferPage = lazy(() => import("./features/ledger/TransferPage").then(module => ({ default: module.TransferPage })));
 const ActionPage = lazy(() => import("./features/ledger/ActionPage").then(module => ({ default: module.ActionPage })));
 const DividendEventsPage = lazy(() => import("./features/dividends/DividendEventsPage").then(module => ({ default: module.DividendEventsPage })));
+const DividendCandidatesPage = lazy(() => import("./features/dividends/DividendCandidatesPage").then(module => ({ default: module.DividendCandidatesPage })));
 const DataCenterLayout = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.DataCenterLayout })));
 const ProvidersPage = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.ProvidersPage })));
 const CoveragePage = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.CoveragePage })));
@@ -87,6 +88,7 @@ function SignedInApp({ session }: { session: AuthSession }) {
             <Route path="/" element={<ServiceStatus />} />
             <Route path="/transactions" element={<TradesPage />} />
             <Route path="/dividends" element={<DividendEventsPage />} />
+            <Route path="/dividends/candidates" element={<DividendCandidatesPage />} />
             <Route path="/cash" element={<BookingPage key="cash" mode="cash" />} />
             <Route path="/cash/expenses" element={<BookingPage key="expense" mode="expense" />} />
             <Route path="/cash/transfers" element={<TransferPage key="cash" mode="cash" />} />

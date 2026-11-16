@@ -18,7 +18,7 @@ import { SourceLink, SourceReadState, SourceValues } from "../sources/details";
 import { AcceptEventForm, WithdrawEventForm } from "./CitedEventDecisionForm";
 import { ManualEventCreateForm, ManualEventOverrideForm, ManualEventRevisionForm } from "./ManualEventForm";
 import { RejectEventForm } from "./RejectEventForm";
-import { basisLabels as basis, eventTypeLabels as eventTypes, statuses } from "./event-labels";
+import { basisLabels as basis, eventTypeLabels as eventTypes, statuses, termLabels } from "./event-labels";
 import { validAcceptanceTarget, validCitedTarget, validRejection, validTarget, type RevisionTarget } from "./event-validation";
 
 type Schemas = components["schemas"];
@@ -28,14 +28,10 @@ type Terms = Event | Revision;
 type Rejection = Schemas["RejectionDecision"];
 type Editor = { mode: "create" } | { mode: "revise" | "accept" | "withdraw" | "override"; target: RevisionTarget } | { mode: "reject"; target: Event };
 
-const fields: Record<Schemas["EventEvidence"]["fields"][number], string> = {
-  ex_date: "除淨日", announce_date: "宣告日", record_date: "記錄日", pay_date: "付款日", event_type: "事件類型",
-  currency: "幣別", dps: "每股金額", adjustment_basis: "調整基準",
-};
 const decisions: Record<Event["decision_kind"], string> = {
   CANDIDATE: "明確關聯候選資料", MANUAL: "人工條款", VERIFY: "人工接受", WITHDRAW: "人工撤回",
 };
-const names = (items: Schemas["EventEvidence"]["fields"]) => items.length ? items.map(item => fields[item]).join("、") : "未列明";
+const names = (items: Schemas["EventEvidence"]["fields"]) => items.length ? items.map(item => termLabels[item]).join("、") : "未列明";
 
 function Citation({ reference, label }: { reference: Schemas["EventReference"] | null; label: string }) {
   if (!reference) return <p className="text-sm text-secondary">此版本沒有人工引用；不推定文件已核實。</p>;
@@ -192,7 +188,8 @@ export function DividendEventsPage() {
   function closeEditor() { setEditor(null); void cache.invalidateQueries({ queryKey: ["dividends"] }); }
   return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 className="text-2xl font-semibold">股息事件</h1>
     <p className="mt-2 text-sm leading-7 text-secondary">查看已記錄的事件決定、來源與歷史；人工接受不是文件驗證或持倉資格，這裡不計算應收或實收。未知不會補零。</p>
-    <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div>
+    <div className="flex flex-wrap gap-x-5"><Link to="/dividends/candidates" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息候選資料</Link>
+      <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div></div>
     <Button data-editor-create disabled={editing} onClick={() => { setNotice(null); setEditor({ mode: "create" }); }}>新增人工股息事件</Button></header>
     {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.mode === "reject" ? "拒絕決定" : notice.mode === "accept" ? "人工接受決定" : notice.mode === "withdraw" ? "撤回決定" : notice.mode === "override" ? "人工覆寫決定" : "事件決定"} {notice.id}；可能是原鍵回覆，請重新載入核對目前版本及拒絕狀態。這不是文件驗證、持倉資格或實收。</p>}
     {editor && <EventEditor editor={editor} onCancel={closeEditor} onSaved={record => { setNotice({ id: record.id, mode: editor.mode }); closeEditor(); }} />}
