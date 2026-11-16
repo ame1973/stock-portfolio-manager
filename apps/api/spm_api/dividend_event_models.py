@@ -41,6 +41,11 @@ class ManualEventRevision(ManualEventCreate):
     confirm_reopen: bool = Field(default=False, strict=True)
 
 
+class ManualDividendOverride(ManualEventRevision):
+    decision: Literal["MANUAL_OVERRIDE"]
+    source_url: EvidenceUrl | None = Field(default=None, alias="evidence_url", repr=False)
+
+
 class CandidateEventSelection(Model):
     candidate_id: UUID = Field(repr=False)
     candidate_revision_id: UUID = Field(repr=False)
@@ -73,6 +78,11 @@ class AcceptDividendRevision(Model):
     reason: Reason = Field(repr=False)
 
 
+VerificationDecision = Annotated[
+    AcceptDividendRevision | ManualDividendOverride, Field(discriminator="decision")
+]
+
+
 class EventReference(Model):
     citation: CitationReference = Field(repr=False)
     url: EvidenceUrl | None = Field(repr=False)
@@ -91,6 +101,7 @@ class EventFields(Model):
     adjustment_basis: AdjustmentBasis
     workflow_status: ReviewStatus
     manual_locked: bool
+    manual_override: bool = Field(default=False, strict=True)
     decision_kind: DecisionKind
     candidate_revision_id: UUID | None = Field(repr=False)
     independent_origin_groups: Annotated[int, Field(ge=0)] | None

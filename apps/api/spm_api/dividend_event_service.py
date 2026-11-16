@@ -86,6 +86,7 @@ class EventRevision(Model):
 class ReviewedEvent:
     record: EventRevision = field(repr=False)
     assessment: EvidenceAssessment | None = field(repr=False)
+    manual_override: bool = False
 
 
 def _scope(owner_id: UUID, identifier: UUID, version: int | None) -> None:
@@ -136,6 +137,48 @@ def _audit_values(record: EventRevision) -> dict[str, object]:
         "evidence": [item.model_dump(mode="json") for item in record.evidence],
         "created_at": stamp(record.created_at.astimezone(UTC)),
     }
+
+
+def _override_revision_audit_values(record: EventRevision) -> dict[str, object]:
+    return {**_audit_values(record), "manual_override": True}
+
+
+def _override_audit_values(previous: EventRevision, record: EventRevision) -> dict[str, object]:
+    return {
+        "decision": "MANUAL_OVERRIDE",
+        "event_id": str(record.event_id),
+        "observed_revision_id": str(previous.revision_id),
+        "revision_id": str(record.revision_id),
+        "revision_no": record.revision_no,
+        "revision_sha256": digest(canonical(_override_revision_audit_values(record))),
+    }
+
+
+def _manual_override(
+    con: Connection, record: EventRevision, previous: EventRevision | None
+) -> bool:
+    rows = con.execute(
+        text("""
+        SELECT owner_id,request_id,reason,before_sha256,after_sha256 FROM audit_events
+        WHERE entity_type='dividend_event_revision' AND entity_id=:id
+          AND action='DIVIDEND_EVENT_MANUAL_OVERRIDE'
+    """),
+        {"id": str(record.revision_id)},
+    ).all()
+    if not rows:
+        return False
+    if previous is None or record.decision_kind != "MANUAL":
+        raise ValueError("Invalid manual override origin")
+    expected = (
+        str(record.owner_id),
+        str(record.request_id),
+        record.reason,
+        digest(canonical(_audit_values(previous))),
+        digest(canonical(_override_audit_values(previous, record))),
+    )
+    if len(rows) != 1 or tuple(rows[0]) != expected:
+        raise ValueError("Inconsistent manual override audit")
+    return True
 
 
 def _owned_parent(con: Connection, owner_id: UUID, identifier: UUID) -> RowMapping | None:
@@ -377,7 +420,13 @@ def _lineage(con: Connection, record: EventRevision) -> EvidenceAssessment | Non
     return None
 
 
-def _audited(con: Connection, record: EventRevision, previous: EventRevision | None) -> None:
+def _audited(
+    con: Connection,
+    record: EventRevision,
+    previous: EventRevision | None,
+    *,
+    manual_override: bool,
+) -> None:
     rows = con.execute(
         text("""
         SELECT owner_id,request_id,reason,before_sha256,after_sha256 FROM audit_events
@@ -391,7 +440,13 @@ def _audited(con: Connection, record: EventRevision, previous: EventRevision | N
         str(record.request_id),
         record.reason,
         digest(canonical(_audit_values(previous))) if previous is not None else None,
-        digest(canonical(_audit_values(record))),
+        digest(
+            canonical(
+                _override_revision_audit_values(record)
+                if manual_override
+                else _audit_values(record)
+            )
+        ),
     )
     if len(rows) != 1 or tuple(rows[0]) != expected:
         raise ValueError("Inconsistent event audit")
@@ -434,10 +489,11 @@ def get(
                     and previous.manual_locked != record.manual_locked
                 ):
                     raise ValueError("Withdrawal cannot change the manual lock")
-            _audited(con, record, previous)
+            manual_override = _manual_override(con, record, previous)
+            _audited(con, record, previous, manual_override=manual_override)
             previous = record
             if number == selected:
-                result = ReviewedEvent(record, assessment)
+                result = ReviewedEvent(record, assessment, manual_override)
         return result
     except (ValueError, TypeError, KeyError, OverflowError, ApiError, PydanticSerializationError):
         raise EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE") from None

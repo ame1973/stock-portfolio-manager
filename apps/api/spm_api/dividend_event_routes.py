@@ -125,6 +125,7 @@ def _fields(review: events.ReviewedEvent) -> dict[str, Any]:
         **terms.model_dump(),
         "workflow_status": record.review_status,
         "manual_locked": record.manual_locked,
+        "manual_override": review.manual_override,
         "decision_kind": record.decision_kind,
         "candidate_revision_id": record.candidate_revision_id,
         "independent_origin_groups": (
@@ -302,6 +303,7 @@ def _write_manual(
             revision_id=uuid4(),
             revision_no=next_version,
             kind="MANUAL",
+            manual_override=isinstance(body, models.ManualDividendOverride),
             terms=terms,
             citation=body.citation,
             source_url=body.source_url,
@@ -324,6 +326,7 @@ def _write_manual(
         record = historical.record
         if (
             record.decision_kind != "MANUAL"
+            or historical.manual_override != isinstance(body, models.ManualDividendOverride)
             or record.terms != terms
             or record.citation != body.citation
             or record.source_url != body.source_url
@@ -602,15 +605,18 @@ def withdraw_event(
     operation_id="verify_dividend_event",
     responses={409: {"model": Error}, 412: {"model": Error}},
 )
-def accept_revision(
+def verify_dividend_event(
     event_id: UUID,
-    body: models.AcceptDividendRevision,
+    body: models.VerificationDecision,
     request: Request,
     response: Response,
     headers: WriteDep,
     version: DividendEventVersionDep,
 ) -> models.DividendEventRecord:
-    result = _write_cited_decision(request, headers, body, identifier=event_id, version=version)
+    if isinstance(body, models.ManualDividendOverride):
+        result = _write_manual(request, headers, body, identifier=event_id, version=version)
+    else:
+        result = _write_cited_decision(request, headers, body, identifier=event_id, version=version)
     response.headers["ETag"] = f'"{result.version}"'
     return result
 

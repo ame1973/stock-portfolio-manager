@@ -13,6 +13,7 @@ import spm_api.dividend_candidate_service as candidates
 import spm_api.dividend_event_service as events
 from spm_api.action_models import EvidenceUrl
 from spm_api.audit import audit, canonical, digest, stamp
+from spm_api.db import savepoint
 from spm_api.decimal_types import to_scaled
 from spm_api.dividend_evidence import DividendTerms, EvidenceAssessment
 from spm_api.errors import Model
@@ -29,6 +30,7 @@ class EventIntent(Model):
     revision_id: UUID
     revision_no: events.Version
     kind: events.DecisionKind
+    manual_override: bool = Field(default=False, strict=True)
     terms: DividendTerms | None = Field(default=None, repr=False)
     candidate_id: UUID | None = None
     candidate_version: events.Version | None = None
@@ -38,6 +40,8 @@ class EventIntent(Model):
 
     @model_validator(mode="after")
     def explicit_decision(self) -> Self:
+        if self.manual_override and (self.kind != "MANUAL" or self.revision_no == 1):
+            raise ValueError("A manual override requires an existing event revision")
         if self.kind == "CANDIDATE":
             if (
                 self.candidate_id is None
@@ -442,6 +446,18 @@ def save(
 ) -> events.ReviewedEvent:
     """Append an audited decision; callers still owe session/CSRF and atomic projections."""
     _writer(con, owner_id)
+    with savepoint(con):
+        return _save(con, owner_id, intent, at=at, request_id=request_id)
+
+
+def _save(
+    con: Connection,
+    owner_id: UUID,
+    intent: EventIntent,
+    *,
+    at: datetime,
+    request_id: UUID,
+) -> events.ReviewedEvent:
     try:
         if (
             not isinstance(intent, EventIntent)
@@ -466,7 +482,11 @@ def save(
         if type(existing.revision_no) is not int or not 1 <= existing.revision_no <= 2_147_483_647:
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         original = events.get(con, owner_id, intent.event_id, version=existing.revision_no)
-        if original is None or not _replay_matches(con, intent, original.record, at, request_id):
+        if (
+            original is None
+            or original.manual_override != intent.manual_override
+            or not _replay_matches(con, intent, original.record, at, request_id)
+        ):
             raise events.EventError("DIVIDEND_EVENT_REVISION_CONFLICT")
         return original
 
@@ -607,9 +627,26 @@ def save(
         "DIVIDEND_EVENT_REVISED",
         request_id=str(request_id),
         before=events._audit_values(previous) if previous is not None else None,
-        after=events._audit_values(record),
+        after=(
+            events._override_revision_audit_values(record)
+            if intent.manual_override
+            else events._audit_values(record)
+        ),
         reason=record.reason,
     )
+    if intent.manual_override:
+        assert previous is not None
+        audit(
+            con,
+            str(owner_id),
+            "dividend_event_revision",
+            str(record.revision_id),
+            "DIVIDEND_EVENT_MANUAL_OVERRIDE",
+            request_id=str(request_id),
+            before=events._audit_values(previous),
+            after=events._override_audit_values(previous, record),
+            reason=record.reason,
+        )
     result = con.execute(
         text("""
         UPDATE dividend_events SET current_revision_id=:revision,

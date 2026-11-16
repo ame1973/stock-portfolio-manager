@@ -107,8 +107,8 @@ workflow decision, not proof that a document was fetched or authenticated.
 Citation URLs containing a query or fragment are withheld rather than returned with
 private parameters; the reference and a withholding marker remain visible to the
 owner. These reads never contact a provider, create an entitlement or change receipts,
-cash or historical FX. Protected candidate adoption, owner acceptance and withdrawal
-are described below; rejection, manual override and the dividend browser workspace
+cash or historical FX. Protected candidate adoption, owner acceptance, explicit manual
+override and withdrawal are described below; rejection and the dividend browser workspace
 remain unfinished. The existing event revision fence is unchanged.
 
 ## Protected manual event writes
@@ -175,7 +175,7 @@ The existing publication fence rejects **every** new revision when any prior rev
 has an entitlement or the event has projection history, until a future atomic rebuild
 and reconciliation workflow can preserve all receipt associations. Neither manual
 write calculates holdings, posts receipts or changes cash or locked FX. Protected
-acceptance and withdrawal are described below; rejection, manual override, projection
+acceptance, manual override and withdrawal are described below; rejection, projection
 rebuilding, receipt posting and the browser dividend workspace remain separate work.
 
 ## Protected candidate adoption
@@ -228,7 +228,7 @@ No provider is contacted and no entitlement, receipt, cash or locked FX is chang
 
 ## Protected owner acceptance
 
-`POST /api/v1/dividends/{event_id}/verify` currently accepts only an explicit
+`POST /api/v1/dividends/{event_id}/verify` accepts an explicit
 `ACCEPT_REVISION` decision. It requires the observed physical `revision_id`, the
 quoted event version in `If-Match`, an owner citation and a reason. An optional
 `evidence_url` is a reference supplied by the owner, not a document fetched or
@@ -271,9 +271,62 @@ private and `no-store` and explicitly retain `OWNER_EVENT_DECISION_ONLY`,
 The existing publication fence rejects acceptance when any prior revision has an
 entitlement or the event has projection history. This decision does not calculate
 holdings, post receipts or alter cash or locked FX; tax estimates for an earlier
-physical revision are not inherited. `REJECT_REVISION` and `MANUAL_OVERRIDE` are not
-implemented by this endpoint yet and must not be interpreted as withdrawal or a
-replacement of terms.
+physical revision are not inherited. `REJECT_REVISION` is not implemented and must
+not be interpreted as withdrawal, zero income or replacement terms.
+
+## Protected manual override
+
+The same verification endpoint accepts `MANUAL_OVERRIDE` only with complete explicit
+replacement terms. It requires the observed physical `revision_id`, quoted event
+version in `If-Match`, unchanged `security_id`, event type, ex-date, exact DPS string,
+currency, adjustment basis, citation and reason. Dates other than ex-date and
+`evidence_url` may be omitted when unknown. For example:
+
+```json
+{
+  "revision_id": "00000000-0000-4000-8000-000000000002",
+  "decision": "MANUAL_OVERRIDE",
+  "security_id": "00000000-0000-4000-8000-000000000003",
+  "event_type": "REGULAR",
+  "ex_date": "2026-01-08",
+  "dps": "1.23456789",
+  "currency": "USD",
+  "adjustment_basis": "AS_DECLARED",
+  "citation": "Synthetic owner reference for replacement terms",
+  "evidence_url": null,
+  "confirm_unlock": true,
+  "reason": "Synthetic explicit owner override"
+}
+```
+
+The decision is a new owner-entered `MANUAL` physical revision with
+`manual_override=true`, not an automatically verified document. Replacing a locked
+revision requires `confirm_unlock: true`; reopening a withdrawn event requires
+`confirm_reopen: true`; both are required when both conditions apply. A new
+`AS_DECLARED` override remains `PROVISIONAL`. `UNKNOWN` or `SPLIT_ADJUSTED` remains
+`INCOMPLETE` with an evidence review, and explicit zero remains distinct from missing
+DPS. Later acceptance is a separate decision. A previous candidate is retained in
+history but is not silently adopted as the source of the new manual terms.
+
+The active session, Origin, CSRF, idempotency key, recent password confirmation and
+physical/version pins are rechecked inside the writer. The revision audit's canonical
+fingerprint binds the override label, and a second correlated audit binds its observed
+predecessor and new revision. The historical reader validates both for the complete
+chain: a late marker cannot turn an ordinary manual decision into an override, and a
+missing or inconsistent marker cannot turn an override into a plain manual decision.
+Older manual and other decisions retain their original audit fingerprints and report
+`manual_override=false`; older cached responses without the additive label replay with
+that false label without rewriting storage. Matching local audit fingerprints are not
+signatures, document authentication or proof of complete ownership.
+
+An unchanged completed retry reauthenticates and validates the original unredacted
+reference, request intent, cached result and complete history, then returns the original
+result without writes, even after a later revision. Its ETag is historical. Changed
+intent under the same key conflicts, stale pins return 412 and inconsistent retained
+history fails closed with 503. URL queries/fragments are withheld from responses; no
+provider is contacted. Existing entitlement/projection history still fences publication,
+and receipts, cash and locked FX are not rewritten. A tax setting on the previous
+physical revision is not inherited.
 
 ## Protected event withdrawal
 
@@ -335,15 +388,18 @@ split-adjusted manual terms stay incomplete; only an explicit separate
 prior terms and lock, and reopening it requires a new explicit manual revision.
 These are owner decisions, not independent verification of an external document.
 
-The writer inserts the event revision, source links, correlated audit, affected
+The writer inserts the event revision, source links, correlated audits, affected
 owner-portfolio invalidations and any conflict/incomplete evidence reviews in
-one transaction. Reviews are attached to affected portfolios, or to the event
-when none exists. An explicit later decision resolves outstanding reviews only
-after rechecking their original event revision, canonical detail, owner and
-creation audit; corrupt review history aborts the whole transaction. Historical
-replay of the same internal revision identity, request and timestamp is zero-write
-even after a later source/action change or receipt. A new candidate use is not
-such a replay and must pass current-scope checks again.
+one transaction. Its savepoint rolls back the entire event operation if a caller
+catches a body failure; unrelated outer work remains intact. If savepoint creation,
+rollback or release has an uncertain outcome, the enclosing transaction is aborted.
+Reviews are attached to affected portfolios, or to the event when none exists. An
+explicit later decision resolves outstanding reviews only after rechecking their
+original event revision, canonical detail, owner and creation audit; corrupt review
+history aborts the event operation. Historical replay of the same internal revision
+identity, request and timestamp is zero-write even after a later source/action change
+or receipt. A new candidate use is not such a replay and must pass current-scope checks
+again.
 
 **Projection safety fence:** if *any* prior revision of an event has an
 entitlement, or the event has a stored projection version, this internal writer
@@ -666,9 +722,9 @@ the owner/account scope and retained history remain readable. A changed
 intent under the same key conflicts; stale observed versions return 412. Results are
 `OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`, not confirmed tax, ownership,
 eligibility or income. No endpoint contacts a provider or modifies prior projections,
-receipts, cash or locked FX. Verification rejection and override, projection rebuilding,
-receipt workflows and a browser tax workspace remain unfinished; these APIs alone do
-not provide a complete dividend workflow.
+receipts, cash or locked FX. Verification rejection, projection rebuilding, receipt
+workflows and a browser tax workspace remain unfinished; these APIs alone do not
+provide a complete dividend workflow.
 
 ## Projection tax provenance
 
@@ -1406,6 +1462,11 @@ shares, demonstrating that this reader does not establish financial authority.
 active-owner and writer boundaries, later candidate changes or dismissals, changed
 basis, explicit manual decisions, same-transaction revalidation and competing
 writers. These synthetic tests establish no ownership or economic authorization.
+
+`uv run pytest tests/test_dividend_manual_override_api.py` exercises complete explicit
+override terms, lock/reopen confirmations, audited origin and legacy replay labels,
+late or missing markers, security races, financial publication fences and atomic
+rollback. These synthetic decisions are not document authentication or income.
 
 `uv run pytest tests/test_dividend_verification_api.py` exercises owner acceptance,
 physical and source pins, session and reauthentication races, unchanged historical

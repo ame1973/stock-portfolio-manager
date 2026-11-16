@@ -635,7 +635,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Accept Revision */
+        /** Verify Dividend Event */
         post: operations["verify_dividend_event"];
         delete?: never;
         options?: never;
@@ -1413,8 +1413,8 @@ export interface components {
             /** Citation */
             citation: string;
             /**
-             * Decision
-             * @constant
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
             decision: "ACCEPT_REVISION";
             /** Evidence Url */
@@ -2639,6 +2639,11 @@ export interface components {
             independent_origin_groups: number | null;
             /** Manual Locked */
             manual_locked: boolean;
+            /**
+             * Manual Override
+             * @default false
+             */
+            manual_override: boolean;
             /** Pay Date */
             pay_date: string | null;
             /** Reason */
@@ -2729,6 +2734,11 @@ export interface components {
             independent_origin_groups: number | null;
             /** Manual Locked */
             manual_locked: boolean;
+            /**
+             * Manual Override
+             * @default false
+             */
+            manual_override: boolean;
             /** Pay Date */
             pay_date: string | null;
             /** Reason */
@@ -3205,6 +3215,68 @@ export interface components {
              * Format: password
              */
             password: string;
+        };
+        /** ManualDividendOverride */
+        ManualDividendOverride: {
+            /**
+             * Adjustment Basis
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /** Announce Date */
+            announce_date?: string | null;
+            /** Citation */
+            citation: string;
+            /**
+             * Confirm Reopen
+             * @default false
+             */
+            confirm_reopen: boolean;
+            /**
+             * Confirm Unlock
+             * @default false
+             */
+            confirm_unlock: boolean;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            decision: "MANUAL_OVERRIDE";
+            /** Dps */
+            dps: string;
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "REGULAR" | "SPECIAL" | "INTERIM" | "FINAL" | "SUPPLEMENTAL" | "ETF_DISTRIBUTION" | "REIT_DISTRIBUTION" | "UNKNOWN";
+            /** Evidence Url */
+            evidence_url?: string | null;
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+            /** Pay Date */
+            pay_date?: string | null;
+            /** Reason */
+            reason: string;
+            /** Record Date */
+            record_date?: string | null;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
         };
         /** ManualEventCreate */
         ManualEventCreate: {
@@ -10475,7 +10547,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AcceptDividendRevision"];
+                "application/json": components["schemas"]["AcceptDividendRevision"] | components["schemas"]["ManualDividendOverride"];
             };
         };
         responses: {
