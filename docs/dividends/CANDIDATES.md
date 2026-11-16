@@ -224,15 +224,23 @@ prevents starting a revision. Each form requires a fresh change reason and a
 separate acknowledgment that this is review only. Choosing `DISMISSED` records an
 append-only decision, not deletion, event withdrawal or a receipt reversal.
 
-A user enters each original observation UUID and SHA-256 fingerprint, association
-reason and, optionally, an already retained owned basis declaration UUID. A link
-opens the source-observation workspace in another tab for copying exact values;
-the form neither guesses matches nor creates basis declarations. Old associations
-are displayed for explicit review and can be edited or removed. A stale or
+A user may browse bounded pages of recorded v1 observations for the explicitly
+selected security, then add a source only by an explicit choice. The picker copies
+only the observation UUID and original `source_sha256`; it never fills candidate
+terms, a basis declaration or the required individual association reason. Unknown
+values remain unknown and an explicit source zero is displayed as zero, not copied
+into the candidate. Duplicate observation identities, including different UUID
+letter case, cannot be selected twice. A stale, paused, malformed or foreign-security
+source page cannot be used for a new selection. Old-source omission counts are not
+coverage claims. Alternatively, the user can enter observation UUID and hash
+manually; a link opens the source-observation workspace in another tab for review.
+The optional already retained owned basis declaration UUID is still entered manually.
+Old associations are displayed for explicit review and can be edited or removed. A stale or
 mismatched source/basis is rejected by the server; to dismiss after a basis has
 become stale, explicitly remove that reference. An empty match list requires its
 own confirmation, which is reset after removing the final association. Duplicate
-observations, invalid UUIDs, oversized UTF-8 association payloads and invalid
+observations or basis-declaration IDs, including differently cased UUID spellings,
+invalid UUIDs, oversized UTF-8 association payloads and invalid
 amounts are rejected before writing. Empty dates, amount and currency stay unknown;
 zero must be entered explicitly. No quote currency or guessed date is inserted.
 
@@ -255,6 +263,15 @@ a 412 competing revision, and zero-write replay after an equivalent decimal
 reformat. It checks unchanged event, entitlement, receipt, projection, cash,
 trade, job and upstream-attempt tables and uses no network provider, worker,
 deployment data or screenshot.
+
+`npm run test:e2e:candidate-source-picker` uses a fresh synthetic application and
+real browser to check same-security no-store source reads, exact observation/hash
+selection, explicit association reason, preserved unknown candidate terms,
+responsive and busy-close behavior, and a held/lost response followed by
+zero-write historical replay. Changing the selected security preserves the entered
+pins; the server rejects the mismatched source without writes. Financial and
+reference-FX tables start and remain empty. The test uses no network provider,
+worker, deployment data or screenshot.
 
 ## Create a distinct event from a candidate
 
@@ -356,6 +373,6 @@ let the owner create a distinct event or explicitly associate the current candid
 with one selected existing event. Both candidate identity and physical revision are
 pinned and revalidated; the review response's `NOT_ADOPTED` label is still not a
 linkage query. Adoption records an owner decision, not verified market history,
-eligible shares, confirmed income or a receipt. A guided observation/basis picker,
+eligible shares, confirmed income or a receipt. A guided basis-declaration picker,
 atomic entitlement rebuilding, verification and the actual receipt workflow remain
 unfinished.

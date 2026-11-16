@@ -29,6 +29,7 @@
     "test:e2e:candidate-write": "node tests/e2e/credentials/check.mjs --candidate-write",
     "test:e2e:candidate-event-create": "node tests/e2e/credentials/check.mjs --candidate-event-create",
     "test:e2e:candidate-event-match": "node tests/e2e/credentials/check.mjs --candidate-event-match",
+    "test:e2e:candidate-source-picker": "node tests/e2e/credentials/check.mjs --candidate-source-picker",
     "generate:contracts": "uv run python scripts/export_openapi.py && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",
     "check:contracts": "uv run python scripts/export_openapi.py --check && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts --check"
   },

@@ -12,6 +12,7 @@ import { date, optional, price, samePrice } from "../ledger/inputs";
 import { SecurityName } from "../ledger/ReferenceName";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { useFormAction } from "../settings/data";
+import { CandidateSourcePicker } from "./CandidateSourcePicker";
 import { candidateReason, validCandidate } from "./candidate-validation";
 import { eventTypeLabels } from "./event-labels";
 import { eventTypes } from "./event-validation";
@@ -33,10 +34,12 @@ const schema = z.object({
 }).superRefine((value, context) => {
   if (!value.acknowledged) context.addIssue({ code: "custom", path: ["acknowledged"], message: "請先確認本次候選只作審閱。" });
   if (!value.matches.length && !value.confirm_empty) context.addIssue({ code: "custom", path: ["confirm_empty"], message: "請確認本次明確不列來源關聯。" });
-  const ids = new Set<string>();
+  const ids = new Set<string>(); const basisIds = new Set<string>();
   value.matches.forEach((item, index) => {
     if (ids.has(item.observation_id)) context.addIssue({ code: "custom", path: ["matches", index, "observation_id"], message: "同一觀測不可重複關聯。" });
     ids.add(item.observation_id);
+    if (item.basis_assertion_id && basisIds.has(item.basis_assertion_id)) context.addIssue({ code: "custom", path: ["matches", index, "basis_assertion_id"], message: "同一基準聲明不可重複關聯。" });
+    if (item.basis_assertion_id) basisIds.add(item.basis_assertion_id);
   });
   const bytes = new TextEncoder().encode(JSON.stringify(value.matches.map(item => ({ ...item, basis_assertion_id: item.basis_assertion_id || null })))).length;
   if (bytes > 131_072) context.addIssue({ code: "custom", path: ["matches"], message: "來源關聯內容超過 128 KiB，請縮短依據或減少來源。" });
@@ -74,13 +77,14 @@ function checkedDecision(record: Candidate, body: Input, target?: Candidate): Ca
 
 function CandidateForm({ onSaved, onCancel, observed }: Props & { observed?: Candidate }) {
   const [target] = useState(() => observed ? structuredClone(observed) : undefined);
+  const [showSources, setShowSources] = useState(false);
   const usable = !target || (validCandidate(target) && target.version < 2_147_483_647);
   const previous = usable ? target : undefined;
   const action = useFormAction(onSaved);
   const submitted = useRef<string | null>(null);
   const closeEditor = useContext(EditorCloseContext);
   const confirmationId = useId();
-  const { register, control, setValue, handleSubmit, formState: { errors, isSubmitting } } = useForm<z.infer<typeof schema>>({
+  const { register, control, setValue, getValues, handleSubmit, formState: { errors, isSubmitting } } = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema), defaultValues: {
       security_id: previous?.terms.security_id ?? "", state: previous?.state ?? "OPEN", event_type: previous?.terms.event_type ?? "UNKNOWN",
       ex_date: previous?.terms.ex_date ?? "", announce_date: previous?.terms.announce_date ?? "", record_date: previous?.terms.record_date ?? "", pay_date: previous?.terms.pay_date ?? "",
@@ -91,6 +95,9 @@ function CandidateForm({ onSaved, onCancel, observed }: Props & { observed?: Can
   });
   const { fields, append, remove } = useFieldArray({ control, name: "matches" });
   const securityId = useWatch({ control, name: "security_id" });
+  const matches = useWatch({ control, name: "matches" });
+  const selectedIds = matches.map(item => item.observation_id.trim().toLowerCase());
+  const validSecurity = z.uuid().safeParse(securityId).success;
   if (!usable) return <p role="alert" className="text-sm leading-7 text-danger">固定候選範圍無法核對或版本已達上限；請關閉並重新載入。</p>;
   return <FormFrame title={target ? "修訂股息候選" : "新增股息候選"} submitLabel={target ? "儲存候選修訂" : "儲存候選資料"} error={action.error} pending={isSubmitting}
     onCancel={closeEditor ?? onCancel} onSubmit={event => void handleSubmit(values => {
@@ -127,8 +134,14 @@ function CandidateForm({ onSaved, onCancel, observed }: Props & { observed?: Can
     <SelectField label="候選金額口徑" {...register("adjustment_basis")}><option value="UNKNOWN">未知，待核對</option><option value="AS_DECLARED">記錄為宣告口徑，非文件驗證</option><option value="SPLIT_ADJUSTED">拆股調整後，待核對</option></SelectField>
     {([ ["announce_date", "候選宣告日（選填）"], ["record_date", "候選記錄日（選填）"], ["pay_date", "候選付款日（選填）"] ] as const).map(([key, label]) => <Field key={key} label={label} type="date" {...register(key)} error={errors[key]?.message} />)}
     <section aria-label="來源關聯輸入" className="grid min-w-0 gap-4 rounded-md border border-border p-4 sm:col-span-2"><h4 className="font-medium">明確來源關聯</h4>
-      <p className="text-sm leading-7 text-secondary">請從來源觀測複製原始觀測識別碼及雜湊，逐項說明關聯依據；可選擇已存在的基準聲明識別碼。伺服器重新核對來源與基準，不會根據相同日期自動合併或驗證文件。</p>
+      <p className="text-sm leading-7 text-secondary">可瀏覽同一證券的已記錄來源，或手動輸入原始觀測識別碼及雜湊；每項都須自行說明關聯依據。伺服器重新核對來源與基準，不會根據相同日期自動合併或驗證文件。</p>
       <Link to="/data-center/dividends" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm text-primary underline">另開分頁核對來源觀測</Link>
+      <div><Button type="button" variant="outline" disabled={!validSecurity} aria-expanded={showSources && validSecurity} onClick={() => setShowSources(value => !value)}>{showSources && validSecurity ? "收合來源觀測" : "瀏覽來源觀測"}</Button></div>
+      {showSources && validSecurity && <CandidateSourcePicker key={securityId} securityId={securityId} selectedIds={selectedIds} full={fields.length >= 100} onSelect={pin => {
+        const current = getValues("matches");
+        if (getValues("security_id") !== securityId || current.length >= 100 || current.some(item => item.observation_id.trim().toLowerCase() === pin.observation_id.toLowerCase())) return;
+        append({ ...pin, basis_assertion_id: "", reason: "" });
+      }} />}
       {fields.map((field, index) => <fieldset key={field.id} className="grid min-w-0 gap-4 rounded-md border border-border p-4 sm:grid-cols-2"><legend className="px-1 text-sm font-medium">來源 {index + 1}</legend>
         <Field label={`來源 ${index + 1} 觀測識別碼`} maxLength={64} {...register(`matches.${index}.observation_id`)} error={errors.matches?.[index]?.observation_id?.message} />
         <Field label={`來源 ${index + 1} 原始雜湊`} maxLength={64} {...register(`matches.${index}.source_sha256`)} error={errors.matches?.[index]?.source_sha256?.message} />

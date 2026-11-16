@@ -25,8 +25,8 @@ function candidatePage<T extends { items: Candidate[]; next_cursor?: string | nu
   if (!page || !Array.isArray(page.items) || page.items.length > 25
     || (page.next_cursor != null && typeof page.next_cursor !== "string") || page.items.some(record => {
       if (!validCandidate(record) || record.terms.security_id !== security || record.state !== "OPEN"
-        || ids.has(record.id) || revisions.has(record.revision_id)) return true;
-      ids.add(record.id); revisions.add(record.revision_id); return false;
+        || ids.has(record.id.toLowerCase()) || revisions.has(record.revision_id.toLowerCase())) return true;
+      ids.add(record.id.toLowerCase()); revisions.add(record.revision_id.toLowerCase()); return false;
     })) throw new Error("候選清單無法核對；請重新載入或檢查伺服器狀態及有效備份。");
   return page;
 }

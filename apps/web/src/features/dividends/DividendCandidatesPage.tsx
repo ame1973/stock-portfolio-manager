@@ -28,10 +28,10 @@ function verifiedPage<T extends { items: Candidate[]; next_cursor?: string | nul
   const revisions = new Set<string>();
   let previousVersion = 2_147_483_648;
   if (!page || !Array.isArray(page.items) || page.items.some(record => {
-    if (!validCandidate(record) || revisions.has(record.revision_id)) return true;
+    if (!validCandidate(record) || revisions.has(record.revision_id.toLowerCase())) return true;
     if (scope && (record.id !== scope.id || record.terms.security_id !== scope.security || record.version >= previousVersion)) return true;
-    if (!scope && ids.has(record.id)) return true;
-    ids.add(record.id); revisions.add(record.revision_id); previousVersion = record.version;
+    if (!scope && ids.has(record.id.toLowerCase())) return true;
+    ids.add(record.id.toLowerCase()); revisions.add(record.revision_id.toLowerCase()); previousVersion = record.version;
     return false;
   })) throw new Error("候選資料無法核對；請重新載入或檢查伺服器狀態及有效備份。");
   return page;

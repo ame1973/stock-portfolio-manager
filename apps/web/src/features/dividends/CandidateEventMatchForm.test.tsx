@@ -115,6 +115,8 @@ describe("associate an explicit candidate with an existing event", () => {
   it.each([
     { items: [{ ...candidate, terms: { ...candidate.terms, security_id: previous.id } }] },
     { items: [{ ...candidate, state: "DISMISSED" }] }, { items: [candidate, candidate] },
+    { items: [{ ...candidate, id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+      { ...candidate, id: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA", revision_id: "99999999-9999-4999-8999-999999999999" }] },
   ])("does not offer choices from a mismatched, dismissed or duplicated candidate page", async ({ items }) => {
     reads(items); renderForm();
     expect(await screen.findByRole("alert")).toHaveTextContent("候選清單無法核對");

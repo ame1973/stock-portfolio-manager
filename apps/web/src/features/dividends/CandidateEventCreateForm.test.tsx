@@ -85,6 +85,14 @@ describe("distinct event from an explicit candidate", () => {
     { ...candidate, assessment: { ...candidate.assessment, checks: [{ ...candidate.assessment.checks[0]!, basis_assertion_id: "77777777-7777-4777-8777-777777777777" }] } },
     { ...candidate, assessment: { ...candidate.assessment, eligible_observation_ids: ["77777777-7777-4777-8777-777777777777"] } },
     { ...candidate, assessment: { ...candidate.assessment, eligible_observation_ids: [candidate.matches[0]!.observation_id, candidate.matches[0]!.observation_id] } },
+    { ...candidate, matches: [{ ...candidate.matches[0]!, observation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+      { ...candidate.matches[0]!, observation_id: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" }],
+      assessment: { ...candidate.assessment, checks: [{ ...candidate.assessment.checks[0]!, observation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        { ...candidate.assessment.checks[0]!, observation_id: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" }] } },
+    { ...candidate, matches: [{ ...candidate.matches[0]!, basis_assertion_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+      { ...candidate.matches[0]!, observation_id: "77777777-7777-4777-8777-777777777777", basis_assertion_id: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" }],
+      assessment: { ...candidate.assessment, checks: [{ ...candidate.assessment.checks[0]!, basis_assertion_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        { ...candidate.assessment.checks[0]!, observation_id: "77777777-7777-4777-8777-777777777777", basis_assertion_id: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" }] } },
   ])("does not allow a dismissed, incomplete or malformed target", broken => {
     reads(); const post = vi.spyOn(api, "POST"); renderForm(broken as unknown as Candidate);
     expect(screen.getByRole("alert")).toHaveTextContent("固定候選無法核對"); expect(post).not.toHaveBeenCalled();

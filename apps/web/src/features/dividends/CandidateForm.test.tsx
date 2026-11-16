@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { api, type components } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
@@ -9,6 +9,15 @@ type Schemas = components["schemas"];
 type Candidate = Schemas["CandidateRecord"];
 const security = { id: "11111111-1111-4111-8111-111111111111", name: "Synthetic candidate security", display_ticker: "SYN", exchange_code: "NASDAQ", quote_currency: "USD" };
 const match = { observation_id: "22222222-2222-4222-8222-222222222222", source_sha256: "a".repeat(64), basis_assertion_id: null, reason: "Synthetic source association reason" };
+const observation: Schemas["DividendObservationRecord"] = {
+  id: match.observation_id, security_id: security.id, normalized_sha256: match.source_sha256, provider_id: "manual", origin_group: "USER_VERIFIED",
+  provider_run_id: "77777777-7777-4777-8777-777777777777", provider_symbol: "SYN.CITED", provider_event_id: null, source_url: null, evidence: null,
+  retrieved_at: "2026-11-01T00:00:00Z", last_seen_at: "2026-11-01T00:00:00Z", sightings_count: 1, provenance_version: 1,
+  scope: "SOURCE_ONLY", canonical_adoption: "NOT_ADOPTED", canonical_adoption_scope: "RESPONSE_ONLY_NOT_LINKAGE",
+  ex_date: "2026-11-01", announce_date: null, record_date: null, pay_date: null, event_type: "SPECIAL", dps: "0", currency: "USD",
+  adjustment_basis: "AS_DECLARED", source_currency: null, source_period: null, source_frequency: null, incomplete_reasons: [],
+};
+const sourcePage = { items: [observation], next_cursor: null, scope: "IMMUTABLE_SOURCE_V1", legacy_records_omitted: 0 };
 const created: Candidate = {
   id: "33333333-3333-4333-8333-333333333333", revision_id: "44444444-4444-4444-8444-444444444444", version: 1, state: "OPEN",
   terms: { security_id: security.id, ex_date: null, announce_date: null, record_date: null, pay_date: null, event_type: "UNKNOWN", dps: null, currency: null, adjustment_basis: "UNKNOWN" },
@@ -22,6 +31,7 @@ function reads() {
     if (path === "/api/v1/auth/csrf") return reply({ csrf_token: "synthetic-csrf", expires_at: "2099-01-01T00:00:00Z" });
     if (path === "/api/v1/securities") return reply({ items: [security], next_cursor: null });
     if (path === "/api/v1/securities/{id}") return reply(security);
+    if (path === "/api/v1/dividends/observations") return reply(sourcePage);
     throw new Error(`Unexpected read: ${path}`);
   });
 }
@@ -50,6 +60,45 @@ describe("explicit candidate forms", () => {
     expect(post).toHaveBeenCalledWith("/api/v1/dividends/candidates", expect.anything());
     expect(body(post).body).toMatchObject({ state: "OPEN", terms: { security_id: security.id, ex_date: null, dps: null, currency: null, adjustment_basis: "UNKNOWN" }, matches: [], change_reason: created.change_reason });
     expect(localStorage.length + sessionStorage.length).toBe(0);
+  });
+
+  it("adds an explicitly selected source with exact pins without filling terms or reason", async () => {
+    const get = reads(); const response = { ...created, matches: [match] }; const saved = vi.fn();
+    const post = vi.spyOn(api, "POST").mockResolvedValue(reply(response));
+    renderForm(<CandidateCreateForm onSaved={saved} onCancel={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "瀏覽來源觀測" })).toBeDisabled();
+    expect(get).not.toHaveBeenCalledWith("/api/v1/dividends/observations", expect.anything());
+    await chooseSecurity(); fireEvent.click(screen.getByRole("button", { name: "瀏覽來源觀測" }));
+    const card = await screen.findByRole("article", { name: `可選來源 ${observation.id}` });
+    expect(card).toHaveTextContent(observation.normalized_sha256); expect(card).toHaveTextContent("每股 USD 0");
+    expect(card).toHaveTextContent("不是事件關聯查詢");
+    fireEvent.click(within(card).getByRole("button", { name: "加入此來源" }));
+    expect(screen.getByLabelText("來源 1 觀測識別碼")).toHaveValue(observation.id);
+    expect(screen.getByLabelText("來源 1 原始雜湊")).toHaveValue(observation.normalized_sha256);
+    expect(screen.getByLabelText("來源 1 基準聲明識別碼（選填）")).toHaveValue("");
+    expect(screen.getByLabelText("來源 1 關聯依據")).toHaveValue("");
+    expect(screen.getByLabelText("候選除淨日（選填）")).toHaveValue("");
+    expect(screen.getByLabelText("候選每股金額（選填）")).toHaveValue("");
+    expect(screen.getByLabelText("候選股息幣別")).toHaveValue("");
+    expect(within(card).getByRole("button", { name: "已列入來源" })).toBeDisabled();
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("來源 1 關聯依據"), { target: { value: match.reason } });
+    fireEvent.change(screen.getByLabelText("候選變更依據"), { target: { value: created.change_reason } }); acknowledge(); submit();
+    await waitFor(() => expect(saved).toHaveBeenCalledWith(response));
+    expect(body(post).body.matches).toEqual([match]); expect(body(post).body.terms.dps).toBeNull(); expect(body(post).body.terms.currency).toBeNull();
+    expect(localStorage.length + sessionStorage.length).toBe(0);
+  });
+
+  it("keeps manually entered source pins when changing the selected security", async () => {
+    reads(); renderForm(<CandidateCreateForm onSaved={vi.fn()} onCancel={vi.fn()} />); await chooseSecurity();
+    fireEvent.click(screen.getByRole("button", { name: "瀏覽來源觀測" }));
+    const card = await screen.findByRole("article", { name: `可選來源 ${observation.id}` });
+    fireEvent.click(within(card).getByRole("button", { name: "加入此來源" }));
+    fireEvent.change(screen.getByLabelText("來源 1 關聯依據"), { target: { value: match.reason } });
+    fireEvent.change(screen.getByLabelText("候選證券", { exact: true }), { target: { value: "" } });
+    expect(screen.getByLabelText("來源 1 觀測識別碼")).toHaveValue(observation.id);
+    expect(screen.getByLabelText("來源 1 關聯依據")).toHaveValue(match.reason);
+    expect(screen.queryByRole("article", { name: `可選來源 ${observation.id}` })).not.toBeInTheDocument();
   });
 
   it("sends explicit exact source pins and zero without inheriting quote currency", async () => {
@@ -201,6 +250,19 @@ describe("explicit candidate forms", () => {
     renderForm(<CandidateRevisionForm target={{ ...created, matches }} onSaved={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("候選變更依據"), { target: { value: "Synthetic source-bound revision reason" } }); acknowledge(); submit();
     expect(await screen.findByText(/來源關聯內容超過 128 KiB/)).toBeVisible(); expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("rejects one basis declaration reused across different observations", async () => {
+    reads(); const post = vi.spyOn(api, "POST"); renderForm(<CandidateCreateForm onSaved={vi.fn()} onCancel={vi.fn()} />); await chooseSecurity();
+    fireEvent.change(screen.getByLabelText("候選變更依據"), { target: { value: created.change_reason } });
+    for (let index = 1; index <= 2; index++) {
+      fireEvent.click(screen.getByRole("button", { name: "新增來源關聯" }));
+      fireEvent.change(screen.getByLabelText(`來源 ${index} 觀測識別碼`), { target: { value: index === 1 ? match.observation_id : "55555555-5555-4555-8555-555555555555" } });
+      fireEvent.change(screen.getByLabelText(`來源 ${index} 原始雜湊`), { target: { value: match.source_sha256 } });
+      fireEvent.change(screen.getByLabelText(`來源 ${index} 基準聲明識別碼（選填）`), { target: { value: index === 1 ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" : "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" } });
+      fireEvent.change(screen.getByLabelText(`來源 ${index} 關聯依據`), { target: { value: match.reason } });
+    }
+    acknowledge(); submit(); expect(await screen.findByText("同一基準聲明不可重複關聯。" )).toBeVisible(); expect(post).not.toHaveBeenCalled();
   });
 
   it("rejects duplicate or malformed source pins without contacting the writer", async () => {

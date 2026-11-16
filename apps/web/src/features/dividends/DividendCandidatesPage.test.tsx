@@ -182,6 +182,9 @@ describe("dividend candidate review workspace", () => {
   it.each([
     [candidate, { ...older, id: candidate.id }],
     [candidate, { ...older, id: "66666666-6666-4666-8666-666666666666", revision_id: candidate.revision_id }],
+    [{ ...candidate, id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }, { ...older, id: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" }],
+    [{ ...candidate, revision_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+      { ...older, id: "66666666-6666-4666-8666-666666666666", revision_id: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" }],
   ])("rejects duplicated stable or physical identities on a candidate page", async (...items) => {
     reads({ "/api/v1/dividends/candidates": { items, next_cursor: null } }); renderPage();
     expect(await screen.findByRole("alert")).toHaveTextContent("候選資料無法核對");

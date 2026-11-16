@@ -37,12 +37,13 @@ export function validCandidate(record: unknown): record is Candidate {
 export function validCandidateForEvent(record: unknown): record is Candidate {
   if (!validCandidate(record) || record.state !== "OPEN" || record.terms.ex_date == null
     || record.terms.dps == null || record.terms.currency == null) return false;
-  const matches = new Map(record.matches.map(match => [match.observation_id, match.basis_assertion_id ?? null]));
-  const checks = new Set(record.assessment.checks.map(check => check.observation_id));
-  const eligible = new Set(record.assessment.eligible_observation_ids);
-  return matches.size === record.matches.length && checks.size === record.assessment.checks.length
-    && matches.size === checks.size && record.assessment.checks.every(check => matches.has(check.observation_id)
-      && matches.get(check.observation_id) === check.basis_assertion_id)
+  const matches = new Map(record.matches.map(match => [match.observation_id.toLowerCase(), match.basis_assertion_id?.toLowerCase() ?? null]));
+  const checks = new Set(record.assessment.checks.map(check => check.observation_id.toLowerCase()));
+  const basisIds = record.matches.flatMap(match => match.basis_assertion_id ? [match.basis_assertion_id.toLowerCase()] : []);
+  const eligible = new Set(record.assessment.eligible_observation_ids.map(id => id.toLowerCase()));
+  return matches.size === record.matches.length && checks.size === record.assessment.checks.length && new Set(basisIds).size === basisIds.length
+    && matches.size === checks.size && record.assessment.checks.every(check => matches.has(check.observation_id.toLowerCase())
+      && matches.get(check.observation_id.toLowerCase()) === (check.basis_assertion_id?.toLowerCase() ?? null))
     && eligible.size === record.assessment.eligible_observation_ids.length && [...eligible].every(id => checks.has(id));
 }
 
