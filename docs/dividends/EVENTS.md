@@ -755,6 +755,35 @@ actual withholding, eligible shares or an economic grant. No production projecti
 writer is installed. Event publication remains fenced until
 an authenticated atomic rebuild and receipt reconciliation are implemented.
 
+## Inert revision-rejection storage
+
+Migration `0023_dividend_rejections` adds one initially empty immutable table and
+brings the schema to 61 business tables. It does not backfill rejections or change
+existing event decisions, entitlements, receipts, cash, projections, tax settings,
+locked FX or prior audits. A row identifies one owner-controlled current physical
+revision, a cited reason, a request and one correlated audit. The schema rejects
+wrong or stale event/owner/revision scope, malformed metadata, missing or ambiguous
+audit shapes, duplicate rejections, updates, deletes and replacement writes.
+Matching database hashes are not signatures, an authenticated owner decision or
+proof of external evidence.
+
+A retained rejection prevents publishing a successor event revision and inserting a
+new entitlement, projection version or tax setting for that rejected revision. It
+does not withdraw an event, turn an expected amount into zero, adopt another revision,
+reverse a receipt or alter existing cash and historical FX. The original event
+representation and its strong version ETag remain unchanged; historical projection
+reads do not become current-use approvals. Existing receipts and projections remain
+retained and require explicit later reconciliation, not silent deletion.
+
+This migration is **storage and a conservative database fence only**. There is no
+protected rejection writer, owner-scoped rejection reader, rejection-aware
+current-use check, portfolio invalidation or supported resolution workflow yet.
+Do not insert rejection rows manually: the resulting publication fence cannot be
+cleared through the application. Before enabling the workflow, authenticate and
+audit the request, recheck the event and rejection state in the same writer, bind
+explicit resolution to the observed rejection, preserve historical idempotency
+replays, and implement any required atomic projection/receipt reconciliation.
+
 ## Internal retained-projection history reader
 
 `dividend_projection_history.history` reads one supplied owner, event and account in
@@ -1438,6 +1467,11 @@ HTTP routes, session/CSRF/reauthentication, exact INT64 strings, current and his
 selection, competing writes, zero-write replay, corruption and atomic rollback. It
 also checks that existing receipts and locked FX remain unchanged. These synthetic
 tests do not confirm tax or establish eligibility.
+
+`uv run pytest tests/test_dividend_rejection_migration.py` checks an isolated upgrade,
+private backup, retained receipts and locked FX, rejection scope and audit shapes,
+immutable/replacement guards, financial fences and competing revision writes. It
+does not authenticate a rejection or install a protected decision workflow.
 
 `uv run pytest tests/test_dividend_projection_tax.py tests/test_dividend_projection_tax_migration.py`
 checks legacy fingerprint preservation, private pre-upgrade backup, atomic migration

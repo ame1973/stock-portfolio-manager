@@ -96,8 +96,8 @@ def populate(engine: Engine) -> tuple[Any, str, dict[str, Any]]:
     return event, account, old
 
 
-def test_head_adds_no_business_table_or_assumed_tax_rate(engine: Engine) -> None:
-    assert schema_head() == HEAD
+def test_current_head_starts_without_settings_or_projection_history(engine: Engine) -> None:
+    assert schema_head() == "0023_dividend_rejections"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql("SELECT count(*) FROM dividend_tax_settings").scalar_one() == 0
         assert (

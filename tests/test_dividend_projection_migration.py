@@ -144,7 +144,7 @@ def staged_event(
 
 
 def test_head_adds_an_empty_projection_history(engine: Engine) -> None:
-    assert schema_head() == "0022_dividend_projection_tax"
+    assert schema_head() == "0023_dividend_rejections"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
