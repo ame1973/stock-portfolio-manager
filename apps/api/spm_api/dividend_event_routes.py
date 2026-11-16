@@ -17,7 +17,7 @@ from spm_api.candidate_models import CandidateAssessment, CandidateEvidenceCheck
 from spm_api.db import unit_of_work
 from spm_api.decimal_types import IsoDate
 from spm_api.dividend_evidence import DividendTerms, EvidenceAssessment
-from spm_api.errors import ApiError, Error
+from spm_api.errors import ApiError, Error, Model
 from spm_api.master_service import security_row
 from spm_api.mutations import check_version, mutate
 from spm_api.pagination import Page, PageDep, paginate, validate_date_page, validate_version_page
@@ -200,6 +200,18 @@ def _terms(body: models.ManualEventCreate) -> DividendTerms:
     return DividendTerms.model_validate(body.model_dump(include=set(DividendTerms.model_fields)))
 
 
+def _payload(body: Model) -> dict[str, Any]:
+    payload = body.model_dump(mode="json")
+    if payload.get("resolve_rejection_id") is None:
+        # Preserve fingerprints and intent audits for requests recorded before this field existed.
+        payload.pop("resolve_rejection_id", None)
+    return payload
+
+
+def _resolution_matches(review: events.ReviewedEvent, expected: UUID | None) -> bool:
+    return (review.resolution.rejection_id if review.resolution is not None else None) == expected
+
+
 def _binding(
     request: Request,
     headers: WriteDep,
@@ -282,10 +294,13 @@ def _write_manual(
     identifier: UUID | None,
     version: int | None,
 ) -> models.DividendEventRecord:
-    payload = body.model_dump(mode="json")
+    payload = _payload(body)
     if version is not None:
         payload = {"event_version": version, **payload}
     terms = _terms(body)
+    resolution_pin = (
+        body.resolve_rejection_id if isinstance(body, models.ManualEventRevision) else None
+    )
 
     def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
         if identifier is None:
@@ -308,6 +323,7 @@ def _write_manual(
             revision_no=next_version,
             kind="MANUAL",
             manual_override=isinstance(body, models.ManualDividendOverride),
+            resolve_rejection_id=resolution_pin,
             terms=terms,
             citation=body.citation,
             source_url=body.source_url,
@@ -325,7 +341,11 @@ def _write_manual(
         if cached.version != expected or (identifier is not None and cached.id != identifier):
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         historical = events.get(con, auth.owner.id, cached.id, version=expected)
-        if historical is None or _current(historical) != cached:
+        if (
+            historical is None
+            or _current(historical) != cached
+            or not _resolution_matches(historical, resolution_pin)
+        ):
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         record = historical.record
         if (
@@ -376,9 +396,12 @@ def _write_candidate(
     identifier: UUID | None,
     version: int | None,
 ) -> models.DividendEventRecord:
-    payload = body.model_dump(mode="json")
+    payload = _payload(body)
     if version is not None:
         payload = {"event_version": version, **payload}
+    resolution_pin = (
+        body.resolve_rejection_id if isinstance(body, models.CandidateEventRevision) else None
+    )
 
     def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
         if identifier is None:
@@ -400,6 +423,7 @@ def _write_candidate(
             revision_id=uuid4(),
             revision_no=next_version,
             kind="CANDIDATE",
+            resolve_rejection_id=resolution_pin,
             candidate_id=body.candidate_id,
             candidate_version=body.candidate_version,
             reason=body.reason,
@@ -416,7 +440,11 @@ def _write_candidate(
         if cached.version != expected or (identifier is not None and cached.id != identifier):
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         historical = events.get(con, auth.owner.id, cached.id, version=expected)
-        if historical is None or _current(historical) != cached:
+        if (
+            historical is None
+            or _current(historical) != cached
+            or not _resolution_matches(historical, resolution_pin)
+        ):
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         record = historical.record
         if (
@@ -465,7 +493,7 @@ def _write_cited_decision(
     identifier: UUID,
     version: int,
 ) -> models.DividendEventRecord:
-    payload = {"event_version": version, **body.model_dump(mode="json")}
+    payload = {"event_version": version, **_payload(body)}
     accepting = isinstance(body, models.AcceptDividendRevision)
     kind: events.DecisionKind = "VERIFY" if accepting else "WITHDRAW"
     source_url = (
@@ -483,6 +511,7 @@ def _write_cited_decision(
             revision_id=uuid4(),
             revision_no=version + 1,
             kind=kind,
+            resolve_rejection_id=body.resolve_rejection_id,
             citation=body.citation,
             source_url=source_url,
             reason=body.reason,
@@ -498,7 +527,11 @@ def _write_cited_decision(
         if cached.id != identifier or cached.version != version + 1:
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         historical = events.get(con, auth.owner.id, identifier, version=version + 1)
-        if historical is None or _current(historical) != cached:
+        if (
+            historical is None
+            or _current(historical) != cached
+            or not _resolution_matches(historical, body.resolve_rejection_id)
+        ):
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         record = historical.record
         if (

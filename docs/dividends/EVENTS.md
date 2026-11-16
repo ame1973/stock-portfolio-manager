@@ -857,11 +857,23 @@ resolved successor without erasing either earlier decision. Rejecting or resolvi
 not alter the event representation at the moment of rejection; publishing the successor
 advances its normal event version.
 
+Protected manual revisions, existing-event candidate adoption, acceptance, manual
+override and withdrawal accept an optional `resolve_rejection_id` naming the exact
+observed rejection. They still require the event's physical revision and `If-Match`
+version, plus their existing confirmation, current-source and authorization checks.
+An absent pin for a rejected current revision returns 409; a mismatched pin returns
+412. A pin without a current rejection is also rejected. The pin is part of the
+idempotent intent when supplied; absent and explicit null preserve the earlier
+request fingerprint, so old completed requests remain replayable without writes.
+The event ETag changes only when the successor is published, not when a rejection
+is recorded. No protected rejection-read or decision API is installed yet; do not
+insert rejections into deployment data to obtain a pin.
+
 Both the application and SQL publication fences still prevent a successor whenever any
 prior revision has an entitlement or the event has projection history. They never detach,
 rewrite or reverse earlier receipts, cash or locked FX. The internal primitive does not
 authenticate an HTTP session, confirm ownership, validate eligibility or post income;
-protected rejection/resolution endpoints and atomic projection/receipt reconciliation
+protected rejection read/write endpoints and atomic projection/receipt reconciliation
 remain unfinished.
 
 ## Internal retained-projection history reader
@@ -1568,7 +1580,11 @@ checks explicit pins, repeated rejection/resolution chains, historical zero-writ
 replays, late or corrupted audits, SQL and application fences, private migration backups,
 retained financial facts and caught-failure rollback. The existing event endpoints refuse
 an unpinned rejected revision while retaining the original event ETag. These tests do
-not provide a protected rejection/resolution API or establish economic eligibility.
+not provide a protected rejection-read/decision API or establish economic eligibility.
+`uv run pytest tests/test_dividend_resolution_pins_api.py tests/test_dividend_resolution_pins_financial_api.py tests/test_dividend_candidate_resolution_api.py tests/test_dividend_candidate_resolution_safety_api.py`
+checks the protected event operations' explicit pins, compatibility with old request
+fingerprints, historical replays, current-candidate checks, concurrent requests and
+preservation of existing receipts and locked FX.
 
 `uv run pytest tests/test_dividend_projection_tax.py tests/test_dividend_projection_tax_migration.py`
 checks legacy fingerprint preservation, private pre-upgrade backup, atomic migration

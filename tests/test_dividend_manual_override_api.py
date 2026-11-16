@@ -619,7 +619,9 @@ async def test_override_replay_validates_original_unredacted_intent(
     changed = override_body(book, **{field: value})
     normalized = {
         "event_version": 1,
-        **models.ManualDividendOverride.model_validate(changed).model_dump(mode="json"),
+        **models.ManualDividendOverride.model_validate(changed).model_dump(
+            mode="json", exclude={"resolve_rejection_id"}
+        ),
     }
     with unit_of_work(engine, write=True) as con:
         con.exec_driver_sql(

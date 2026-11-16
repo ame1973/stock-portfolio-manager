@@ -576,7 +576,9 @@ async def test_original_unredacted_acceptance_intent_is_verified_on_replay(
     changed = body(event.revision_id, **{field: changed_value})
     normalized = {
         "event_version": 1,
-        **models.AcceptDividendRevision.model_validate(changed).model_dump(mode="json"),
+        **models.AcceptDividendRevision.model_validate(changed).model_dump(
+            mode="json", exclude={"resolve_rejection_id"}
+        ),
     }
     with unit_of_work(engine, write=True) as con:
         con.exec_driver_sql(
@@ -604,7 +606,9 @@ async def test_manual_revision_cannot_be_replayed_as_acceptance(
     intent = body(event.revision_id)
     normalized = {
         "event_version": 1,
-        **models.AcceptDividendRevision.model_validate(intent).model_dump(mode="json"),
+        **models.AcceptDividendRevision.model_validate(intent).model_dump(
+            mode="json", exclude={"resolve_rejection_id"}
+        ),
     }
     with unit_of_work(engine, write=True) as con:
         con.exec_driver_sql(

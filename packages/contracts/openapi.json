@@ -36,6 +36,18 @@
             "title": "Reason",
             "type": "string"
           },
+          "resolve_rejection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolve Rejection Id"
+          },
           "revision_id": {
             "format": "uuid",
             "title": "Revision Id",
@@ -792,6 +804,18 @@
             "pattern": "^[^\\x00]+$",
             "title": "Reason",
             "type": "string"
+          },
+          "resolve_rejection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolve Rejection Id"
           },
           "revision_id": {
             "format": "uuid",
@@ -3774,6 +3798,18 @@
             "title": "Reason",
             "type": "string"
           },
+          "resolve_rejection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolve Rejection Id"
+          },
           "revision_id": {
             "format": "uuid",
             "title": "Revision Id",
@@ -4618,6 +4654,18 @@
             ],
             "title": "Record Date"
           },
+          "resolve_rejection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolve Rejection Id"
+          },
           "revision_id": {
             "format": "uuid",
             "title": "Revision Id",
@@ -4883,6 +4931,18 @@
               }
             ],
             "title": "Record Date"
+          },
+          "resolve_rejection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolve Rejection Id"
           },
           "revision_id": {
             "format": "uuid",

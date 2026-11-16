@@ -37,6 +37,7 @@ class ManualEventCreate(Model):
 
 class ManualEventRevision(ManualEventCreate):
     revision_id: UUID = Field(repr=False)
+    resolve_rejection_id: UUID | None = Field(default=None, repr=False)
     confirm_unlock: bool = Field(default=False, strict=True)
     confirm_reopen: bool = Field(default=False, strict=True)
 
@@ -59,11 +60,13 @@ class CandidateEventCreate(CandidateEventSelection):
 
 class CandidateEventRevision(CandidateEventSelection):
     revision_id: UUID = Field(repr=False)
+    resolve_rejection_id: UUID | None = Field(default=None, repr=False)
     confirmation: Literal["MATCH_EXISTING_EVENT"]
 
 
 class DividendWithdrawal(Model):
     revision_id: UUID = Field(repr=False)
+    resolve_rejection_id: UUID | None = Field(default=None, repr=False)
     confirmation: Literal["WITHDRAW_EVENT"]
     citation: CitationReference = Field(repr=False)
     source_url: EvidenceUrl | None = Field(default=None, repr=False)
@@ -72,6 +75,7 @@ class DividendWithdrawal(Model):
 
 class AcceptDividendRevision(Model):
     revision_id: UUID = Field(repr=False)
+    resolve_rejection_id: UUID | None = Field(default=None, repr=False)
     decision: Literal["ACCEPT_REVISION"]
     citation: CitationReference = Field(repr=False)
     evidence_url: EvidenceUrl | None = Field(default=None, repr=False)

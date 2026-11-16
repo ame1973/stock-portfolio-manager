@@ -538,7 +538,9 @@ async def test_original_withdrawal_intent_is_verified_on_replay(
     changed = {**body, field: changed_value}
     changed_payload = {
         "event_version": 1,
-        **models.DividendWithdrawal.model_validate(changed).model_dump(mode="json"),
+        **models.DividendWithdrawal.model_validate(changed).model_dump(
+            mode="json", exclude={"resolve_rejection_id"}
+        ),
     }
     with unit_of_work(engine, write=True) as con:
         con.exec_driver_sql(
@@ -614,7 +616,9 @@ async def test_manual_revision_cannot_be_replayed_as_a_withdrawal(
     body = withdrawal_body(book)
     normalized = {
         "event_version": 1,
-        **models.DividendWithdrawal.model_validate(body).model_dump(mode="json"),
+        **models.DividendWithdrawal.model_validate(body).model_dump(
+            mode="json", exclude={"resolve_rejection_id"}
+        ),
     }
     path = f"{PATH}/{event.event_id}/withdraw"
     with unit_of_work(engine, write=True) as con:

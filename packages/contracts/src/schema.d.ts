@@ -1421,6 +1421,8 @@ export interface components {
             evidence_url?: string | null;
             /** Reason */
             reason: string;
+            /** Resolve Rejection Id */
+            resolve_rejection_id?: string | null;
             /**
              * Revision Id
              * Format: uuid
@@ -1737,6 +1739,8 @@ export interface components {
             confirmation: "MATCH_EXISTING_EVENT";
             /** Reason */
             reason: string;
+            /** Resolve Rejection Id */
+            resolve_rejection_id?: string | null;
             /**
              * Revision Id
              * Format: uuid
@@ -2919,6 +2923,8 @@ export interface components {
             confirmation: "WITHDRAW_EVENT";
             /** Reason */
             reason: string;
+            /** Resolve Rejection Id */
+            resolve_rejection_id?: string | null;
             /**
              * Revision Id
              * Format: uuid
@@ -3267,6 +3273,8 @@ export interface components {
             reason: string;
             /** Record Date */
             record_date?: string | null;
+            /** Resolve Rejection Id */
+            resolve_rejection_id?: string | null;
             /**
              * Revision Id
              * Format: uuid
@@ -3364,6 +3372,8 @@ export interface components {
             reason: string;
             /** Record Date */
             record_date?: string | null;
+            /** Resolve Rejection Id */
+            resolve_rejection_id?: string | null;
             /**
              * Revision Id
              * Format: uuid
