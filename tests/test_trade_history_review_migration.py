@@ -192,7 +192,7 @@ def review_values(
 
 def test_current_schema_starts_with_no_unverified_review_decisions(engine: Engine) -> None:
     with unit_of_work(engine) as con:
-        assert schema_head() == "0024_dividend_resolutions"
+        assert schema_head() == "0025_dividend_fee_settings"
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
 
 

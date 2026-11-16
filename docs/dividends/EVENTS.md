@@ -933,6 +933,36 @@ currently be resolved safely. They do not prevent an unchanged historical replay
 a later valid successor and subsequent receipt. A later workflow must implement the full
 atomic rebuild and reconciliation rather than silently dropping these safeguards.
 
+## Inert fee-setting provenance storage
+
+Migration `0025_dividend_fee_settings` adds one initially empty immutable table, bringing
+this schema revision to 63 business tables. It does not backfill the broker's current
+fee, alter earlier projection fingerprints, or change event decisions, tax settings,
+entitlements, receipts, cash, locked FX or old audit records. Each assertion belongs
+to one owner, physical event revision and account, and retains the observed portfolio,
+broker and their account/broker versions, an explicit effective-from day, a unique
+setting number, predecessor, request and correlated audit shape.
+
+`ESTIMATED` requires an explicit nonnegative six-place fee and HKD or USD currency;
+explicit zero is not the same as missing. `UNKNOWN` has no amount but can retain an
+explicitly known supported currency, or no currency when that too is unknown. A source
+currency outside the supported set must not be silently replaced or converted. The
+current broker fee may be an omitted default zero and does not establish a historical
+fee estimate. Settings are not automatically inherited by a new physical event revision
+or another account.
+
+The SQL guards require the current owned event revision, consistent active owner and
+account/broker scope, an unrejected revision, a contiguous setting chain, valid explicit
+amount/currency and a correlated audit shape; updates, deletes and replacement writes are
+blocked. Database constraints and shaped hashes do not authenticate a caller, verify an
+audit's canonical contents, select an effective setting, prove actual broker charges or
+grant eligibility. Do not insert fee rows directly into deployment data: an audited
+history/selector, protected writer and projection provenance are not installed yet.
+Before any economic projection, independently revalidate the exact event, source,
+rejection state, recorded eligibility, selected effective-day fee and observed history
+head, account/broker versions and any explicit fee-FX provenance. Later backdated
+assertions must not relabel retained snapshots.
+
 ## Internal retained-projection history reader
 
 `dividend_projection_history.history` reads one supplied owner, event and account in
@@ -1603,6 +1633,11 @@ record a financial fact.
 projection components against the underlying unrounded arithmetic, preserving
 missing FX and unresolved states while rejecting inconsistent snapshots. It does
 not establish that the supplied event, shares or settings are authentic.
+
+`uv run pytest tests/test_dividend_fee_migration.py` checks empty additive storage,
+explicit zero versus unknown amount/currency, owned physical revision and account
+scope, rejection and append-only fences, exact private backups and failed-upgrade rollback.
+SQL-shaped synthetic assertions in these tests are not authenticated fee estimates.
 
 `uv run pytest tests/test_dividend_tax_migration.py tests/test_dividend_tax_service.py`
 checks immutable setting storage, audited history, explicit effective-day/head

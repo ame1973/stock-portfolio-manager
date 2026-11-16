@@ -97,7 +97,7 @@ def populate(engine: Engine) -> tuple[Any, str, dict[str, Any]]:
 
 
 def test_current_head_starts_without_settings_or_projection_history(engine: Engine) -> None:
-    assert schema_head() == "0024_dividend_resolutions"
+    assert schema_head() == "0025_dividend_fee_settings"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql("SELECT count(*) FROM dividend_tax_settings").scalar_one() == 0
         assert (
