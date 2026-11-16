@@ -11,6 +11,7 @@ from sqlalchemy import Connection, text
 from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.dividend_event_service as events
+import spm_api.dividend_fee_service as fees
 import spm_api.dividend_tax_service as tax
 from spm_api.audit import canonical, digest
 from spm_api.decimal_types import INT64_MAX, from_scaled, to_scaled
@@ -28,6 +29,18 @@ class ProjectionHistoryError(ValueError):
 @dataclass(frozen=True, slots=True)
 class RetainedTaxProvenance:
     """A retained owner estimate, not confirmed tax or an economic grant."""
+
+    effective_on: date
+    selected_setting_id: UUID | None = field(repr=False)
+    observed_head_no: int
+    observed_head_id: UUID | None = field(repr=False)
+    status: Literal["MISSING", "UNKNOWN", "ESTIMATED"]
+    scope: Literal["OWNER_ESTIMATE_ONLY"] = "OWNER_ESTIMATE_ONLY"
+
+
+@dataclass(frozen=True, slots=True)
+class RetainedFeeProvenance:
+    """A retained owner estimate, not a confirmed broker charge or economic grant."""
 
     effective_on: date
     selected_setting_id: UUID | None = field(repr=False)
@@ -63,6 +76,7 @@ class RetainedProjection:
     created_at: datetime = field(repr=False)
     reason: str = field(repr=False)
     tax_provenance: RetainedTaxProvenance | None = field(default=None, repr=False)
+    fee_provenance: RetainedFeeProvenance | None = field(default=None, repr=False)
     history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
     scope: Literal["UNVERIFIED_PROJECTION_HISTORY_ONLY"] = "UNVERIFIED_PROJECTION_HISTORY_ONLY"
 
@@ -113,6 +127,14 @@ _TAX_FIELDS = (
     "tax_selected_setting_id",
     "tax_estimate_status",
 )
+_FEE_FIELDS = (
+    "fee_provenance_version",
+    "fee_effective_on",
+    "fee_observed_head_no",
+    "fee_observed_head_id",
+    "fee_selected_setting_id",
+    "fee_estimate_status",
+)
 
 
 def _payload(row: Mapping[str, Any], revision_no: int, reason: str) -> dict[str, Any]:
@@ -125,15 +147,16 @@ def _payload(row: Mapping[str, Any], revision_no: int, reason: str) -> dict[str,
         or not 10 <= len(reason) <= 1000
     ):
         raise ValueError
-    version = row.get("tax_provenance_version")
-    if version is None:
-        if any(row.get(name) is not None for name in _TAX_FIELDS[1:]):
+    provenance: dict[str, Any] = {}
+    for fields in (_TAX_FIELDS, _FEE_FIELDS):
+        version = row.get(fields[0])
+        if version is None:
+            if any(row.get(name) is not None for name in fields[1:]):
+                raise ValueError
+        elif type(version) is int and version == 1:
+            provenance.update({name: row[name] for name in fields})
+        else:
             raise ValueError
-        provenance: dict[str, Any] = {}
-    elif type(version) is int and version == 1:
-        provenance = {name: row[name] for name in _TAX_FIELDS}
-    else:
-        raise ValueError
     return {
         **{key: row[key] for key in _PAYLOAD_FIELDS},
         **provenance,
@@ -258,6 +281,89 @@ def _tax_provenance(
     )
 
 
+def _fee_provenance(
+    con: Connection,
+    owner: UUID,
+    account_id: UUID,
+    reviewed: events.ReviewedEvent,
+    row: Mapping[str, Any],
+    cache: dict[UUID, tuple[fees.FeeSetting, ...]],
+) -> RetainedFeeProvenance | None:
+    version = row.get("fee_provenance_version")
+    if version is None:
+        if any(row.get(name) is not None for name in _FEE_FIELDS[1:]):
+            raise ValueError
+        return None
+    if type(version) is not int or version != 1:
+        raise ValueError
+    record = reviewed.record
+    if record.revision_id not in cache:
+        settings = fees.history(
+            con, owner, record.event_id, record.revision_id, record.revision_no, account_id
+        )
+        if settings is None:
+            raise ValueError
+        cache[record.revision_id] = settings
+    settings = cache[record.revision_id]
+    head_no = _integer(row["fee_observed_head_no"], 0)
+    if head_no > len(settings):
+        raise ValueError
+    effective_on = _day(row["fee_effective_on"])
+    head_id = (
+        events._uuid(row["fee_observed_head_id"])
+        if row["fee_observed_head_id"] is not None
+        else None
+    )
+    selected_id = (
+        events._uuid(row["fee_selected_setting_id"])
+        if row["fee_selected_setting_id"] is not None
+        else None
+    )
+    selection = fees.select(settings[:head_no], effective_on)
+    selected = selection.selected
+    created_at = events._time(row["created_at"])
+    # ponytail: verify each observed audit; batch verified history if chains grow large.
+    for setting in settings[:head_no]:
+        timestamp = con.execute(
+            text("SELECT created_at FROM audit_events WHERE id=:id"), {"id": str(setting.audit_id)}
+        ).scalar_one()
+        if setting.created_at > created_at or events._time(timestamp) > created_at:
+            raise ValueError
+    if (
+        (selection.head_no, selection.head_id) != (head_no, head_id)
+        or (selected.id if selected else None) != selected_id
+        or selection.status != row["fee_estimate_status"]
+        or (
+            selected is not None
+            and (
+                str(selected.portfolio_id) != row["portfolio_id"]
+                or str(selected.broker_id) != row["broker_id"]
+                or selected.account_version != row["account_version"]
+                or selected.broker_version != row["broker_version"]
+                or selected.created_at > created_at
+            )
+        )
+        or (
+            row["state"] == "EXPECTED"
+            and (
+                selected is None
+                or selection.status != "ESTIMATED"
+                or selected.fee is None
+                or to_scaled(selected.fee, 6) != row["fee_original_micro"]
+                or selected.fee_currency != row["fee_original_currency"]
+            )
+        )
+    ):
+        raise ValueError
+    return RetainedFeeProvenance(
+        effective_on=effective_on,
+        selected_setting_id=selected_id,
+        observed_head_no=head_no,
+        observed_head_id=head_id,
+        status=selection.status,
+    )
+
+
 def history(
     con: Connection, owner: UUID, event_id: UUID, account_id: UUID
 ) -> tuple[RetainedProjection, ...] | None:
@@ -275,6 +381,7 @@ def history(
             return None
         revisions: dict[int, events.ReviewedEvent] = {head.record.revision_no: head}
         tax_histories: dict[UUID, tuple[tax.TaxSetting, ...]] = {}
+        fee_histories: dict[UUID, tuple[fees.FeeSetting, ...]] = {}
         rows = con.execute(
             text("""
                 SELECT v.*,r.revision_no,p.owner_id AS retained_portfolio_owner,
@@ -417,6 +524,9 @@ def history(
                     reason=reason,
                     tax_provenance=_tax_provenance(
                         con, owner, account_id, reviewed, row, tax_histories
+                    ),
+                    fee_provenance=_fee_provenance(
+                        con, owner, account_id, reviewed, row, fee_histories
                     ),
                 )
             )

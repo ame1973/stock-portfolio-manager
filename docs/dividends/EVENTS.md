@@ -957,7 +957,8 @@ amount/currency and a correlated audit shape; updates, deletes and replacement w
 blocked. Database constraints and shaped hashes do not authenticate a caller, verify an
 audit's canonical contents, select an effective setting, prove actual broker charges or
 grant eligibility. Do not insert fee rows directly into deployment data; use the
-protected owner API below. Projection fee provenance is not installed yet.
+protected owner API below. New versioned projection snapshots can retain explicit fee
+provenance as described below.
 Before any economic projection, independently revalidate the exact event, source,
 rejection state, recorded eligibility, selected effective-day fee and observed history
 head, account/broker versions and any explicit fee-FX provenance. Later backdated
@@ -1075,6 +1076,37 @@ current authority. Changed inputs on a reused key conflict; stale event/head pin
 corrupt history fails closed with 503. Neither the write nor its replay verifies broker
 charges or creates a dividend entitlement, projection, receipt, cash movement or FX rate.
 
+## Projection fee provenance
+
+Migration `0026_dividend_projection_fee` adds six nullable fee-provenance columns to
+immutable projection versions without adding a business table. Existing projections,
+fee settings, event decisions, entitlements, receipts, cash, historical FX and prior
+audit fingerprints remain unchanged. Legacy rows retain unavailable provenance; an
+old amount, a broker default or an existing fingerprint is not proof of an effective
+fee setting or an actual broker charge. Provenance cannot be attached to an old
+immutable projection after the fact.
+
+A version 1 snapshot retains an explicit fee-effective day, observed fee-history head
+number and identity, selected setting identity and independent `MISSING`, `UNKNOWN` or
+`ESTIMATED` status. An empty head differs from a nonempty head with no applicable
+setting. `EXPECTED` projections require an `ESTIMATED` setting whose original amount
+and currency match the snapshot exactly; missing or unknown cannot become a zero fee.
+Non-amount states do not acquire a financial amount. SQL checks the complete observed
+head, effective-day selection, owned account/broker scope and each observed setting and
+correlated audit timestamp. SQL shape is not authentication or canonical audit proof.
+
+The historical projection reader validates the complete fee and event/rejection chains,
+then repeats the original selection from the snapshot's explicitly retained prefix.
+Later backdated settings do not relabel an old projection, while a later corrupt audit
+fails the full read closed. Version 1 fee fields participate in that projection's
+canonical audit fingerprint, and unversioned legacy fingerprints are preserved. The
+original fee currency and fee-to-event FX rate/source are separate from the independent
+HKD valuation FX already retained by the projection. A nonzero foreign fee needs its
+explicit conversion; an explicit foreign zero needs no invented rate. These rates and
+owner estimates are retained assertions, not proof of actual broker charges or market
+FX. No production economic projection or receipt writer is installed, and event
+publication remains fenced until atomic rebuilding and receipt reconciliation exist.
+
 ## Internal retained-projection history reader
 
 `dividend_projection_history.history` reads one supplied owner, event and account in
@@ -1087,8 +1119,9 @@ empty history, not a zero entitlement. Unreadable or inconsistent history fails 
 a fixed error, and private financial values and reasons are omitted from representations.
 
 The projection audit fingerprint covers the retained snapshot fields, physical event
-revision number, a hash of the reason and a fixed unverified-scope label. Version 1
-also covers the explicit tax provenance above; the audit ID is correlated separately.
+revision number, a hash of the reason and a fixed unverified-scope label. Independently
+versioned provenance fields also cover the explicit tax and fee selections above; the
+audit ID is correlated separately.
 Future schema changes must preserve the fingerprint contract for existing rows. A
 matching hash only verifies consistency with the stored audit: it does not prove that
 the actor was authenticated, the account actually held the stated shares, the fee
@@ -1818,6 +1851,11 @@ checks legacy fingerprint preservation, private pre-upgrade backup, atomic migra
 rollback, distinct missing/unknown/zero estimates, exact selected/head/day pins,
 backdated decisions and fail-closed retained history. It does not establish session
 authentication, confirmed tax or a financial projection writer.
+`uv run pytest tests/test_dividend_projection_fee.py tests/test_dividend_projection_fee_safety.py tests/test_dividend_projection_fee_migration.py`
+checks additive migration and private backup, unchanged historical fingerprints,
+explicit fee head/day/status, original amount/currency and audit chronology, later
+backdated settings, foreign zero and fail-closed corruption. These synthetic tests do
+not establish eligibility, actual charges, live FX or an economic writer.
 
 `uv run pytest tests/test_dividend_projection_migration.py` exercises isolated
 upgrade/rollback and private backup, immutable version chains, owner and current
