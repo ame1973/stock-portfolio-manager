@@ -507,9 +507,10 @@ async def test_security_is_rechecked_in_the_writer_before_new_or_cached_action(
     data = body(trade, operation, book)
     headers = version_headers(client, 1, key="synthetic-unverified-writer-security")
     if replay:
-        assert (
-            await client.post(path(trade, operation), json=data, headers=headers)
-        ).status_code == 200
+        initial = await client.post(path(trade, operation), json=data, headers=headers)
+        assert initial.status_code == 200, (
+            f"Initial correction failed: {initial.json().get('code')}"
+        )
     checkpoint: dict[str, Any] = {}
 
     def changed_after_dependency(*args: Any, **kwargs: Any) -> Any:
