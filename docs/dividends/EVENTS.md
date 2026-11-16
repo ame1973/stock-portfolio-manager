@@ -438,7 +438,8 @@ ownership, create income or authorize receipts. `CONFLICT`, `INCOMPLETE` and
 is valid only at the instant of the check: a caller that changes the event,
 candidate or related action scope in the same transaction must recheck before
 using it, and must never carry it into a different transaction. It performs no
-provider requests or credential-file access. No projection writer consumes it yet.
+provider requests or credential-file access. The internal recorded-projection writer
+below consumes this fence but does not authenticate a caller or grant income.
 
 ## Recorded account-share calculation
 
@@ -582,8 +583,8 @@ Migration `0020_dividend_projection_history` adds an initially empty, append-onl
 `dividend_projection_versions` table, bringing this schema revision to 59 business
 tables. It does not modify, reparent or backfill old entitlements, receipts, cash
 postings, historical FX or audit records. Existing receipts stay linked to their
-original entitlement; the new table has no receipt linkage or production
-projection writer. Its separate internal history reader is described below.
+original entitlement; the new table has no receipt linkage. The separate internal
+history reader and recorded-projection writer are described below.
 
 A version records an explicitly identified managed event, its current physical
 revision and account, a consecutive per-event/account predecessor chain, the
@@ -640,8 +641,8 @@ confirm actual withholding. SQL-shaped rows are not an income record or grant.
 The separate internal controller below validates audit content and selection; the
 protected API described below adds authentication but does not confirm withholding.
 The projection provenance retains an optional selected setting, observed history
-head and effective day without rewriting existing projection fingerprints. A future
-projection writer must revalidate them in its own writer transaction and keep
+head and effective day without rewriting existing projection fingerprints. The internal
+projection writer below revalidates them in its own writer transaction and keeps
 `ESTIMATED` separate from computational quality. Downgrade refuses to remove history;
 restore a validated pre-upgrade backup instead.
 
@@ -750,8 +751,8 @@ history still fails the complete read closed. Versioned tax fields are included 
 that projection's canonical audit fingerprint, while legacy fingerprints stay
 unchanged. The explicit day is not inferred from ex-date, receipt date or the server
 clock. These checks establish only consistency of retained owner assertions, not
-actual withholding, eligible shares or an economic grant. No production projection
-writer is installed. Event publication remains fenced until
+actual withholding, eligible shares or an economic grant. The internal writer below
+does not authenticate or reconcile receipts. Event publication remains fenced until
 an authenticated atomic rebuild and receipt reconciliation are implemented.
 
 ## Inert revision-rejection storage
@@ -778,7 +779,7 @@ remain retained and require explicit later reconciliation, not silent deletion.
 
 The SQL guards do not authenticate a request or verify canonical audit content. The
 protected rejection decision below adds those HTTP checks, but there is still no
-production economic writer. Do not insert rejection rows or invoke internal writers
+authenticated economic or receipt writer. Do not insert rejection rows or invoke internal writers
 on deployment data: where financial history exists, a resolution remains fenced
 until atomic projection/receipt reconciliation is implemented.
 
@@ -803,8 +804,8 @@ rejection state **only**: it does not revalidate a dismissed candidate, basis/ac
 ownership completeness, eligibility, fees, tax or FX, and it is not a financial grant.
 Callers must perform all other current-source and authorization checks separately and
 repeat this fence after any relevant same-transaction change. A historical WAL read
-cannot be promoted into a current writer. No production economic writer or HTTP endpoint
-consumes this internal fence yet.
+cannot be promoted into a current writer. The internal recorded-projection writer below
+consumes this fence; it is not an authenticated economic or receipt endpoint.
 
 ## Internal rejection-decision writer
 
@@ -1028,7 +1029,7 @@ setting is selected. A selected assertion must still match the current account s
 The result remains `UNVERIFIED_FEE_SELECTION_ONLY`; in particular, `MISSING` or
 `UNKNOWN` is not zero. Callers must separately authenticate, establish eligibility and
 verify all other tax, fee-FX, valuation and projection requirements. There is no confirmed
-charge, economic projection or receipt writer.
+charge, authenticated economic grant or receipt writer.
 
 ## Protected fee-estimate API
 
@@ -1104,8 +1105,64 @@ original fee currency and fee-to-event FX rate/source are separate from the inde
 HKD valuation FX already retained by the projection. A nonzero foreign fee needs its
 explicit conversion; an explicit foreign zero needs no invented rate. These rates and
 owner estimates are retained assertions, not proof of actual broker charges or market
-FX. No production economic projection or receipt writer is installed, and event
-publication remains fenced until atomic rebuilding and receipt reconciliation exist.
+FX. The internal recorded-projection writer below cannot authenticate or post a receipt;
+event publication remains fenced until atomic rebuilding and reconciliation exist.
+
+## Internal recorded-projection writer
+
+`dividend_projection_writer.save` builds one immutable event/account projection from
+recorded facts in an existing `BEGIN IMMEDIATE` writer transaction. The caller supplies
+an active owner, new projection ID and request ID; the observed event physical revision,
+account/portfolio/broker IDs and versions, portfolio data revision and projection head;
+an exchange-local `as_of` and explicit eligibility rule; independent tax and fee
+effective days, setting-head numbers and IDs, and selected-setting IDs; optional
+fee-to-event and event-to-HKD FX rates with their sources; and a reason. Financial
+values are decimal strings, not binary floats. Version numbers remain integers inside
+this internal API; any future HTTP contract must preserve exact INT64 digits as strings.
+
+Before writing, the service rechecks the complete retained projection and source
+histories, current event/candidate/basis, rejection state, account/broker scope, the
+portfolio revision, recorded trade/action/transfer history and both full tax and fee
+setting chains. A newly created projection cannot predate the recorded source,
+rejection, ledger, origin/review, settings, audit or portfolio-invalidation timestamps
+it depends on. These timestamps are retained assertions and do not prove when a source
+was published, authenticate an actor or establish complete ownership. The derived
+snapshot and separate normalized-intent audit are appended atomically in a safe
+savepoint. If a later operation in the same transaction changes an input, a caller must
+revalidate it again before use. No provider request, password hashing, receipt, cash
+posting or old financial fact is made or changed.
+
+A positive recorded quantity with explicit `ESTIMATED` tax and fee can produce an
+`EXPECTED` calculation. `MISSING` or `UNKNOWN` tax or fees, an affected unresolved
+action, unresolved eligibility/basis, unverified retired-trade origin or a reviewed
+creation gap produces `NEEDS_REVIEW` instead of an invented zero or amount. An empty
+recorded position produces `NO_POSITION`, not proof of absent ownership; a withdrawn
+event produces `CANCELLED`. Every result retains `history_completeness=UNVERIFIED`.
+If `as_of` precedes the ex-date, even an `EXPECTED` result describes recorded holdings
+on that day, not accrued income or final eligible shares. The caller must explicitly
+choose review for uncertain due-bill or other nonordinary conventions.
+
+Same-currency identity conversion is exact. A nonzero fee in a different currency
+needs its own explicit conversion; an explicitly estimated zero needs no invented
+fee rate. Missing USD-to-HKD valuation FX leaves the HKD amount unavailable with
+`MISSING_FX`, not a default rate or zero. The snapshot retains the independent owner
+estimates and conversion sources; computational `OK` is not a confirmed charge,
+withholding or live-market FX.
+
+An identical request and normalized intent replays its original validated historical
+projection without writing, even after a later ledger or setting change. The replay
+also checks the separate intent audit against the physical projection, including its
+observed heads and FX. A changed request or reused identity conflicts; later corrupt
+history fails closed. Historical replay is not a current-use grant. Derived snapshots
+do not advance their own input `data_revision` or enqueue a new rebuild, which would
+instantly stale the snapshot; a future authenticated client must invalidate its own
+query caches and independently revalidate current facts before economic use.
+
+This is an internal primitive, not a session/Origin/CSRF/reauthenticated API, a complete
+projection-usage fence, receipt reconciliation or a dividend UI. Do not invoke it on
+deployment data. Existing receipts and locked FX are preserved; creating a snapshot
+also retains the existing event-revision publication fence until authenticated atomic
+rebuilding and receipt reconciliation are installed.
 
 ## Internal retained-projection history reader
 
@@ -1131,9 +1188,9 @@ its stored trade-history labels are also unverified assertions. An inactive owne
 history can remain readable internally but cannot pass the active-owner current-use
 fence. Callers must authenticate separately and recheck the event, ledger, eligibility,
 account configuration and authorization in a writer transaction before economic use.
-There is no projection rebuild or receipt writer, event publication remains fenced,
-and computational `OK` is not confirmed tax. This read performs no writes or provider
-access.
+There is no authenticated atomic event-revision rebuild or receipt writer; event publication
+remains fenced, and computational `OK` is not confirmed tax. This read performs no writes
+or provider access.
 
 ## Inert trade-audit origin storage
 
@@ -1863,6 +1920,13 @@ revision/data-revision fences, competing inserts, integer extremes, nullable FX
 and coexistence with old entitlement/receipt/cash records. It also checks that a
 well-shaped but economically inconsistent row can be stored and cannot advance
 an event. These tests do not authenticate the row or implement a projection writer.
+
+`uv run pytest tests/test_dividend_projection_writer*.py tests/test_dividend_projection_source_time.py`
+checks actual recorded ledger replay, exact head/day/account pins, unresolved and
+unverified states, independent foreign-fee and valuation FX, audit chronology,
+concurrent heads, rollback, historical replay and retained receipt/cash/FX. These
+isolated synthetic tests do not establish session authentication, verified ownership,
+actual broker charges, current-use authority, live FX or receipt reconciliation.
 
 `uv run pytest tests/test_dividend_projection_history.py` checks complete retained
 chains, canonical fingerprints, private fixed errors, exact component arithmetic,

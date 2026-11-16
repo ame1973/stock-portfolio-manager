@@ -49,6 +49,7 @@ class RecordedEligibilityBook:
     trade_history_audit_scope: TradeHistoryAuditScope
     trade_creation_audit_scope: TradeCreationAuditScope
     accounts: tuple[AccountEligibility, ...] = field(repr=False)
+    latest_input_at: datetime | None = field(default=None, repr=False)
 
 
 def _canonical_uuid(value: object) -> UUID:
@@ -69,6 +70,15 @@ def _day(value: object) -> date:
     return result
 
 
+def _timestamp(value: object) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError("Expected an aware timestamp")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.utcoffset() is None:
+        raise ValueError("Expected an aware timestamp")
+    return parsed.astimezone(UTC)
+
+
 def _sequence(row: RowMapping, kind: str) -> None:
     _canonical_uuid(row["id"])
     _canonical_uuid(row["root_id"])
@@ -87,6 +97,7 @@ def _audit_entry(
     kind: Literal["TRADE", "TRANSFER", "ACTION"],
     action: str,
     owner: str | None,
+    observed: list[datetime],
 ) -> RowMapping:
     entity = {"TRADE": "trade", "TRANSFER": "security_transfer", "ACTION": "corporate_action"}[kind]
     entries = (
@@ -119,6 +130,7 @@ def _audit_entry(
     recorded = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
     if recorded.utcoffset() is None or stamp(recorded.astimezone(UTC)) != timestamp:
         raise ValueError("Invalid audit timestamp")
+    observed.append(recorded.astimezone(UTC))
     before, after = entry["before_sha256"], entry["after_sha256"]
 
     def valid_hash(value: object) -> bool:
@@ -169,11 +181,14 @@ def _audited(
     row: RowMapping,
     kind: Literal["TRADE", "TRANSFER", "ACTION"],
     owner: str | None,
+    observed: list[datetime],
     *,
     latest: bool,
     previous: RowMapping | None,
 ) -> None:
-    creation = _audit_entry(con, row, kind, "CREATE" if row["revision"] == 1 else "REVISE", owner)
+    creation = _audit_entry(
+        con, row, kind, "CREATE" if row["revision"] == 1 else "REVISE", owner, observed
+    )
     if kind == "ACTION":
         expected_reason = row["reason"]
     elif row["revision"] == 1 and kind == "TRANSFER":
@@ -244,7 +259,7 @@ def _audited(
     if hashes is not None and creation["after_sha256"] not in hashes:
         raise ValueError("Inconsistent fact audit")
     if latest and row["status"] == "VOID":
-        void = _audit_entry(con, row, kind, "VOID", owner)
+        void = _audit_entry(con, row, kind, "VOID", owner, observed)
         if kind != "TRADE" and void["before_sha256"] not in _predecessor_hashes(
             con, row, kind, statuses=tuple(matching_statuses) if kind == "ACTION" else None
         ):
@@ -259,12 +274,16 @@ def _chains(
     rows: Sequence[RowMapping],
     kind: Literal["TRADE", "TRANSFER", "ACTION"],
     owner: str | None,
+    observed: list[datetime],
 ) -> bool:
     """Reject incomplete histories and report retired trades without reconstructible origins."""
     groups: dict[str, list[RowMapping]] = {}
     unverified = False
     for row in rows:
         _sequence(row, kind)
+        observed.append(_timestamp(row["created_at"]))
+        if kind == "TRADE":
+            observed.append(_timestamp(row["updated_at"]))
         if (
             type(row["revision"]) is not int
             or not 1 <= row["revision"] <= INT64_MAX
@@ -307,7 +326,7 @@ def _chains(
                 )
                 if row["status"] not in statuses or (not latest and row["status"] == "VOID"):
                     raise ValueError("Inconsistent fact lifecycle")
-            _audited(con, row, kind, owner, latest=latest, previous=previous)
+            _audited(con, row, kind, owner, observed, latest=latest, previous=previous)
             if kind == "TRADE":
                 if owner is None:
                     raise ValueError("Missing trade owner")
@@ -322,11 +341,12 @@ def _chains(
                 origin = trade_audit.get_origin(con, UUID(owner), UUID(row["id"]))
                 if origin is None:
                     raise ValueError("Missing retained trade origin")
+                observed.append(_timestamp(origin.captured_at))
                 if retired:
                     retirement_row = row if latest else history[number]
                     retirement_action = "VOID" if latest else "REVISE"
                     retirement = _audit_entry(
-                        con, retirement_row, "TRADE", retirement_action, owner
+                        con, retirement_row, "TRADE", retirement_action, owner, observed
                     )
                     if retirement["before_sha256"] != origin.before_sha256:
                         raise ValueError("Inconsistent trade retirement audit")
@@ -352,7 +372,12 @@ def _accounts(con: Connection, owner: str, portfolio: str) -> list[str]:
 
 
 def _fact_scope(
-    con: Connection, owner: str, portfolio: str, security: str, accounts: set[str]
+    con: Connection,
+    owner: str,
+    portfolio: str,
+    security: str,
+    accounts: set[str],
+    observed: list[datetime],
 ) -> tuple[bool, bool, bool]:
     # ponytail: scan relevant retained roots; add indexed checkpoints if measured histories grow.
     params = {"portfolio": portfolio, "security": security}
@@ -387,7 +412,7 @@ def _fact_scope(
         ):
             raise ValueError("Inconsistent trade scope")
         _day(row["trade_date"])
-    unverified_trades = _chains(con, trades, "TRADE", owner)
+    unverified_trades = _chains(con, trades, "TRADE", owner, observed)
     reviewed_creation_gap = False
     for row in trades:
         has_review = con.execute(
@@ -399,6 +424,7 @@ def _fact_scope(
         reviews = trade_history_review.history(con, UUID(owner), UUID(row["id"]))
         if not reviews:
             raise ValueError("Missing trade review history")
+        observed.extend(_timestamp(review.created_at) for review in reviews)
         if any(review.gap == "MISSING_CREATION_AUDIT" for review in reviews):
             reviewed_creation_gap = True
 
@@ -445,7 +471,7 @@ def _fact_scope(
         ):
             raise ValueError("Inconsistent transfer scope")
         _day(row["transfer_date"])
-    _chains(con, transfers, "TRANSFER", owner)
+    _chains(con, transfers, "TRANSFER", owner, observed)
     return (
         any(row["status"] in {"SUPERSEDED", "VOID"} for row in trades),
         unverified_trades,
@@ -453,7 +479,7 @@ def _fact_scope(
     )
 
 
-def _actions(con: Connection, security: str) -> None:
+def _actions(con: Connection, security: str, observed: list[datetime]) -> None:
     rows = (
         con.execute(
             text("""
@@ -497,7 +523,7 @@ def _actions(con: Connection, security: str) -> None:
                 raise ValueError("Invalid action direction")
         elif row["status"] not in {"NEEDS_REVIEW", "VOID"}:
             raise ValueError("Unallocated action cannot be confirmed")
-    _chains(con, rows, "ACTION", None)
+    _chains(con, rows, "ACTION", None, observed)
 
 
 def get(
@@ -554,10 +580,11 @@ def get(
             raise ValueError("Invalid portfolio data revision")
         account_ids = _accounts(con, str(owner_id), str(portfolio_id))
         account_set = set(account_ids)
+        observed: list[datetime] = []
         retired_trades, unverified_trades, reviewed_creation_gap = _fact_scope(
-            con, str(owner_id), str(portfolio_id), str(security_id), account_set
+            con, str(owner_id), str(portfolio_id), str(security_id), account_set, observed
         )
-        _actions(con, str(security_id))
+        _actions(con, str(security_id), observed)
         events, unresolved = history_events(con, str(portfolio_id))
         for event in events:
             operation = event.operation
@@ -606,6 +633,7 @@ def get(
             trade_scope,
             creation_scope,
             accounts,
+            max(observed, default=None),
         )
     except (ValueError, TypeError, KeyError, OverflowError):
         raise EligibilityHistoryError("ELIGIBILITY_HISTORY_UNAVAILABLE") from None

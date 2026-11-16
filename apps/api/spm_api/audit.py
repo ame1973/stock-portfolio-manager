@@ -36,8 +36,13 @@ def audit(
     before: dict[str, Any] | None = None,
     after: dict[str, Any] | None = None,
     reason: str = "",
+    at: datetime | None = None,
 ) -> None:
     """Callers pass public entity values only, never passwords, cookies, or provider keys."""
+    if at is not None:
+        if not isinstance(at, datetime) or at.utcoffset() is None:
+            raise ValueError("Audit timestamps must be timezone-aware")
+        at = at.astimezone(UTC)
     con.execute(
         text("""
         INSERT INTO audit_events
@@ -54,6 +59,6 @@ def audit(
             "after": digest(canonical(after)) if after is not None else None,
             "reason": reason,
             "request": request_id,
-            "now": stamp(),
+            "now": stamp(at),
         },
     )
