@@ -1,50 +1,32 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, type components } from "@spm/contracts";
-import { z } from "zod";
 import { SelectField } from "../../components/forms/fields";
 import { FilterChips } from "../../components/forms/filter-chips";
 import { Button } from "../../components/ui/button";
+import { EditorSheet } from "../../components/ui/editor-sheet";
 import { checked } from "../../lib/api";
 import { useDesktop } from "../../lib/use-desktop";
 import { useViewState } from "../../lib/view-state";
-import { date, price } from "../ledger/inputs";
 import { SecurityName } from "../ledger/ReferenceName";
 import { RecordList } from "../settings/RecordList";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { usePageState } from "../settings/data";
 import { SourceValues } from "../sources/details";
 import { basisLabels, eventTypeLabels, termLabels } from "./event-labels";
-import { eventTypes } from "./event-validation";
+import { CandidateCreateForm, CandidateRevisionForm } from "./CandidateForm";
+import { validCandidate } from "./candidate-validation";
 
 type Candidate = components["schemas"]["CandidateRecord"];
 type Field = components["schemas"]["CandidateAssessment"]["conflicting_fields"][number];
-const fieldNames = ["ex_date", "announce_date", "record_date", "pay_date", "event_type", "currency", "dps", "adjustment_basis"] as const;
-const fields = z.array(z.enum(fieldNames));
-const uuid = z.uuid();
-const basis = z.enum(["AS_DECLARED", "SPLIT_ADJUSTED", "UNKNOWN"]);
-const optionalDate = date.nullish();
-const candidateSchema = z.object({
-  id: uuid, revision_id: uuid, version: z.int().min(1).max(2_147_483_647), state: z.enum(["OPEN", "DISMISSED"]),
-  terms: z.object({ security_id: uuid, ex_date: optionalDate, announce_date: optionalDate, record_date: optionalDate, pay_date: optionalDate,
-    event_type: z.enum(eventTypes), dps: price.nullish(), currency: z.enum(["HKD", "USD"]).nullish(), adjustment_basis: basis }),
-  matches: z.array(z.object({ observation_id: uuid, source_sha256: z.string().regex(/^[a-f0-9]{64}$/), basis_assertion_id: uuid.nullish(), reason: z.string() })).max(100),
-  change_reason: z.string(), created_at: z.string(),
-  assessment: z.object({ status: z.enum(["PROVISIONAL", "CORROBORATED", "CONFLICT", "INCOMPLETE"]), independent_origins: z.array(z.string()),
-    eligible_observation_ids: z.array(uuid), conflicting_fields: fields, incomplete_reasons: z.array(z.string()),
-    checks: z.array(z.object({ observation_id: uuid, supporting_fields: fields, conflicting_fields: fields, incomplete_reasons: z.array(z.string()),
-      comparison_dps: price.nullable(), comparison_basis: basis, basis_assertion_id: uuid.nullable() })) }),
-  scope: z.literal("CANDIDATE_REVIEW_ONLY"), canonical_adoption: z.literal("NOT_ADOPTED"),
-  canonical_adoption_scope: z.literal("RESPONSE_ONLY_NOT_LINKAGE"), current_use_scope: z.literal("REVALIDATION_REQUIRED"),
-});
 
 function verifiedPage<T extends { items: Candidate[]; next_cursor?: string | null }>(page: T, scope?: { id: string; security: string }): T {
   const ids = new Set<string>();
   const revisions = new Set<string>();
   let previousVersion = 2_147_483_648;
   if (!page || !Array.isArray(page.items) || page.items.some(record => {
-    if (!candidateSchema.safeParse(record).success || revisions.has(record.revision_id)) return true;
+    if (!validCandidate(record) || revisions.has(record.revision_id)) return true;
     if (scope && (record.id !== scope.id || record.terms.security_id !== scope.security || record.version >= previousVersion)) return true;
     if (!scope && ids.has(record.id)) return true;
     ids.add(record.id); revisions.add(record.revision_id); previousVersion = record.version;
@@ -99,7 +81,7 @@ function CandidateHistory({ record }: { record: Candidate }) {
     </article>}</RecordList></section>;
 }
 
-function CandidateCard({ record }: { record: Candidate }) {
+function CandidateCard({ record, disabled, onEdit }: { record: Candidate; disabled: boolean; onEdit: (record: Candidate) => void }) {
   const desktop = useDesktop();
   const [open, setOpen] = useState(false);
   const [history, setHistory] = useState(false);
@@ -109,13 +91,19 @@ function CandidateCard({ record }: { record: Candidate }) {
       <span className="rounded-md border border-border px-2 py-1 text-sm">{states[record.state]}</span></div>
     {!desktop && <Button variant="outline" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? "收合候選資料" : "查看候選資料"}</Button>}
     {(desktop || open) && <div className="grid min-w-0 gap-5"><CandidateDetails record={record} />
-      <div><Button variant="outline" aria-expanded={history} onClick={() => setHistory(value => !value)}>{history ? "收合候選修訂歷史" : "查看候選修訂歷史"}</Button></div>
+      <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={disabled || record.version >= 2_147_483_647} onClick={() => onEdit(record)}>修訂候選資料</Button>
+        <Button variant="outline" aria-expanded={history} onClick={() => setHistory(value => !value)}>{history ? "收合候選修訂歷史" : "查看候選修訂歷史"}</Button></div>
+      {record.version >= 2_147_483_647 && <p className="text-sm text-danger">候選版本已達上限，不能建立新修訂。</p>}
       {history && <CandidateHistory record={record} />}</div>}
   </article>;
 }
 
+type Editor = { mode: "create" } | { mode: "revise"; target: Candidate };
 const initialFilters = { security_id: "", state: "" as "" | Candidate["state"] };
 export function DividendCandidatesPage() {
+  const cache = useQueryClient();
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const page = usePageState("dividends:candidates");
   const [filters, setFilters] = useViewState("filters:dividends:candidates", initialFilters);
   const result = useQuery({ queryKey: ["dividends", "candidates", filters, page.q, page.cursor], staleTime: 0,
@@ -124,10 +112,19 @@ export function DividendCandidatesPage() {
     } }, signal }))),
   });
   function filter(change: Partial<typeof initialFilters>) { setFilters(previous => ({ ...previous, ...change })); page.search(page.q); }
-  return <div className="grid min-w-0 gap-6"><header className="max-w-3xl"><h1 className="text-2xl font-semibold">股息候選資料</h1>
+  const ready = !!result.data && !result.isFetching && !result.isError && !result.isPaused;
+  function closeEditor() { setEditor(null); void cache.invalidateQueries({ queryKey: ["dividends"] }); }
+  return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 className="text-2xl font-semibold">股息候選資料</h1>
     <p className="mt-2 text-sm leading-7 text-secondary">檢視已記錄的候選條款、來源關聯和歷史比較。這裡不驗證文件、不判斷持倉資格，也不產生應收或實收；未知不會補零。</p>
     <div className="flex flex-wrap gap-x-5"><Link to="/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">返回股息事件</Link>
-      <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div></header>
+      <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div></div>
+    <Button data-editor-create disabled={!ready || editor !== null} onClick={() => { setNotice(null); setEditor({ mode: "create" }); }}>新增股息候選</Button></header>
+    {!ready && <p className="text-sm leading-7 text-secondary">候選清單尚未完成重新核對；目前不能開始新增或修訂，請等候或重試。</p>}
+    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆候選決定 {notice}；可能是原鍵歷史回覆，請重新載入核對目前版本與來源。這不是文件驗證、事件關聯或實收。</p>}
+    {editor && <EditorSheet title={editor.mode === "create" ? "新增股息候選" : "修訂股息候選"} onClose={closeEditor}>
+      {editor.mode === "create" ? <CandidateCreateForm onCancel={closeEditor} onSaved={record => { setNotice(record.id); closeEditor(); }} />
+        : <CandidateRevisionForm target={editor.target} onCancel={closeEditor} onSaved={record => { setNotice(record.id); closeEditor(); }} />}
+    </EditorSheet>}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選股息候選</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><ReferenceSelect kind="securities" activeOnly={false} label="候選證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
         <SelectField label="候選狀態" value={filters.state} onChange={event => filter({ state: event.target.value as typeof filters.state })}><option value="">全部候選狀態</option>{(Object.keys(states) as Candidate["state"][]).map(state => <option key={state} value={state}>{states[state]}</option>)}</SelectField>
@@ -140,6 +137,6 @@ export function DividendCandidatesPage() {
       { id: "amount", header: "每股候選金額，非收入", cell: ({ row }) => amount(row.original.terms) },
       { id: "state", header: "候選狀態", cell: ({ row }) => states[row.original.state] },
       { id: "assessment", header: "歷史比較", cell: ({ row }) => assessments[row.original.assessment.status] },
-    ]}>{record => <CandidateCard record={record} />}</RecordList>
+    ]}>{record => <CandidateCard record={record} disabled={!ready || editor !== null} onEdit={target => { setNotice(null); setEditor({ mode: "revise", target }); }} />}</RecordList>
   </div>;
 }

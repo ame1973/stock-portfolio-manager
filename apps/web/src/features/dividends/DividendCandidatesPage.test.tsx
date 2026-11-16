@@ -44,6 +44,51 @@ async function openCandidate() {
 }
 
 describe("dividend candidate review workspace", () => {
+  it("opens a create sheet only after a usable candidate read and makes no write on open", async () => {
+    reads(); const post = vi.spyOn(api, "POST"); renderPage();
+    const opener = await screen.findByRole("button", { name: "新增股息候選" });
+    await waitFor(() => expect(opener).toBeEnabled()); opener.focus(); fireEvent.click(opener);
+    const sheet = await screen.findByRole("dialog", { name: "新增股息候選" });
+    expect(within(sheet).getByRole("form", { name: "新增股息候選" })).toBeVisible();
+    expect(within(sheet).getByRole("button", { name: "關閉編輯" })).toHaveFocus();
+    fireEvent.click(within(sheet).getByRole("button", { name: "關閉編輯" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(opener).toHaveFocus(); expect(post).not.toHaveBeenCalled();
+  });
+
+  it("opens revision with the exact observed stable and physical identifiers", async () => {
+    reads(); const patch = vi.spyOn(api, "PATCH"); renderPage(); const card = await openCandidate();
+    fireEvent.click(within(card).getByRole("button", { name: "修訂候選資料" }));
+    const sheet = await screen.findByRole("dialog", { name: "修訂股息候選" });
+    expect(sheet).toHaveTextContent(candidate.id); expect(sheet).toHaveTextContent(candidate.revision_id); expect(sheet).toHaveTextContent("版本 2");
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("keeps create and revision unavailable when a refresh fails and retains stale data", async () => {
+    const get = reads(); let attempts = 0;
+    get.mockImplementation(async path => {
+      if (path === "/api/v1/dividends/candidates") return ++attempts === 1
+        ? reply({ items: [candidate], next_cursor: null })
+        : { error: { code: "CANDIDATE_HISTORY_UNAVAILABLE", message: "synthetic private history" }, response: new Response(null, { status: 503 }) };
+      if (path === "/api/v1/securities/{id}") return reply({ id: candidate.terms.security_id, display_ticker: "SYN", exchange_code: "NASDAQ" });
+      return reply(empty);
+    });
+    renderPage(); const card = await openCandidate();
+    expect(within(card).getByRole("button", { name: "修訂候選資料" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新載入股息候選" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("候選歷史無法安全核對");
+    expect(screen.getByText(/以下為上次載入的資料/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "新增股息候選" })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "修訂候選資料" })).toBeDisabled();
+  });
+
+  it("does not enable editing for a candidate with an exhausted version", async () => {
+    reads({ "/api/v1/dividends/candidates": { items: [{ ...candidate, version: 2_147_483_647 }], next_cursor: null } });
+    renderPage(); const card = await openCandidate();
+    expect(within(card).getByRole("button", { name: "修訂候選資料" })).toBeDisabled();
+    expect(card).toHaveTextContent("版本已達上限");
+  });
+
   it("preserves exact proposed values, unknowns and historical source boundaries", async () => {
     const get = reads(); const post = vi.spyOn(api, "POST"); const patch = vi.spyOn(api, "PATCH"); renderPage();
     const card = await openCandidate();

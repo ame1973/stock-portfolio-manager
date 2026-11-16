@@ -26,6 +26,7 @@
     "test:e2e:dividend-withdrawal": "node tests/e2e/credentials/check.mjs --dividend-withdrawal",
     "test:e2e:dividend-override": "node tests/e2e/credentials/check.mjs --dividend-override",
     "test:e2e:dividend-candidates": "node tests/e2e/credentials/check.mjs --dividend-candidates",
+    "test:e2e:candidate-write": "node tests/e2e/credentials/check.mjs --candidate-write",
     "generate:contracts": "uv run python scripts/export_openapi.py && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",
     "check:contracts": "uv run python scripts/export_openapi.py --check && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts --check"
   },

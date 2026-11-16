@@ -200,8 +200,8 @@ The list is not a document-verification, ownership, income or linkage lookup.
 In particular, `NOT_ADOPTED` describes only the review response and cannot be
 used to conclude that a candidate has never been associated with an event. Reads
 are private and no-store; search and filters remain in login-session memory, not
-browser storage or the URL. This screen does not create or revise candidates,
-select sources, adopt events, calculate eligibility or write receipts.
+browser storage or the URL. The read-only views do not themselves adopt events,
+calculate eligibility or write receipts.
 
 The isolated `npm run test:e2e:dividend-candidates` fixture uses a new synthetic
 application root, a synthetic manually cited source and real browser to check
@@ -212,6 +212,49 @@ after viewing. The fixture links the original candidate revision to an event,
 then revises the candidate and confirms that its response still carries the
 response-only `NOT_ADOPTED` marker. It does not use a deployment database,
 network provider, worker or screenshot.
+
+## Candidate decision forms
+
+The candidate workspace also provides explicit creation and revision sheets when
+its list read is usable. A revision freezes the displayed candidate, physical
+revision and version; the request uses the observed version as `If-Match` and the
+server rechecks its retained chain. The stable security cannot be changed on a
+revision. A failed or paused list read, or an exhausted candidate version,
+prevents starting a revision. Each form requires a fresh change reason and a
+separate acknowledgment that this is review only. Choosing `DISMISSED` records an
+append-only decision, not deletion, event withdrawal or a receipt reversal.
+
+A user enters each original observation UUID and SHA-256 fingerprint, association
+reason and, optionally, an already retained owned basis declaration UUID. A link
+opens the source-observation workspace in another tab for copying exact values;
+the form neither guesses matches nor creates basis declarations. Old associations
+are displayed for explicit review and can be edited or removed. A stale or
+mismatched source/basis is rejected by the server; to dismiss after a basis has
+become stale, explicitly remove that reference. An empty match list requires its
+own confirmation, which is reset after removing the final association. Duplicate
+observations, invalid UUIDs, oversized UTF-8 association payloads and invalid
+amounts are rejected before writing. Empty dates, amount and currency stay unknown;
+zero must be entered explicitly. No quote currency or guessed date is inserted.
+
+Requests use the authenticated session, CSRF and idempotency headers already
+required by the candidate API; this form does not claim server-enforced recent
+password reauthentication. An uncertain retry keeps the same in-memory intent key;
+normalization for comparing equivalent exact decimal spellings uses strings only,
+and the entered decimal string is still sent unchanged. Changing the actual
+submitted intent generates a new key. The returned stable/physical IDs, version,
+terms, source pins and review-only labels are checked before closing. A successful
+response may be an old idempotent replay, not the current version. Form input and
+keys are not placed in browser storage or mutation caches; do not close an
+uncertain form without checking history.
+
+The separate `npm run test:e2e:candidate-write` fixture runs a new isolated
+application and real browser. It uses one synthetic manually cited source, tests
+create/revise/dismiss, exact source/hash pins, unknown currency, explicit zero,
+pending-close protection, a held/lost response and historical zero-write replay,
+a 412 competing revision, and zero-write replay after an equivalent decimal
+reformat. It checks unchanged event, entitlement, receipt, projection, cash,
+trade, job and upstream-attempt tables and uses no network provider, worker,
+deployment data or screenshot.
 
 ## Checks and remaining work
 
@@ -239,6 +282,6 @@ let the owner create a distinct event or explicitly associate the current candid
 with one selected existing event. Both candidate identity and physical revision are
 pinned and revalidated; the review response's `NOT_ADOPTED` label is still not a
 linkage query. Adoption records an owner decision, not verified market history,
-eligible shares, confirmed income or a receipt. Candidate creation/revision and
+eligible shares, confirmed income or a receipt. A guided observation/basis picker,
 adoption in the browser, atomic entitlement rebuilding, verification and actual
 receipt workflow remain unfinished.

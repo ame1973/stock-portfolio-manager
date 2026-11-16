@@ -35,3 +35,31 @@ export async function readEvent(page: Page, eventId: string) {
   expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
   return { data: await response.json() as Event, etag: response.headers().etag };
 }
+export async function seedCandidateSource(page: Page, securityId: string) {
+  const reason = "Synthetic non-network source citation for candidate history.";
+  const symbol = await page.request.post(`/api/v1/securities/${securityId}/provider-symbols`, { headers: await headers(page), data: {
+    provider_id: "manual", provider_symbol: "CANDE2E.CITED", effective_from: "2020-01-01", reason,
+  } });
+  expect(symbol.status()).toBe(201);
+  const policy = { provider_id: "manual", enabled: false, terms_acknowledged: true, terms_reference: "Synthetic local citation permission",
+    terms_reason: reason, requests_per_minute: null, requests_per_day: null, raw_payload_storage: false };
+  const profile = await page.request.post("/api/v1/provider-profiles", { headers: await headers(page), data: { policy, reason } });
+  expect(profile.status()).toBe(201);
+  const enable = await page.request.patch("/api/v1/provider-profiles/manual", { headers: await headers(page, 1), data: {
+    policy: { ...policy, enabled: true }, clear_credential: false, reason,
+  } });
+  expect(enable.status()).toBe(200);
+  const cited = await page.request.post("/api/v1/providers/cited-observations", { headers: await headers(page), data: {
+    operation: "DIVIDENDS", provider_id: "manual", security_id: securityId, provider_symbol: "CANDE2E.CITED",
+    ex_date: "2026-11-01", event_type: "SPECIAL", dps: "0", currency: "USD", adjustment_basis: "AS_DECLARED",
+    citation: { citation: "Synthetic source reference", reason, url: "https://example.test/citation?private=synthetic-secret#page" },
+  } });
+  expect(cited.status()).toBe(201);
+  const created = await cited.json() as components["schemas"]["CitedSourceCreated"];
+  const response = await page.request.get(`/api/v1/dividends/observations?security_id=${securityId}`);
+  expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
+  const rows = await response.json() as { items: components["schemas"]["DividendObservationRecord"][] };
+  const source = rows.items.find(row => row.id === created.observation_id)!;
+  expect(source.normalized_sha256).toMatch(/^[a-f0-9]{64}$/);
+  return { source, reason };
+}
