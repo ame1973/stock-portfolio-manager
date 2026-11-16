@@ -15,7 +15,9 @@ from alembic import command
 from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 
+import spm_api.dividend_event_service as events
 import spm_api.dividend_event_writer as event_writer
+import spm_api.dividend_rejection_service as rejections
 from spm_api.audit import audit, stamp
 from spm_api.cli import migrate
 from spm_api.config import Settings
@@ -99,7 +101,7 @@ def rejection_values(con: Connection, event: Any, **changes: Any) -> dict[str, A
 
 
 def test_head_adds_empty_rejection_storage_without_inference(engine: Engine) -> None:
-    assert schema_head() == HEAD
+    assert schema_head() == "0024_dividend_resolutions"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
@@ -393,6 +395,19 @@ def test_rejection_blocks_new_revision_and_leaves_no_partial_history(
     before = database_snapshot(engine)
     with (
         unit_of_work(engine, write=True) as con,
+        pytest.raises(events.EventError, match="^DIVIDEND_EVENT_HISTORY_UNAVAILABLE$"),
+    ):
+        event_writer.save(
+            con,
+            OWNER,
+            next_intent(event, "VERIFY"),
+            at=datetime.now(UTC) + timedelta(seconds=2),
+            request_id=uuid4(),
+        )
+    # Bypass only the application read to prove the separate SQL fence on a shaped false audit.
+    with (
+        unit_of_work(engine, write=True) as con,
+        patch.object(rejections, "history", return_value=()),
         pytest.raises(IntegrityError, match="DIVIDEND_EVENT_REJECTION_PENDING"),
     ):
         event_writer.save(
@@ -476,13 +491,16 @@ def test_rejection_and_competing_revision_cannot_both_commit(
                     request_id=uuid4(),
                 )
             return "revised"
-        except IntegrityError:
-            return "revision_blocked"
+        except events.EventError as error:
+            return str(error)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         first, second = pool.submit(reject), pool.submit(revise)
         outcomes = {first.result(), second.result()}
-    assert outcomes in ({"rejected", "revision_blocked"}, {"rejection_blocked", "revised"})
+    assert outcomes in (
+        {"rejected", "DIVIDEND_EVENT_HISTORY_UNAVAILABLE"},
+        {"rejection_blocked", "revised"},
+    )
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(
             "SELECT count(*) FROM dividend_event_revisions"

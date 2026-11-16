@@ -65,6 +65,10 @@ def _write_failure(error: events.EventError) -> ApiError:
         return ApiError(422, code, "The dividend event decision is invalid")
     if code == "DIVIDEND_EVENT_VERSION_CONFLICT":
         return ApiError(412, "PRECONDITION_FAILED", "The observed event changed; reload it")
+    if code == "DIVIDEND_REJECTION_VERSION_CONFLICT":
+        return ApiError(412, "PRECONDITION_FAILED", "The observed rejection changed; reload it")
+    if code == "DIVIDEND_REJECTION_CONFIRMATION_REQUIRED":
+        return ApiError(409, code, "The current rejection requires explicit resolution")
     if code in {
         "DIVIDEND_EVENT_PROJECTION_REQUIRED",
         "DIVIDEND_EVENT_SECURITY_CHANGED",

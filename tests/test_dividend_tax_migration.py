@@ -111,7 +111,7 @@ def setting_values(
 
 
 def test_head_starts_empty_without_setting_a_rate(engine: Engine) -> None:
-    assert schema_head() == "0023_dividend_rejections"
+    assert schema_head() == "0024_dividend_resolutions"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []

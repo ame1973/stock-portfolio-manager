@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import Engine
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.dividend_event_service as events
 import spm_api.dividend_event_writer as event_writer
@@ -593,8 +593,8 @@ def test_serialized_competitor_rechecks_rejection_and_event_scope(
                     )
             else:
                 save(engine, value, request=request)
-        except IntegrityError:
-            return "revision_blocked"
+        except events.EventError as error:
+            return str(error)
         except rejection.RejectionError as error:
             return str(error)
         return "unexpected_success"
@@ -614,7 +614,9 @@ def test_serialized_competitor_rechecks_rejection_and_event_scope(
             competing = pool.submit(compete)
             assert started.wait(timeout=5)
         expected = (
-            "revision_blocked" if winner == "rejection" else "DIVIDEND_REJECTION_VERSION_CONFLICT"
+            "DIVIDEND_REJECTION_CONFIRMATION_REQUIRED"
+            if winner == "rejection"
+            else "DIVIDEND_REJECTION_VERSION_CONFLICT"
         )
         assert competing.result(timeout=10) == expected
     after = database_snapshot(engine)
@@ -656,14 +658,14 @@ def test_rejection_and_event_revision_race_commits_only_one_decision(
                     request_id=uuid4(),
                 )
             return "revised"
-        except IntegrityError:
-            return "revision_blocked"
+        except events.EventError as error:
+            return str(error)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         first, second = pool.submit(reject), pool.submit(revise)
         outcomes = {first.result(), second.result()}
     assert outcomes in (
-        {"rejected", "revision_blocked"},
+        {"rejected", "DIVIDEND_REJECTION_CONFIRMATION_REQUIRED"},
         {"DIVIDEND_REJECTION_VERSION_CONFLICT", "revised"},
     )
     after = database_snapshot(engine)

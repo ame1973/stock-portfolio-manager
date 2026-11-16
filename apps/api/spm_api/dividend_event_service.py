@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticSerializationError
 from sqlalchemy import Connection, RowMapping, text
+from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.dividend_candidate_service as candidates
 from spm_api.action_models import EvidenceUrl
@@ -83,10 +84,17 @@ class EventRevision(Model):
 
 
 @dataclass(frozen=True, slots=True)
+class ResolutionLink:
+    id: UUID = field(repr=False)
+    rejection_id: UUID = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
 class ReviewedEvent:
     record: EventRevision = field(repr=False)
     assessment: EvidenceAssessment | None = field(repr=False)
     manual_override: bool = False
+    resolution: ResolutionLink | None = field(default=None, repr=False)
 
 
 def _scope(owner_id: UUID, identifier: UUID, version: int | None) -> None:
@@ -143,6 +151,18 @@ def _override_revision_audit_values(record: EventRevision) -> dict[str, object]:
     return {**_audit_values(record), "manual_override": True}
 
 
+def _revision_audit_values(
+    record: EventRevision, manual_override: bool, resolution: ResolutionLink | None
+) -> dict[str, object]:
+    values = _override_revision_audit_values(record) if manual_override else _audit_values(record)
+    if resolution is not None:
+        values.update(
+            resolved_rejection_id=str(resolution.rejection_id),
+            rejection_resolution_id=str(resolution.id),
+        )
+    return values
+
+
 def _override_audit_values(previous: EventRevision, record: EventRevision) -> dict[str, object]:
     return {
         "decision": "MANUAL_OVERRIDE",
@@ -179,6 +199,34 @@ def _manual_override(
     if len(rows) != 1 or tuple(rows[0]) != expected:
         raise ValueError("Inconsistent manual override audit")
     return True
+
+
+def _resolution(
+    con: Connection,
+    record: EventRevision,
+    previous: ReviewedEvent | None,
+    *,
+    manual_override: bool,
+) -> ResolutionLink | None:
+    markers = (
+        con.execute(
+            text("""
+            SELECT * FROM audit_events WHERE entity_type='dividend_event_revision'
+              AND entity_id=:id AND action='DIVIDEND_EVENT_REJECTION_RESOLUTION'
+        """),
+            {"id": str(record.revision_id)},
+        )
+        .mappings()
+        .all()
+    )
+    if not markers:
+        return None
+    if len(markers) != 1 or previous is None:
+        raise ValueError("Invalid rejection-resolution marker")
+    # Older schema versions need no resolution table unless a marker is present.
+    from spm_api.dividend_rejection_resolution import checked_link
+
+    return checked_link(con, previous, record, manual_override=manual_override, marker=markers[0])
 
 
 def _owned_parent(con: Connection, owner_id: UUID, identifier: UUID) -> RowMapping | None:
@@ -426,6 +474,7 @@ def _audited(
     previous: EventRevision | None,
     *,
     manual_override: bool,
+    resolution: ResolutionLink | None,
 ) -> None:
     rows = con.execute(
         text("""
@@ -440,13 +489,7 @@ def _audited(
         str(record.request_id),
         record.reason,
         digest(canonical(_audit_values(previous))) if previous is not None else None,
-        digest(
-            canonical(
-                _override_revision_audit_values(record)
-                if manual_override
-                else _audit_values(record)
-            )
-        ),
+        digest(canonical(_revision_audit_values(record, manual_override, resolution))),
     )
     if len(rows) != 1 or tuple(rows[0]) != expected:
         raise ValueError("Inconsistent event audit")
@@ -466,6 +509,7 @@ def get(
         if selected > parent["version"]:
             return None
         previous: EventRevision | None = None
+        previous_reviewed: ReviewedEvent | None = None
         result: ReviewedEvent | None = None
         # ponytail: scan the retained chain; add verified checkpoints if histories grow large.
         for number in range(1, parent["version"] + 1):
@@ -490,10 +534,22 @@ def get(
                 ):
                     raise ValueError("Withdrawal cannot change the manual lock")
             manual_override = _manual_override(con, record, previous)
-            _audited(con, record, previous, manual_override=manual_override)
+            resolution = _resolution(
+                con, record, previous_reviewed, manual_override=manual_override
+            )
+            _audited(con, record, previous, manual_override=manual_override, resolution=resolution)
             previous = record
+            previous_reviewed = ReviewedEvent(record, assessment, manual_override, resolution)
             if number == selected:
-                result = ReviewedEvent(record, assessment, manual_override)
+                result = previous_reviewed
         return result
-    except (ValueError, TypeError, KeyError, OverflowError, ApiError, PydanticSerializationError):
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        OverflowError,
+        ApiError,
+        SQLAlchemyError,
+        PydanticSerializationError,
+    ):
         raise EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE") from None

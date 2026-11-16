@@ -62,9 +62,9 @@ def _writer(con: Connection, owner: UUID) -> None:
 
 
 def _source_values(reviewed: events.ReviewedEvent) -> dict[str, object]:
-    if reviewed.manual_override:
-        return events._override_revision_audit_values(reviewed.record)
-    return events._audit_values(reviewed.record)
+    return events._revision_audit_values(
+        reviewed.record, reviewed.manual_override, reviewed.resolution
+    )
 
 
 def _storage(record: RejectionRecord) -> dict[str, Any]:
@@ -116,8 +116,52 @@ def _record(row: RowMapping) -> RejectionRecord:
     )
 
 
+def _checked(con: Connection, row: RowMapping, reviewed: events.ReviewedEvent) -> RejectionRecord:
+    record = _record(row)
+    source_audits = con.execute(
+        text("""
+        SELECT created_at FROM audit_events WHERE entity_type='dividend_event_revision'
+          AND entity_id=:id AND action='DIVIDEND_EVENT_REVISED'
+    """),
+        {"id": str(reviewed.record.revision_id)},
+    ).all()
+    audits = (
+        con.execute(
+            text("""
+            SELECT * FROM audit_events WHERE entity_type='dividend_event_rejection'
+              AND entity_id=:id
+        """),
+            {"id": str(record.id)},
+        )
+        .mappings()
+        .all()
+    )
+    if len(source_audits) != 1 or len(audits) != 1:
+        raise ValueError("Missing or duplicate rejection audit")
+    entry = audits[0]
+    if (
+        any(row[key] != value for key, value in _storage(record).items())
+        or record.owner_id != reviewed.record.owner_id
+        or record.event_id != reviewed.record.event_id
+        or record.revision_id != reviewed.record.revision_id
+        or record.revision_no != reviewed.record.revision_no
+        or record.created_at < reviewed.record.created_at
+        or record.created_at < events._time(source_audits[0].created_at)
+        or entry["id"] != str(record.audit_id)
+        or entry["owner_id"] != str(record.owner_id)
+        or entry["action"] != "DIVIDEND_EVENT_REVISION_REJECTED"
+        or entry["request_id"] != str(record.request_id)
+        or entry["reason"] != record.reason
+        or events._time(entry["created_at"]) < record.created_at
+        or entry["before_sha256"] != digest(canonical(_source_values(reviewed)))
+        or entry["after_sha256"] != digest(canonical(_payload(_storage(record))))
+    ):
+        raise ValueError("Inconsistent rejection history")
+    return record
+
+
 def history(con: Connection, owner: UUID, event_id: UUID) -> tuple[RejectionRecord, ...] | None:
-    """Read a complete current rejection scope in one snapshot, not an HTTP grant."""
+    """Read complete rejection and successor history in one snapshot, not an HTTP grant."""
     _scope(con, owner, event_id)
     try:
         reviewed = events.get(con, owner, event_id)
@@ -129,59 +173,39 @@ def history(con: Connection, owner: UUID, event_id: UUID) -> tuple[RejectionReco
                 SELECT rejected.* FROM dividend_event_rejections rejected
                 LEFT JOIN dividend_event_revisions revision ON revision.id=rejected.revision_id
                 WHERE rejected.event_id=:event OR revision.event_id=:event
-                ORDER BY rejected.revision_no,rejected.id LIMIT 2
+                ORDER BY rejected.revision_no,rejected.id
             """),
                 {"event": str(event_id)},
             )
             .mappings()
             .all()
         )
-        if len(rows) > 1:
-            raise ValueError("Multiple unresolved event rejections")
-        if not rows:
-            return ()
-        row = rows[0]
-        record = _record(row)
-        source_audits = con.execute(
-            text("""
-            SELECT created_at FROM audit_events WHERE entity_type='dividend_event_revision'
-              AND entity_id=:id AND action='DIVIDEND_EVENT_REVISED'
-        """),
-            {"id": str(reviewed.record.revision_id)},
-        ).all()
-        audits = (
-            con.execute(
-                text("""
-                SELECT * FROM audit_events WHERE entity_type='dividend_event_rejection'
-                  AND entity_id=:id
-            """),
-                {"id": str(record.id)},
-            )
-            .mappings()
-            .all()
-        )
-        if len(source_audits) != 1 or len(audits) != 1:
-            raise ValueError("Missing or duplicate rejection audit")
-        entry = audits[0]
-        if (
-            any(row[key] != value for key, value in _storage(record).items())
-            or record.owner_id != owner
-            or record.event_id != event_id
-            or record.revision_id != reviewed.record.revision_id
-            or record.revision_no != reviewed.record.revision_no
-            or record.created_at < reviewed.record.created_at
-            or record.created_at < events._time(source_audits[0].created_at)
-            or entry["id"] != str(record.audit_id)
-            or entry["owner_id"] != str(owner)
-            or entry["action"] != "DIVIDEND_EVENT_REVISION_REJECTED"
-            or entry["request_id"] != str(record.request_id)
-            or entry["reason"] != record.reason
-            or events._time(entry["created_at"]) < record.created_at
-            or entry["before_sha256"] != digest(canonical(_source_values(reviewed)))
-            or entry["after_sha256"] != digest(canonical(_payload(_storage(record))))
-        ):
-            raise ValueError("Inconsistent rejection history")
-        return (record,)
+        result: list[RejectionRecord] = []
+        identities: set[UUID] = set()
+        versions: set[int] = set()
+        # ponytail: quadratic full-chain reads; batch verified history if it grows.
+        for row in rows:
+            number = row["revision_no"]
+            if type(number) is not int or not 1 <= number <= reviewed.record.revision_no:
+                raise ValueError("Invalid rejected revision")
+            prior = events.get(con, owner, event_id, version=number)
+            if prior is None:
+                raise ValueError("Missing rejected revision")
+            record = _checked(con, row, prior)
+            if record.id in identities or number in versions:
+                raise ValueError("Duplicate rejection identity or revision")
+            identities.add(record.id)
+            versions.add(number)
+            if number < reviewed.record.revision_no:
+                successor = events.get(con, owner, event_id, version=number + 1)
+                if (
+                    successor is None
+                    or successor.resolution is None
+                    or successor.resolution.rejection_id != record.id
+                ):
+                    raise ValueError("Missing immediate rejection resolution")
+            result.append(record)
+        return tuple(result)
     except (
         ValueError,
         TypeError,
@@ -219,7 +243,7 @@ def require_clear(
         retained = history(con, owner, event_id)
         if retained is None:
             raise RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
-        if retained:
+        if any(item.revision_id == revision_id for item in retained):
             raise RejectionError("DIVIDEND_REVISION_REJECTED")
     except RejectionError:
         raise

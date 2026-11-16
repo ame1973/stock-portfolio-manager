@@ -11,6 +11,8 @@ from sqlalchemy import Connection, text
 
 import spm_api.dividend_candidate_service as candidates
 import spm_api.dividend_event_service as events
+import spm_api.dividend_rejection_resolution as resolutions
+import spm_api.dividend_rejection_service as rejections
 from spm_api.action_models import EvidenceUrl
 from spm_api.audit import audit, canonical, digest, stamp
 from spm_api.db import savepoint
@@ -31,6 +33,7 @@ class EventIntent(Model):
     revision_no: events.Version
     kind: events.DecisionKind
     manual_override: bool = Field(default=False, strict=True)
+    resolve_rejection_id: UUID | None = Field(default=None, repr=False)
     terms: DividendTerms | None = Field(default=None, repr=False)
     candidate_id: UUID | None = None
     candidate_version: events.Version | None = None
@@ -485,13 +488,23 @@ def _save(
         if (
             original is None
             or original.manual_override != intent.manual_override
+            or (original.resolution.rejection_id if original.resolution else None)
+            != intent.resolve_rejection_id
             or not _replay_matches(con, intent, original.record, at, request_id)
         ):
             raise events.EventError("DIVIDEND_EVENT_REVISION_CONFLICT")
+        try:
+            retained = rejections.history(con, owner_id, intent.event_id)
+        except rejections.RejectionError:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE") from None
+        if retained is None:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         return original
 
     current = events.get(con, owner_id, intent.event_id)
     previous = current.record if current is not None else None
+    rejected: rejections.RejectionRecord | None = None
+    resolution: events.ResolutionLink | None = None
     if previous is None:
         if (
             con.execute(
@@ -502,6 +515,8 @@ def _save(
             raise events.EventError("DIVIDEND_EVENT_NOT_FOUND")
         if intent.revision_no != 1:
             raise events.EventError("DIVIDEND_EVENT_VERSION_CONFLICT")
+        if intent.resolve_rejection_id is not None:
+            raise events.EventError("DIVIDEND_REJECTION_VERSION_CONFLICT")
     else:
         if intent.revision_no != previous.revision_no + 1:
             raise events.EventError("DIVIDEND_EVENT_VERSION_CONFLICT")
@@ -524,6 +539,29 @@ def _save(
             is not None
         ):
             raise events.EventError("DIVIDEND_EVENT_PROJECTION_REQUIRED")
+        try:
+            retained = rejections.history(con, owner_id, intent.event_id)
+        except rejections.RejectionError:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE") from None
+        if retained is None:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        rejected = next(
+            (item for item in retained if item.revision_id == previous.revision_id), None
+        )
+        if rejected is not None and intent.resolve_rejection_id is None:
+            raise events.EventError("DIVIDEND_REJECTION_CONFIRMATION_REQUIRED")
+        if (rejected.id if rejected is not None else None) != intent.resolve_rejection_id:
+            raise events.EventError("DIVIDEND_REJECTION_VERSION_CONFLICT")
+        if rejected is not None:
+            rejection_audit = con.execute(
+                text("SELECT created_at FROM audit_events WHERE id=:id"),
+                {"id": str(rejected.audit_id)},
+            ).first()
+            if rejection_audit is None:
+                raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+            if at < rejected.created_at or at < events._time(rejection_audit.created_at):
+                raise events.EventError("DIVIDEND_EVENT_TIME_CONFLICT")
+            resolution = events.ResolutionLink(uuid4(), rejected.id)
     record, assessment = _record(con, owner_id, intent, at, request_id, previous)
     if previous is not None and previous.terms.security_id != record.terms.security_id:
         raise events.EventError("DIVIDEND_EVENT_SECURITY_CHANGED")
@@ -627,11 +665,7 @@ def _save(
         "DIVIDEND_EVENT_REVISED",
         request_id=str(request_id),
         before=events._audit_values(previous) if previous is not None else None,
-        after=(
-            events._override_revision_audit_values(record)
-            if intent.manual_override
-            else events._audit_values(record)
-        ),
+        after=events._revision_audit_values(record, intent.manual_override, resolution),
         reason=record.reason,
     )
     if intent.manual_override:
@@ -646,6 +680,11 @@ def _save(
             before=events._audit_values(previous),
             after=events._override_audit_values(previous, record),
             reason=record.reason,
+        )
+    if resolution is not None:
+        assert current is not None and rejected is not None
+        resolutions.append(
+            con, current, rejected, record, manual_override=intent.manual_override, link=resolution
         )
     result = con.execute(
         text("""

@@ -84,13 +84,13 @@ def _save(
         retained = history(con, owner, intent.event_id)
         if retained is None:
             raise rejection.RejectionError("DIVIDEND_REJECTION_NOT_FOUND")
-        if retained:
-            record = retained[0]
-            if record.id != intent.id:
-                raise rejection.RejectionError("DIVIDEND_REVISION_ALREADY_REJECTED")
-            if not _replay_matches(record, intent, request_id):
-                raise rejection.RejectionError("DIVIDEND_REJECTION_CONFLICT")
-            return record
+        for record in retained:
+            if record.id == intent.id:
+                if not _replay_matches(record, intent, request_id):
+                    raise rejection.RejectionError("DIVIDEND_REJECTION_CONFLICT")
+                return record
+        if any(item.revision_id == intent.revision_id for item in retained):
+            raise rejection.RejectionError("DIVIDEND_REVISION_ALREADY_REJECTED")
         if con.execute(
             text("SELECT 1 FROM dividend_event_rejections WHERE id=:id"), {"id": str(intent.id)}
         ).first():
@@ -170,6 +170,6 @@ def _save(
         for portfolio in event_writer._portfolios(con, owner, reviewed.record.terms.security_id):
             invalidate_portfolio(con, portfolio, str(intent.id), "DIVIDEND_REVISION_REJECTED", day)
         result = history(con, owner, intent.event_id)
-        if result is None or len(result) != 1 or result[0].id != intent.id:
+        if result is None or len(result) != len(retained) + 1 or result[-1].id != intent.id:
             raise rejection.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
-        return result[0]
+        return result[-1]
