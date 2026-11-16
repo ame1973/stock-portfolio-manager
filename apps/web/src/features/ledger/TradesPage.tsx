@@ -165,7 +165,7 @@ export function TradesPage() {
       <div className="max-w-2xl"><h1 className="text-2xl font-semibold">交易紀錄</h1><p className="mt-2 text-sm leading-7 text-secondary">逐帳戶記錄買賣與歷史交收。更正建立新版本，不覆寫原值；缺少 FX 不會被當作零，也不會以現價補填。</p></div>
       <Button data-editor-create disabled={editing} onClick={() => { setNotice(null); setEditor("new"); }}>新增交易</Button>
     </div>
-    <p className="text-sm leading-7 text-secondary">請先在<Link to="/settings/accounts" className="inline-flex min-h-11 items-center text-primary underline">管理設定</Link>建立組合、帳戶與證券。此頁不是現金估值或目前持倉總額。</p>
+    <p className="text-sm leading-7 text-secondary">請先在<Link to="/settings/accounts" className="inline-flex min-h-11 items-center text-primary underline">管理設定</Link>建立組合、帳戶與證券。此頁不是現金估值或目前持倉總額。<Link to="/corporate-actions" className="ml-2 inline-flex min-h-11 items-center text-primary underline">核對企業行動</Link></p>
     {notice && <p role="status" className="text-sm leading-7 text-success">{notice}</p>}
     {editor !== null && <EditorSheet title={editor === "new" ? "新增交易" : "更正交易"} onClose={() => { setEditor(null); void result.refetch(); }}>
       <TradeForm key={editor === "new" ? "new" : editor.id} record={editor === "new" ? undefined : editor} onCancel={() => { setEditor(null); void result.refetch(); }}

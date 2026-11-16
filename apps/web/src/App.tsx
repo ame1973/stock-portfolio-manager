@@ -19,6 +19,7 @@ const BookingPage = lazy(() => import("./features/ledger/BookingPage").then(modu
 const AccountCashPage = lazy(() => import("./features/ledger/AccountCashPage").then(module => ({ default: module.AccountCashPage })));
 const TransferPage = lazy(() => import("./features/ledger/TransferPage").then(module => ({ default: module.TransferPage })));
 const ActionPage = lazy(() => import("./features/ledger/ActionPage").then(module => ({ default: module.ActionPage })));
+const DividendEventsPage = lazy(() => import("./features/dividends/DividendEventsPage").then(module => ({ default: module.DividendEventsPage })));
 const DataCenterLayout = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.DataCenterLayout })));
 const ProvidersPage = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.ProvidersPage })));
 const CoveragePage = lazy(() => import("./features/sources/SourcePages").then(module => ({ default: module.CoveragePage })));
@@ -32,6 +33,7 @@ const navigation = [
   { to: "/", label: "服務連線", icon: "M3 11 12 3l9 8M5 10v11h5v-7h4v7h5V10" },
   { to: "/transactions", label: "交易紀錄", icon: "M4 5h16M4 12h10M4 19h16m-3-10 3 3-3 3" },
   { to: "/cash", label: "現金帳", icon: "M3 5h18v15H3V5Zm12 5h6v5h-6v-5ZM7 5V3h11v2" },
+  { to: "/dividends", label: "股息事件", icon: "M12 3v18M16 7.5c0-1.5-1.8-2.5-4-2.5S8 6 8 7.5 9.8 10 12 10s4 1 4 3-1.8 3-4 3-4-1-4-3M4 21h16" },
   { to: "/transfers", label: "股票轉倉", icon: "M3 7h17m-4-4 4 4-4 4M21 17H4m4-4-4 4 4 4" },
   { to: "/corporate-actions", label: "企業行動", icon: "M12 3v7m0 0H5v8m7-8h7v8M2 18h6v4H2v-4Zm14 0h6v4h-6v-4Z" },
   { to: "/data-center", label: "資料中心", icon: "M4 3h16v18H4V3Zm4 5h8M8 12h8M8 16h5" },
@@ -84,6 +86,7 @@ function SignedInApp({ session }: { session: AuthSession }) {
           <Suspense fallback={<p role="status">正在載入工作區…</p>}><Routes>
             <Route path="/" element={<ServiceStatus />} />
             <Route path="/transactions" element={<TradesPage />} />
+            <Route path="/dividends" element={<DividendEventsPage />} />
             <Route path="/cash" element={<BookingPage key="cash" mode="cash" />} />
             <Route path="/cash/expenses" element={<BookingPage key="expense" mode="expense" />} />
             <Route path="/cash/transfers" element={<TransferPage key="cash" mode="cash" />} />
@@ -119,7 +122,7 @@ function SignedInApp({ session }: { session: AuthSession }) {
       </div>
     </div>
     <nav aria-label="手機主要導覽" className="mobile-workspace-nav fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-surface lg:hidden">
-      {navigation.filter(item => item.to !== "/" && item.to !== "/data-center").map(item => <NavLink key={item.to} to={item.to} aria-label={item.label} className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-xs aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-primary"><NavIcon path={item.icon} /><span>{item.label}</span></NavLink>)}
+      {navigation.filter(item => item.to !== "/" && item.to !== "/data-center" && item.to !== "/corporate-actions").map(item => <NavLink key={item.to} to={item.to} aria-label={item.label} className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-xs aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-primary"><NavIcon path={item.icon} /><span>{item.label}</span></NavLink>)}
     </nav>
   </div></ViewContext>;
 }
@@ -154,7 +157,7 @@ function ServiceStatus() {
       <h2 id="status-title" className="text-lg font-semibold">服務連線</h2>
       {health.isPending ? <p role="status" className="my-5 text-secondary">正在檢查服務狀態…</p>
         : health.isError ? <div role="alert" className="my-5 text-danger"><p>暫時無法使用</p><p className="mt-2 text-sm leading-6">{health.error.message}</p></div>
-          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供交易、現金／費用、轉倉、企業行動、期初設定及來源擷取／觀測診斷；股息採納／實收、估值與完整離線／備份功能仍在開發。</p></div>}
+          : <div role="status" className="my-5"><p className="font-medium text-success">已連線，資料庫已就緒</p><p className="mt-2 text-sm leading-6 text-secondary">目前為開發版本，已提供交易、現金／費用、轉倉、企業行動、期初設定、來源擷取／觀測診斷及唯讀股息事件；股息決定編輯／實收、估值與完整離線／備份功能仍在開發。</p></div>}
       <Button variant="outline" onClick={() => void health.refetch()} disabled={health.isFetching}>重新檢查</Button>
     </section>
   </div>;

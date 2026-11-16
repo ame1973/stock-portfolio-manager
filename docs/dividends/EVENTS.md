@@ -80,6 +80,36 @@ basis/action scope. The protected DTOs described below authenticate the caller a
 withhold private URL details. The internal reader performs no writes, provider
 requests, credential-file access, entitlement calculation or receipt posting.
 
+## Read-only event workspace
+
+The signed-in `/dividends` page lists owned event decisions by ex-date using the
+protected, server-paginated event API. Owners can filter by security, recorded event
+status and date, inspect the exact DPS and original decision/evidence, and open
+separately paginated revision and rejection histories. Search, filters and cursors
+remain in the authenticated in-memory workspace; they are not written to the browser
+address bar, local storage or an offline cache. The five-item mobile navigation links
+to this page; corporate actions remain reachable from the transaction page.
+
+Opening an event reads its rejection state separately. A rejection can change while
+its event DTO and ETag stay unchanged; the page therefore provides an explicit
+rejection refresh, labels the last successful read, and refuses to associate responses
+whose stable event, physical revision or version do not match the displayed event.
+The two requests are not an atomic snapshot, even when their pins match. A failed
+refresh is marked stale rather than treated as an absence of rejection. Historical
+resolution links are shown as retained decisions, not verified documents. Private
+citation URLs with a query or fragment are withheld, and opening an allowed external
+link is an explicit user action.
+
+This screen is read-only. `VERIFIED` is displayed as an owner acceptance, not document
+verification; a missing event or an unrejected decision does not establish ownership,
+eligibility, an accrued amount or a receipt. It does not calculate income, mutate
+financial facts, contact providers, or relax the event-revision fence. Event decision
+forms, tax/fee controls, protected projections and receipt reconciliation remain
+separate unfinished work. `npm run build && npm run test:e2e:dividend-events` runs the
+real API and built SPA with synthetic events in an exclusive temporary root; it checks
+responsive/keyboard behavior, no-store responses, a rejection without an ETag change,
+private URL withholding and an unchanged complete database after the read-only views.
+
 ## Protected event-decision read API
 
 Authenticated owners can read retained managed decisions through three private,

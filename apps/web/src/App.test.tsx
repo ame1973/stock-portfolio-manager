@@ -60,14 +60,15 @@ describe("financial workspace navigation", () => {
     vi.spyOn(api, "GET").mockImplementation(async path => ({ data: path === "/api/v1/health/ready" ? { status: "ready" } : { items: [], next_cursor: null }, response: new Response() }));
   }
 
-  it("has seven working desktop destinations and exactly five mobile destinations with labelled collapsed icons", async () => {
+  it("has eight working desktop destinations and exactly five mobile destinations with labelled collapsed icons", async () => {
     reads();
     renderApp();
     await screen.findByText("已連線，資料庫已就緒");
     const desktop = screen.getByRole("navigation", { name: "主要導覽" });
     const mobile = screen.getByRole("navigation", { name: "手機主要導覽" });
-    expect(within(desktop).getAllByRole("link")).toHaveLength(7);
+    expect(within(desktop).getAllByRole("link")).toHaveLength(8);
     expect(within(mobile).getAllByRole("link")).toHaveLength(5);
+    expect(within(mobile).getByRole("link", { name: "股息事件" })).toHaveAttribute("href", "/dividends");
     expect(within(desktop).getByRole("link", { name: "服務連線" })).toHaveAttribute("aria-current", "page");
     fireEvent.click(screen.getByRole("button", { name: "收合導覽" }));
     expect(screen.getByRole("button", { name: "展開導覽" })).toHaveAttribute("aria-expanded", "false");
@@ -76,6 +77,20 @@ describe("financial workspace navigation", () => {
     expect(await screen.findByRole("heading", { name: "交易紀錄" })).toBeVisible();
     expect(within(desktop).getByRole("link", { name: "交易紀錄" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("main")).toHaveFocus();
+  });
+
+  it("keeps dividends and corporate actions reachable through five mobile destinations", async () => {
+    reads();
+    renderApp("/transactions");
+    await screen.findByRole("heading", { name: "交易紀錄" });
+    const mobile = screen.getByRole("navigation", { name: "手機主要導覽" });
+    fireEvent.click(within(mobile).getByRole("link", { name: "股息事件" }));
+    expect(await screen.findByRole("heading", { name: "股息事件" })).toBeVisible();
+    expect(within(mobile).getByRole("link", { name: "股息事件" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(within(mobile).getByRole("link", { name: "交易紀錄" }));
+    await screen.findByRole("heading", { name: "交易紀錄" });
+    fireEvent.click(screen.getByRole("link", { name: "核對企業行動" }));
+    expect(await screen.findByRole("heading", { name: "企業行動" })).toBeVisible();
   });
 
   it("reaches the data center from settings on mobile and isolates dividend/split memory filters", async () => {

@@ -90,7 +90,7 @@ export async function workspaceBrowserForms(page: Page, post: Post) {
     if (item.key === "action") await expect(row).toContainText("9223372036854775806");
     await page.screenshot({ path: `.local/screenshots/workspace-table-${item.key}-1440.png`, fullPage: true });
     const sidebar = page.getByRole("navigation", { name: "主要導覽", exact: true });
-    await expect(sidebar.getByRole("link")).toHaveCount(7);
+    await expect(sidebar.getByRole("link")).toHaveCount(8);
     await page.getByRole("button", { name: "收合導覽", exact: true }).click();
     await expect(page.getByRole("button", { name: "展開導覽", exact: true })).toHaveAttribute("aria-expanded", "false");
     await expect(sidebar.getByRole("link", { name: "交易紀錄", exact: true })).toBeVisible();
