@@ -12,9 +12,9 @@ import { date, optional, price, samePrice } from "../ledger/inputs";
 import { SecurityName } from "../ledger/ReferenceName";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { useFormAction } from "../settings/data";
-import { validCandidate } from "./candidate-validation";
+import { candidateReason, validCandidate } from "./candidate-validation";
 import { eventTypeLabels } from "./event-labels";
-import { decisionReason, eventTypes } from "./event-validation";
+import { eventTypes } from "./event-validation";
 
 type Schemas = components["schemas"];
 type Candidate = Schemas["CandidateRecord"];
@@ -22,17 +22,13 @@ type Input = Schemas["CandidateWrite"];
 type Props = { onSaved: (record: Candidate) => void; onCancel: () => void };
 const identifier = z.string().transform(value => value.trim().toLowerCase()).pipe(z.uuid("請填寫有效的識別碼。"));
 const optionalIdentifier = z.string().transform(value => value.trim().toLowerCase()).pipe(z.union([z.literal(""), z.uuid("請填寫有效的基準聲明識別碼。")]));
-const text = decisionReason.refine(value => Array.from(value).every(character => {
-  const point = character.codePointAt(0)!;
-  return point < 0xd800 || point > 0xdfff;
-}), "依據含有無效的 Unicode 字元，請重新輸入。");
 const matchSchema = z.object({ observation_id: identifier, source_sha256: z.string().regex(/^[a-f0-9]{64}$/, "請填寫 64 位小寫來源雜湊。"),
-  basis_assertion_id: optionalIdentifier, reason: text });
+  basis_assertion_id: optionalIdentifier, reason: candidateReason });
 const schema = z.object({
   security_id: z.uuid("請選擇候選證券。"), state: z.enum(["OPEN", "DISMISSED"]), event_type: z.enum(eventTypes),
   ex_date: optional(date), announce_date: optional(date), record_date: optional(date), pay_date: optional(date),
   dps: optional(price.max(50, "每股金額最多 50 個字元。")), currency: z.enum(["", "HKD", "USD"]), adjustment_basis: z.enum(["UNKNOWN", "AS_DECLARED", "SPLIT_ADJUSTED"]),
-  matches: z.array(matchSchema).max(100, "最多記錄 100 個來源關聯。"), change_reason: text,
+  matches: z.array(matchSchema).max(100, "最多記錄 100 個來源關聯。"), change_reason: candidateReason,
   acknowledged: z.boolean(), confirm_empty: z.boolean(),
 }).superRefine((value, context) => {
   if (!value.acknowledged) context.addIssue({ code: "custom", path: ["acknowledged"], message: "請先確認本次候選只作審閱。" });

@@ -64,22 +64,55 @@ describe("dividend candidate review workspace", () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it("keeps create and revision unavailable when a refresh fails and retains stale data", async () => {
+  it("opens a password-confirmed distinct-event sheet for complete open terms", async () => {
+    const complete = { ...candidate, terms: { ...candidate.terms, ex_date: "2026-11-01", currency: "USD" } };
+    reads({ "/api/v1/dividends/candidates": { items: [complete], next_cursor: null } });
+    const post = vi.spyOn(api, "POST"); renderPage(); const card = await openCandidate();
+    fireEvent.click(within(card).getByRole("button", { name: "建立獨立股息事件" }));
+    const sheet = await screen.findByRole("dialog", { name: "由候選建立獨立股息事件" });
+    expect(within(sheet).getByRole("form", { name: "重新驗證" })).toBeVisible();
+    expect(within(sheet).getByRole("form", { name: "由候選建立獨立股息事件" })).toHaveTextContent(complete.revision_id);
+    expect(within(sheet).getByRole("button", { name: "關閉編輯" })).toHaveFocus(); expect(post).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { ...candidate, state: "DISMISSED", terms: { ...candidate.terms, ex_date: "2026-11-01", currency: "USD" } },
+    { ...candidate, terms: { ...candidate.terms, ex_date: null, currency: "USD" } },
+    { ...candidate, terms: { ...candidate.terms, ex_date: "2026-11-01", dps: null, currency: "USD" } },
+    { ...candidate, terms: { ...candidate.terms, ex_date: "2026-11-01", currency: null } },
+  ])("does not offer event creation from dismissed or incomplete candidate terms", async broken => {
+    reads({ "/api/v1/dividends/candidates": { items: [broken], next_cursor: null } }); renderPage(); const card = await openCandidate();
+    expect(within(card).queryByRole("button", { name: "建立獨立股息事件" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer event creation when source associations and historical checks disagree", async () => {
+    const inconsistent = { ...candidate, terms: { ...candidate.terms, ex_date: "2026-11-01", currency: "USD" },
+      assessment: { ...candidate.assessment, checks: [] } };
+    reads({ "/api/v1/dividends/candidates": { items: [inconsistent], next_cursor: null } });
+    renderPage(); const card = await openCandidate();
+    expect(within(card).queryByRole("button", { name: "建立獨立股息事件" })).not.toBeInTheDocument();
+    expect(card).toHaveTextContent("來源比較無法核對");
+  });
+
+  it("keeps create, revision and event creation unavailable when a refresh fails", async () => {
+    const complete = { ...candidate, terms: { ...candidate.terms, ex_date: "2026-11-01", currency: "USD" } };
     const get = reads(); let attempts = 0;
     get.mockImplementation(async path => {
       if (path === "/api/v1/dividends/candidates") return ++attempts === 1
-        ? reply({ items: [candidate], next_cursor: null })
+        ? reply({ items: [complete], next_cursor: null })
         : { error: { code: "CANDIDATE_HISTORY_UNAVAILABLE", message: "synthetic private history" }, response: new Response(null, { status: 503 }) };
       if (path === "/api/v1/securities/{id}") return reply({ id: candidate.terms.security_id, display_ticker: "SYN", exchange_code: "NASDAQ" });
       return reply(empty);
     });
     renderPage(); const card = await openCandidate();
     expect(within(card).getByRole("button", { name: "修訂候選資料" })).toBeEnabled();
+    expect(within(card).getByRole("button", { name: "建立獨立股息事件" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "重新載入股息候選" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("候選歷史無法安全核對");
     expect(screen.getByText(/以下為上次載入的資料/)).toBeVisible();
     expect(screen.getByRole("button", { name: "新增股息候選" })).toBeDisabled();
     expect(within(card).getByRole("button", { name: "修訂候選資料" })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "建立獨立股息事件" })).toBeDisabled();
   });
 
   it("does not enable editing for a candidate with an exhausted version", async () => {

@@ -12,11 +12,13 @@ import { useViewState } from "../../lib/view-state";
 import { SecurityName } from "../ledger/ReferenceName";
 import { RecordList } from "../settings/RecordList";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
+import { PasswordForm } from "../settings/SecuritySettingsPage";
 import { usePageState } from "../settings/data";
 import { SourceValues } from "../sources/details";
 import { basisLabels, eventTypeLabels, termLabels } from "./event-labels";
 import { CandidateCreateForm, CandidateRevisionForm } from "./CandidateForm";
-import { validCandidate } from "./candidate-validation";
+import { CandidateEventCreateForm } from "./CandidateEventCreateForm";
+import { validCandidate, validCandidateForEvent } from "./candidate-validation";
 
 type Candidate = components["schemas"]["CandidateRecord"];
 type Field = components["schemas"]["CandidateAssessment"]["conflicting_fields"][number];
@@ -81,29 +83,41 @@ function CandidateHistory({ record }: { record: Candidate }) {
     </article>}</RecordList></section>;
 }
 
-function CandidateCard({ record, disabled, onEdit }: { record: Candidate; disabled: boolean; onEdit: (record: Candidate) => void }) {
+function CandidateCard({ record, disabled, onOpen }: { record: Candidate; disabled: boolean; onOpen: (editor: Editor) => void }) {
   const desktop = useDesktop();
   const [open, setOpen] = useState(false);
   const [history, setHistory] = useState(false);
+  const eventReady = validCandidateForEvent(record);
   return <article aria-label={`股息候選 ${record.id}`} className="grid min-w-0 gap-4">
     <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h2 className="font-semibold"><SecurityName id={record.terms.security_id} /></h2>
       <p className="mt-2 break-all text-sm">除淨日 {record.terms.ex_date ?? "未知"}；每股 <span className="font-medium">{amount(record.terms)}</span></p></div>
       <span className="rounded-md border border-border px-2 py-1 text-sm">{states[record.state]}</span></div>
     {!desktop && <Button variant="outline" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? "收合候選資料" : "查看候選資料"}</Button>}
     {(desktop || open) && <div className="grid min-w-0 gap-5"><CandidateDetails record={record} />
-      <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={disabled || record.version >= 2_147_483_647} onClick={() => onEdit(record)}>修訂候選資料</Button>
+      <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={disabled || record.version >= 2_147_483_647} onClick={() => onOpen({ mode: "revise", target: record })}>修訂候選資料</Button>
+        {eventReady && <Button variant="outline" disabled={disabled} onClick={() => onOpen({ mode: "distinct", target: record })}>建立獨立股息事件</Button>}
         <Button variant="outline" aria-expanded={history} onClick={() => setHistory(value => !value)}>{history ? "收合候選修訂歷史" : "查看候選修訂歷史"}</Button></div>
+      {!eventReady && <p className="text-sm leading-7 text-secondary">候選已排除、欠缺明確除淨日、每股金額或幣別，或來源比較無法核對；目前不能建立事件。</p>}
       {record.version >= 2_147_483_647 && <p className="text-sm text-danger">候選版本已達上限，不能建立新修訂。</p>}
       {history && <CandidateHistory record={record} />}</div>}
   </article>;
 }
 
-type Editor = { mode: "create" } | { mode: "revise"; target: Candidate };
+type Editor = { mode: "create" } | { mode: "revise" | "distinct"; target: Candidate };
+
+function DistinctEventEditor({ target, onClose, onSaved }: { target: Candidate; onClose: () => void; onSaved: (event: components["schemas"]["DividendEventRecord"]) => void }) {
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [decisionBusy, setDecisionBusy] = useState(false);
+  return <EditorSheet title="由候選建立獨立股息事件" onClose={onClose}>
+    <div className="mb-6"><PasswordForm disabled={decisionBusy} onPendingChange={setPasswordBusy} /></div>
+    <CandidateEventCreateForm target={target} onCancel={onClose} onSaved={onSaved} disabled={passwordBusy} onPendingChange={setDecisionBusy} />
+  </EditorSheet>;
+}
 const initialFilters = { security_id: "", state: "" as "" | Candidate["state"] };
 export function DividendCandidatesPage() {
   const cache = useQueryClient();
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ kind: "candidate" | "event"; id: string } | null>(null);
   const page = usePageState("dividends:candidates");
   const [filters, setFilters] = useViewState("filters:dividends:candidates", initialFilters);
   const result = useQuery({ queryKey: ["dividends", "candidates", filters, page.q, page.cursor], staleTime: 0,
@@ -119,12 +133,13 @@ export function DividendCandidatesPage() {
     <div className="flex flex-wrap gap-x-5"><Link to="/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">返回股息事件</Link>
       <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div></div>
     <Button data-editor-create disabled={!ready || editor !== null} onClick={() => { setNotice(null); setEditor({ mode: "create" }); }}>新增股息候選</Button></header>
-    {!ready && <p className="text-sm leading-7 text-secondary">候選清單尚未完成重新核對；目前不能開始新增或修訂，請等候或重試。</p>}
-    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆候選決定 {notice}；可能是原鍵歷史回覆，請重新載入核對目前版本與來源。這不是文件驗證、事件關聯或實收。</p>}
-    {editor && <EditorSheet title={editor.mode === "create" ? "新增股息候選" : "修訂股息候選"} onClose={closeEditor}>
-      {editor.mode === "create" ? <CandidateCreateForm onCancel={closeEditor} onSaved={record => { setNotice(record.id); closeEditor(); }} />
-        : <CandidateRevisionForm target={editor.target} onCancel={closeEditor} onSaved={record => { setNotice(record.id); closeEditor(); }} />}
-    </EditorSheet>}
+    {!ready && <p className="text-sm leading-7 text-secondary">候選清單尚未完成重新核對；目前不能開始新增、修訂或建立事件，請等候或重試。</p>}
+    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.kind === "event" ? "獨立事件" : "候選決定"} {notice.id}；可能是原鍵歷史回覆，請重新載入核對目前版本與來源。這不是文件驗證、持倉資格或實收。</p>}
+    {editor?.mode === "distinct" ? <DistinctEventEditor target={editor.target} onClose={closeEditor} onSaved={record => { setNotice({ kind: "event", id: record.id }); closeEditor(); }} />
+      : editor && <EditorSheet title={editor.mode === "create" ? "新增股息候選" : "修訂股息候選"} onClose={closeEditor}>
+        {editor.mode === "create" ? <CandidateCreateForm onCancel={closeEditor} onSaved={record => { setNotice({ kind: "candidate", id: record.id }); closeEditor(); }} />
+          : <CandidateRevisionForm target={editor.target} onCancel={closeEditor} onSaved={record => { setNotice({ kind: "candidate", id: record.id }); closeEditor(); }} />}
+      </EditorSheet>}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選股息候選</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><ReferenceSelect kind="securities" activeOnly={false} label="候選證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
         <SelectField label="候選狀態" value={filters.state} onChange={event => filter({ state: event.target.value as typeof filters.state })}><option value="">全部候選狀態</option>{(Object.keys(states) as Candidate["state"][]).map(state => <option key={state} value={state}>{states[state]}</option>)}</SelectField>
@@ -137,6 +152,6 @@ export function DividendCandidatesPage() {
       { id: "amount", header: "每股候選金額，非收入", cell: ({ row }) => amount(row.original.terms) },
       { id: "state", header: "候選狀態", cell: ({ row }) => states[row.original.state] },
       { id: "assessment", header: "歷史比較", cell: ({ row }) => assessments[row.original.assessment.status] },
-    ]}>{record => <CandidateCard record={record} disabled={!ready || editor !== null} onEdit={target => { setNotice(null); setEditor({ mode: "revise", target }); }} />}</RecordList>
+    ]}>{record => <CandidateCard record={record} disabled={!ready || editor !== null} onOpen={value => { setNotice(null); setEditor(value); }} />}</RecordList>
   </div>;
 }

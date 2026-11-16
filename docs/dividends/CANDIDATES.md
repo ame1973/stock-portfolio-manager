@@ -256,6 +256,38 @@ reformat. It checks unchanged event, entitlement, receipt, projection, cash,
 trade, job and upstream-attempt tables and uses no network provider, worker,
 deployment data or screenshot.
 
+## Create a distinct event from a candidate
+
+For an `OPEN` candidate with an explicit ex-date, DPS and event currency, the
+workspace offers a separate, reauthenticated decision to create a **new distinct**
+event. Zero DPS is accepted only when explicitly recorded. The sheet freezes the
+candidate's stable ID, physical revision ID, version and displayed terms. Before
+opening it, the browser checks that the historical comparison's observations and
+basis IDs correspond to the explicit matches; the server remains authoritative
+and revalidates the current candidate, source and basis inside the writer. Conflict
+or incomplete comparison is displayed as such and is not silently promoted to
+verification. The owner supplies a reason and separately confirms both the distinct
+event choice and the absence of document verification or financial eligibility.
+
+The form links to the event workspace for a manual review of existing events:
+`NOT_ADOPTED` is not a linkage lookup. The server rejects an attempt to link the
+same stable candidate to a different event, including after later candidate
+revisions. A stale or dismissed candidate is rejected without replacing the owner's
+input. The event response is checked against the frozen candidate, physical source
+revision, complete terms and historical comparison. A lost response keeps the same
+body and in-memory idempotency key for an unchanged retry; the response may be a
+historical replay, not the current event state. No password, decision input or key
+is placed in browser storage or mutation caches. Creating an event neither confirms
+source documents nor grants ownership, income, projection or receipt authority.
+
+`npm run test:e2e:candidate-event-create` uses an isolated synthetic application,
+manually cited source and real browser to verify password confirmation, exact
+candidate/source pins, responsive and busy-close behavior, a held/lost response,
+zero-write historical replay after dismissal, an already-associated candidate's
+409, and a competing revision's 412. The synthetic financial and reference-FX
+tables start and remain empty; no worker, network provider, deployment data or
+screenshot is used.
+
 ## Checks and remaining work
 
 `uv run pytest tests/test_dividend_candidates.py tests/test_dividend_evidence.py`
@@ -282,6 +314,6 @@ let the owner create a distinct event or explicitly associate the current candid
 with one selected existing event. Both candidate identity and physical revision are
 pinned and revalidated; the review response's `NOT_ADOPTED` label is still not a
 linkage query. Adoption records an owner decision, not verified market history,
-eligible shares, confirmed income or a receipt. A guided observation/basis picker,
-adoption in the browser, atomic entitlement rebuilding, verification and actual
-receipt workflow remain unfinished.
+eligible shares, confirmed income or a receipt. Browser association with an existing
+event, a guided observation/basis picker, atomic entitlement rebuilding, verification
+and the actual receipt workflow remain unfinished.
