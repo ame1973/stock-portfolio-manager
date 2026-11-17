@@ -373,7 +373,7 @@ async def test_executable_contract_marks_exact_versions_and_boundaries_as_requir
 ) -> None:
     schema = (await client.get("/openapi.json")).json()
     template = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projections"
-    assert set(schema["paths"][template]) == {"get"}
+    assert set(schema["paths"][template]) == {"get", "post"}
     assert schema["paths"][template]["get"]["security"] == [{"cookieAuth": []}]
     projection = schema["components"]["schemas"]["ProjectionRecord"]
     for field in ("account_version", "broker_version", "portfolio_data_revision", "projection_no"):

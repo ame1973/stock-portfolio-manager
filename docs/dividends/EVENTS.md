@@ -1510,8 +1510,8 @@ All records explicitly carry `UNVERIFIED_PROJECTION_HISTORY_ONLY`,
 `REVALIDATION_REQUIRED`, `history_completeness=UNVERIFIED` and
 `eligibility_scope=NOT_ESTABLISHED`. Historical results may be stale, do not authenticate
 the original writer, and are neither current entitlement nor received income. This read
-never appends projections, contacts providers, posts cash or modifies receipts/FX; no
-protected projection writer, current-use grant or atomic reconciliation is installed.
+never appends projections, contacts providers, posts cash or modifies receipts/FX. The
+separate writer below does not establish a current-use grant or atomic reconciliation.
 
 ## Protected projection-input snapshot
 
@@ -1535,8 +1535,42 @@ all pins in its own serialized transaction; these reads may become stale immedia
 The response states `RECORDED_PROJECTION_INPUTS_ONLY`, `REVALIDATION_REQUIRED`,
 `CURRENT_SOURCE_NOT_REVALIDATED` and `eligibility_scope=NOT_ESTABLISHED`. It does not
 verify current sources or historical share ownership, compute eligibility, choose exchange
-rates, post income, change receipts or contact providers. No protected projection writer or atomic
-event-revision/receipt reconciliation is installed.
+rates, post income, change receipts or contact providers. Atomic event-revision/receipt
+reconciliation remains unfinished.
+
+## Protected recorded-projection writer
+
+`POST /api/v1/dividends/events/{event_id}/accounts/{account_id}/projections` requires
+an active owner session, Origin and CSRF validation, an idempotency key, a quoted event
+`If-Match` and recent password confirmation. It rechecks session, CSRF and reauthentication
+inside the serialized writer before either a new operation or a cached replay. The body
+requires `RECORDED_PROJECTION_ONLY` and a separate `confirm_revision_fence=true`, the
+observed physical event revision, account, portfolio, broker and exact-string data/head
+versions, explicit as-of/rule and tax/fee selection pins, independent optional FX rates
+and sources, and a reason. All required nullable FX and selection fields must be supplied
+explicitly; no missing rate is guessed.
+
+**Recording any projection currently fences new event revisions, withdrawals and
+rejections**, even if the snapshot is `NEEDS_REVIEW` and no receipt exists. Projection
+history is append-only; there is currently no supported way to remove that fence.
+The explicit acknowledgment is required so an API client does not create this constraint
+without the owner's knowledge. Atomic event-revision reconciliation is needed to allow
+safe changes later.
+
+For a new request the internal writer revalidates current event/source, rejection, ledger,
+account, settings and projection history in the same transaction. The snapshot, its
+canonical audits, a separate route/key/normalized-intent binding audit and the serialized
+idempotency response commit together or roll back together. Changed pins are rejected;
+unavailable or inconsistent history returns a private fixed 503. An unchanged retry
+validates the complete retained chain and both the original intent and HTTP binding, and
+returns the original historical projection with no durable writes, even after account or
+setting changes. A matching replay is not current-use authority.
+
+Every returned snapshot retains the history read's unverified/no-grant labels. Before
+ex-date it is only recorded holdings, not accrued income; arithmetic `OK` does not verify
+tax, fee or FX. The writer posts no receipt or cash, does not rewrite historical facts or
+locked FX, and cannot advance a financially fenced event revision. Atomic event-revision
+rebuild and stable-event/account/currency receipt reconciliation are still required.
 
 ## Inert trade-audit origin storage
 

@@ -1,8 +1,9 @@
-"""Private, audited dividend projection-history reads without current-use authority."""
+"""Private recorded projections without current-use or receipt authority."""
 
 import re
 from decimal import Decimal
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request
 from pydantic_core import PydanticSerializationError
@@ -12,11 +13,15 @@ from sqlalchemy.exc import SQLAlchemyError
 import spm_api.dividend_event_service as events
 import spm_api.dividend_projection_history as history
 import spm_api.dividend_projection_models as models
+import spm_api.dividend_projection_write_models as write_models
+import spm_api.dividend_projection_writer as writer
+from spm_api.audit import audit, canonical, digest
 from spm_api.db import unit_of_work
 from spm_api.decimal_types import INT64_MAX
 from spm_api.errors import ApiError, Error
+from spm_api.mutations import mutate
 from spm_api.pagination import Page, PageDep, paginate
-from spm_api.security import AuthDep
+from spm_api.security import Auth, AuthDep, DividendEventVersionDep, WriteDep
 
 router = APIRouter(
     prefix="/api/v1/dividends/events/{event_id}/accounts/{account_id}/projections",
@@ -31,6 +36,40 @@ def _unavailable() -> ApiError:
         "DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE",
         "The projection history cannot be read safely",
     )
+
+
+def _failure(error: writer.ProjectionWriteError) -> ApiError:
+    code = str(error)
+    if code in {"DIVIDEND_PROJECTION_NOT_FOUND", "DIVIDEND_EVENT_NOT_FOUND"}:
+        return ApiError(404, "NOT_FOUND", "Dividend projection scope not found")
+    if code == "DIVIDEND_PROJECTION_OWNER_UNAVAILABLE":
+        return ApiError(401, "UNAUTHORIZED", "Authentication is required")
+    if code in {"INVALID_DIVIDEND_PROJECTION_SCOPE", "INVALID_DIVIDEND_PROJECTION_FX"}:
+        return ApiError(422, code, "The projection inputs are invalid")
+    if code in {"DIVIDEND_PROJECTION_VERSION_CONFLICT", "DIVIDEND_EVENT_VERSION_CONFLICT"}:
+        return ApiError(412, "PRECONDITION_FAILED", "The observed scope changed; reload it")
+    if code in {
+        "DIVIDEND_PROJECTION_CONFLICT",
+        "DIVIDEND_PROJECTION_SCOPE_CHANGED",
+        "DIVIDEND_PROJECTION_INPUT_CHANGED",
+        "DIVIDEND_PROJECTION_TIME_CONFLICT",
+        "DIVIDEND_REVISION_REJECTED",
+        "DIVIDEND_REJECTION_VERSION_CONFLICT",
+        "DIVIDEND_EVENT_SOURCE_CHANGED",
+        "DIVIDEND_TAX_SETTING_CHANGED",
+        "DIVIDEND_TAX_SCOPE_CHANGED",
+        "DIVIDEND_FEE_SETTING_CHANGED",
+        "DIVIDEND_FEE_SCOPE_CHANGED",
+        "CANDIDATE_NOT_FOUND",
+        "CANDIDATE_VERSION_CONFLICT",
+        "CANDIDATE_DISMISSED",
+        "CANDIDATE_SOURCE_UNAVAILABLE",
+        "CANDIDATE_SOURCE_CHANGED",
+        "CANDIDATE_BASIS_UNAVAILABLE",
+        "CANDIDATE_BASIS_CHANGED",
+    }:
+        return ApiError(409, code, "The projection no longer matches its observed inputs")
+    return _unavailable()
 
 
 def _decimal(value: Decimal | None) -> str | None:
@@ -121,6 +160,83 @@ def _provenance(
     )
 
 
+def _intent(
+    event_id: UUID,
+    account_id: UUID,
+    revision_no: int,
+    identifier: UUID,
+    body: write_models.ProjectionWrite,
+) -> writer.ProjectionIntent:
+    values = body.model_dump(exclude={"confirmation", "confirm_revision_fence"})
+    for name in (
+        "account_version",
+        "broker_version",
+        "expected_data_revision",
+        "expected_projection_no",
+        "expected_tax_head_no",
+        "expected_fee_head_no",
+    ):
+        values[name] = int(values[name])
+    return writer.ProjectionIntent.model_validate(
+        {
+            **values,
+            "id": identifier,
+            "event_id": event_id,
+            "account_id": account_id,
+            "revision_no": revision_no,
+        }
+    )
+
+
+def _binding(
+    request: Request, headers: WriteDep, payload: dict[str, Any], record: history.RetainedProjection
+) -> dict[str, object]:
+    version = record.version
+    return {
+        "event_id": str(version.event_id),
+        "revision_id": str(version.revision_id),
+        "revision_no": version.revision_no,
+        "account_id": str(version.account_id),
+        "projection_id": str(version.id),
+        "projection_no": version.projection_no,
+        "route": f"{request.method} {request.url.path}",
+        "key_sha256": digest(headers.key),
+        "intent_sha256": digest(canonical(payload)),
+        "scope": "RECORDED_PROJECTION_HTTP_INTENT_ONLY",
+    }
+
+
+def _check_intent(
+    con: Connection,
+    auth: Auth,
+    request: Request,
+    headers: WriteDep,
+    payload: dict[str, Any],
+    record: history.RetainedProjection,
+) -> None:
+    rows = con.execute(
+        text("""
+        SELECT owner_id,action,request_id,reason,before_sha256,after_sha256,created_at
+        FROM audit_events WHERE entity_type='dividend_projection_http_intent' AND entity_id=:id
+    """),
+        {"id": str(record.version.id)},
+    ).all()
+    expected = (
+        str(auth.owner.id),
+        "DIVIDEND_PROJECTION_HTTP_INTENT",
+        str(record.request_id),
+        "",
+        None,
+        digest(canonical(_binding(request, headers, payload, record))),
+    )
+    if (
+        len(rows) != 1
+        or tuple(rows[0][:6]) != expected
+        or events._time(rows[0].created_at) < record.created_at
+    ):
+        raise writer.ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE")
+
+
 @router.get("", operation_id="list_dividend_projection_history")
 def projection_history(
     event_id: UUID, account_id: UUID, request: Request, auth: AuthDep, page: PageDep
@@ -165,6 +281,78 @@ def projection_history(
             )
     except (history.ProjectionHistoryError, events.EventError):
         raise _unavailable() from None
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        OverflowError,
+        SQLAlchemyError,
+        PydanticSerializationError,
+    ):
+        raise _unavailable() from None
+
+
+@router.post(
+    "",
+    status_code=201,
+    operation_id="create_recorded_dividend_projection",
+    responses={409: {"model": Error}, 412: {"model": Error}},
+)
+def create_projection(
+    event_id: UUID,
+    account_id: UUID,
+    body: write_models.ProjectionWrite,
+    request: Request,
+    headers: WriteDep,
+    version: DividendEventVersionDep,
+) -> models.ProjectionRecord:
+    payload = {"event_version": version, **body.model_dump(mode="json")}
+    expected = int(body.expected_projection_no)
+
+    def action(con: Connection, auth: Auth) -> models.ProjectionRecord:
+        intent = _intent(event_id, account_id, version, uuid4(), body)
+        record = writer.save(con, auth.owner.id, intent, request_id=UUID(request.state.request_id))
+        audit(
+            con,
+            str(auth.owner.id),
+            "dividend_projection_http_intent",
+            str(record.version.id),
+            "DIVIDEND_PROJECTION_HTTP_INTENT",
+            request_id=str(record.request_id),
+            after=_binding(request, headers, payload, record),
+        )
+        _check_intent(con, auth, request, headers, payload, record)
+        return _public(con, auth.owner.id, record)
+
+    def replay(con: Connection, auth: Auth, cached: models.ProjectionRecord) -> None:
+        retained = history.history(con, auth.owner.id, event_id, account_id)
+        if retained is None or len(retained) <= expected:
+            raise writer.ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE")
+        original = retained[expected]
+        if original.version.id != cached.id:
+            raise writer.ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE")
+        intent = _intent(event_id, account_id, version, original.version.id, body)
+        try:
+            verified = writer.save(con, auth.owner.id, intent, request_id=original.request_id)
+        except writer.ProjectionWriteError:
+            raise writer.ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE") from None
+        if _public(con, auth.owner.id, verified) != cached:
+            raise writer.ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE")
+        _check_intent(con, auth, request, headers, payload, verified)
+
+    try:
+        return mutate(
+            request,
+            headers,
+            payload,
+            models.ProjectionRecord,
+            action,
+            status=201,
+            reauth=True,
+            validate_replay=replay,
+        )
+    except writer.ProjectionWriteError as error:
+        raise _failure(error) from None
     except (
         ValueError,
         TypeError,

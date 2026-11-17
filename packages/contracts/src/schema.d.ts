@@ -565,7 +565,8 @@ export interface paths {
         /** Projection History */
         get: operations["list_dividend_projection_history"];
         put?: never;
-        post?: never;
+        /** Create Projection */
+        post: operations["create_recorded_dividend_projection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4328,6 +4329,87 @@ export interface components {
              * @enum {string}
              */
             timing_scope: "BEFORE_EX_DATE_RECORDED_HOLDINGS_ONLY" | "ON_OR_AFTER_EX_DATE_RECORDED_HISTORY_ONLY";
+        };
+        /** ProjectionWrite */
+        ProjectionWrite: {
+            /** Account Version */
+            account_version: string;
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Confirm Revision Fence
+             * @description A retained projection currently blocks event revision, withdrawal and rejection until atomic reconciliation is available.
+             * @constant
+             */
+            confirm_revision_fence: true;
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "RECORDED_PROJECTION_ONLY";
+            /**
+             * Eligibility Rule
+             * @enum {string}
+             */
+            eligibility_rule: "ORDINARY_PRE_EX_DATE" | "REQUIRES_REVIEW";
+            /** Expected Data Revision */
+            expected_data_revision: string;
+            /** Expected Fee Head Id */
+            expected_fee_head_id: string | null;
+            /** Expected Fee Head No */
+            expected_fee_head_no: string;
+            /** Expected Fee Selected Id */
+            expected_fee_selected_id: string | null;
+            /** Expected Projection Id */
+            expected_projection_id: string | null;
+            /** Expected Projection No */
+            expected_projection_no: string;
+            /** Expected Tax Head Id */
+            expected_tax_head_id: string | null;
+            /** Expected Tax Head No */
+            expected_tax_head_no: string;
+            /** Expected Tax Selected Id */
+            expected_tax_selected_id: string | null;
+            /**
+             * Fee Effective On
+             * Format: date
+             */
+            fee_effective_on: string;
+            /** Fee Rate Event */
+            fee_rate_event: string | null;
+            /** Fee Rate Source */
+            fee_rate_source: string | null;
+            /** Fx Rate Hkd */
+            fx_rate_hkd: string | null;
+            /** Fx Source */
+            fx_source: string | null;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /**
+             * Tax Effective On
+             * Format: date
+             */
+            tax_effective_on: string;
         };
         /** ProviderCoverage */
         ProviderCoverage: {
@@ -10986,6 +11068,100 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    create_recorded_dividend_projection: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                event_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectionWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectionRecord"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
                 headers: {
                     [name: string]: unknown;
                 };
