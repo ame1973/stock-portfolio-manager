@@ -10,6 +10,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import Connection, Engine, create_engine, event
 from sqlalchemy.engine import URL
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import ConnectionPoolEntry
 
 from spm_api.config import ROOT, Settings
@@ -91,7 +92,11 @@ def savepoint(connection: Connection) -> Iterator[None]:
         raise
     try:
         yield
-    except BaseException:
+    except BaseException as error:
+        if not connection.in_transaction():
+            if isinstance(error, Exception):
+                raise SQLAlchemyError("SAVEPOINT_OUTCOME_UNCERTAIN") from None
+            raise
         if nested.is_active:
             try:
                 nested.rollback()
@@ -100,8 +105,12 @@ def savepoint(connection: Connection) -> Iterator[None]:
                 raise
         else:
             _abort_uncertain_transaction(connection)
+            if isinstance(error, Exception):
+                raise SQLAlchemyError("SAVEPOINT_OUTCOME_UNCERTAIN") from None
         raise
     else:
+        if not connection.in_transaction():
+            raise SQLAlchemyError("SAVEPOINT_OUTCOME_UNCERTAIN")
         try:
             nested.commit()
         except BaseException:
