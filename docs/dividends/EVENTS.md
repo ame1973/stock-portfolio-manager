@@ -1627,6 +1627,24 @@ tax, fee or FX. The writer posts no receipt or cash, does not rewrite historical
 locked FX, and cannot advance a financially fenced event revision. Atomic event-revision
 rebuild and stable-event/account/currency receipt reconciliation are still required.
 
+## Internal receipt terms and cash calculation
+
+`dividend_receipt_terms` validates explicit actual receipt terms without writing them. An
+actual receipt amount is already net cash: the separately recorded tax and fee are not
+subtracted again. Each component must be supplied explicitly as unknown (`null`) or a
+nonnegative exact decimal string, so an explicit zero is distinct from unknown. A foreign
+currency needs an explicitly sourced historical FX rate for an HKD amount; missing FX
+remains unknown. HKD identity is mathematical, not an external quote. A broker actual HKD
+override requires both the historical rate and a reason and keeps the original rate.
+Calculated money is rounded only at its scaled INT64 boundary, and every cash amount
+must remain exactly reversible.
+
+This isolated calculation neither authenticates a person nor establishes ownership,
+payment or eligibility; it creates no receipt, cash, audit, idempotency entry or grant. The
+legacy receipt table does not yet store unknown tax or fee as `null`, and this calculation
+must not be used to store unknown components as legacy zero. A safe persistence contract,
+a protected receipt writer/void, and atomic event reconciliation remain unfinished.
+
 ## Internal retained-receipt link reader
 
 The internal `dividend_receipt_history.history` reader resolves all retained entitlement
