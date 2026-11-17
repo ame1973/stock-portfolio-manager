@@ -172,7 +172,9 @@ def _verify_intent(
         raise ReceiptWriteError("DIVIDEND_RECEIPT_HISTORY_UNAVAILABLE")
 
 
-def _current_scope(con: Connection, owner: UUID, intent: ReceiptIntent) -> None:
+def _current_scope(
+    con: Connection, owner: UUID, intent: ReceiptIntent, *, invalidated: bool = False
+) -> None:
     event = events.get(con, owner, intent.event_id)
     if event is None:
         raise ReceiptWriteError("DIVIDEND_RECEIPT_NOT_FOUND")
@@ -197,6 +199,11 @@ def _current_scope(con: Connection, owner: UUID, intent: ReceiptIntent) -> None:
     )
     if account is None:
         raise ReceiptWriteError("DIVIDEND_RECEIPT_NOT_FOUND")
+    for name in ("account_version", "portfolio_version", "broker_version"):
+        if type(account[name]) is not int or not 1 <= account[name] <= INT64_MAX:
+            raise ReceiptWriteError("DIVIDEND_RECEIPT_HISTORY_UNAVAILABLE")
+    if type(account["data_revision"]) is not int or not 0 <= account["data_revision"] <= INT64_MAX:
+        raise ReceiptWriteError("DIVIDEND_RECEIPT_HISTORY_UNAVAILABLE")
     if account["status"] != "ACTIVE":
         raise ReceiptWriteError("DIVIDEND_RECEIPT_ACCOUNT_ARCHIVED")
     if (
@@ -205,7 +212,7 @@ def _current_scope(con: Connection, owner: UUID, intent: ReceiptIntent) -> None:
         or account["account_version"] != intent.account_version
         or account["portfolio_version"] != intent.portfolio_version
         or account["broker_version"] != intent.broker_version
-        or account["data_revision"] != intent.expected_data_revision
+        or account["data_revision"] != intent.expected_data_revision + int(invalidated)
     ):
         raise ReceiptWriteError("DIVIDEND_RECEIPT_SCOPE_CHANGED")
     entitlement = con.execute(
@@ -387,6 +394,7 @@ def _save(
             at=at,
         )
         rebase_cash_changes(con, str(owner), [cash_id], str(intent.id), str(request_id))
+        _current_scope(con, owner, intent)
         invalidate_portfolio(
             con,
             str(intent.portfolio_id),
@@ -394,6 +402,7 @@ def _save(
             "DIVIDEND_RECEIPT_RECORDED",
             intent.received_date,
         )
+        _current_scope(con, owner, intent, invalidated=True)
         updated = history.history(con, owner, intent.event_id, intent.account_id)
         if updated is None or len(updated) != len(previous) + 1:
             raise ReceiptWriteError("DIVIDEND_RECEIPT_HISTORY_UNAVAILABLE")
