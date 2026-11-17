@@ -538,6 +538,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Projection History */
+        get: operations["list_dividend_projection_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
         parameters: {
             query?: never;
@@ -3850,6 +3867,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[ProjectionRecord] */
+        Page_ProjectionRecord_: {
+            /** Items */
+            items: components["schemas"]["ProjectionRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[ProviderCoverage] */
         Page_ProviderCoverage_: {
             /** Items */
@@ -3991,6 +4015,186 @@ export interface components {
             cash_completeness?: ("UNKNOWN" | "PARTIAL" | "COMPLETE") | null;
             /** Name */
             name?: string | null;
+        };
+        /** ProjectionAmounts */
+        ProjectionAmounts: {
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /** Estimated Hkd */
+            estimated_hkd: string | null;
+            /** Fee Local */
+            fee_local: string;
+            /** Gross Local */
+            gross_local: string;
+            /** Net Local */
+            net_local: string;
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "OK" | "MISSING_QUOTE" | "MISSING_FX" | "NOT_COMPUTABLE" | "NEEDS_REVIEW";
+            /** Rounding Delta Local */
+            rounding_delta_local: string;
+            /** Tax Local */
+            tax_local: string;
+        };
+        /** ProjectionProvenance */
+        ProjectionProvenance: {
+            /**
+             * Effective On
+             * Format: date
+             */
+            effective_on: string;
+            /** Observed Head Id */
+            observed_head_id: string | null;
+            /** Observed Head No */
+            observed_head_no: string;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "OWNER_ESTIMATE_ONLY";
+            /** Selected Setting Id */
+            selected_setting_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "MISSING" | "UNKNOWN" | "ESTIMATED";
+        };
+        /** ProjectionRecord */
+        ProjectionRecord: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Account Version */
+            account_version: string;
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Creation Audit Scope
+             * @enum {string}
+             */
+            creation_audit_scope: "NO_RECORDED_CREATION_GAP_REVIEW" | "CREATION_GAP_REVIEWED_UNVERIFIED";
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Eligibility Rule
+             * @enum {string}
+             */
+            eligibility_rule: "ORDINARY_PRE_EX_DATE" | "REQUIRES_REVIEW";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            estimated_amounts: components["schemas"]["ProjectionAmounts"] | null;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+            /** Fee Currency */
+            fee_currency: ("HKD" | "USD") | null;
+            /** Fee Original */
+            fee_original: string | null;
+            fee_provenance: components["schemas"]["ProjectionProvenance"] | null;
+            /** Fee Rate Event */
+            fee_rate_event: string | null;
+            /** Fee Rate Source */
+            fee_rate_source: string | null;
+            /** Fx Rate Hkd */
+            fx_rate_hkd: string | null;
+            /** Fx Source */
+            fx_source: string | null;
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Portfolio Data Revision */
+            portfolio_data_revision: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Previous Id */
+            previous_id: string | null;
+            /** Projection No */
+            projection_no: string;
+            /** Reason */
+            reason: string;
+            /** Recorded Shares */
+            recorded_shares: string | null;
+            /**
+             * Retired Trade Scope
+             * @enum {string}
+             */
+            retired_trade_scope: "NO_RETIRED_TRADES" | "RETIRED_TRADE_HISTORY_UNVERIFIED" | "RETIRED_TRADE_HASHES_MATCHED";
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "UNVERIFIED_PROJECTION_HISTORY_ONLY";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "EXPECTED" | "NO_POSITION" | "NEEDS_REVIEW" | "CANCELLED";
+            tax_provenance: components["schemas"]["ProjectionProvenance"] | null;
+            /** Tax Rate */
+            tax_rate: string | null;
+            /**
+             * Timing Scope
+             * @enum {string}
+             */
+            timing_scope: "BEFORE_EX_DATE_RECORDED_HOLDINGS_ONLY" | "ON_OR_AFTER_EX_DATE_RECORDED_HISTORY_ONLY";
         };
         /** ProviderCoverage */
         ProviderCoverage: {
@@ -10504,6 +10708,78 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_dividend_projection_history: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                event_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ProjectionRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

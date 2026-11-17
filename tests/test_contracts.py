@@ -101,6 +101,10 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings/history",
             "get",
         ): "list_dividend_tax_estimate_history",
+        (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projections",
+            "get",
+        ): "list_dividend_projection_history",
         ("/api/v1/dividends/candidates", "get"): "list_dividend_candidates",
         ("/api/v1/dividends/candidates", "post"): "create_dividend_candidate",
         ("/api/v1/dividends/candidates/{id}", "get"): "get_dividend_candidate",

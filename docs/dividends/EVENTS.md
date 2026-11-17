@@ -1456,8 +1456,8 @@ held all shares, that a cited source or tax/fee estimate is true, or that a rece
 may be posted. It reconstructs current calculation inputs from the retained snapshot;
 it does not recover or authenticate the original writer's private request intent.
 Callers must separately enforce session/Origin/CSRF/reauthentication, ex-date recognition,
-receipt reconciliation and all other economic checks. No protected projection API or
-receipt workflow is installed by this internal fence.
+receipt reconciliation and all other economic checks. The separate protected history
+read API below does not expose this current-use fence or install a receipt workflow.
 
 ## Internal retained-projection history reader
 
@@ -1486,6 +1486,32 @@ account configuration and authorization in a writer transaction before economic 
 There is no authenticated atomic event-revision rebuild or receipt writer; event publication
 remains fenced, and computational `OK` is not confirmed tax. This read performs no writes
 or provider access.
+
+## Protected projection-history read API
+
+`GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/projections` requires
+an active owner session and returns private `Cache-Control: no-store` keyset-paginated
+retained versions in descending projection number. The reader validates the complete
+owned history and source/audit chain in one snapshot before filtering or pagination;
+a corrupt later record cannot be hidden by a search. An absent or foreign event/account
+returns 404; an owned scope with no records returns an empty page, not a zero entitlement.
+
+Every record retains the historical physical event revision, explicit `as_of` and that
+revision's ex-date. `timing_scope` distinguishes a pre-ex-date recorded-holdings view
+from a later recorded-history view. `recorded_shares` and `estimated_amounts` are exact
+strings only when the retained state permits them; missing calculations and rates remain
+null. `NO_POSITION` is an unverified recorded-history state, not proof of no holdings.
+`quality=OK` describes arithmetic only. Tax and fee provenance include the original
+observed head and explicit missing/unknown/estimated selection, or null for legacy
+snapshots without retained provenance; no setting or FX is inferred. Projection, account,
+broker and data versions are canonical INT64 strings.
+
+All records explicitly carry `UNVERIFIED_PROJECTION_HISTORY_ONLY`,
+`REVALIDATION_REQUIRED`, `history_completeness=UNVERIFIED` and
+`eligibility_scope=NOT_ESTABLISHED`. Historical results may be stale, do not authenticate
+the original writer, and are neither current entitlement nor received income. This read
+never appends projections, contacts providers, posts cash or modifies receipts/FX; no
+protected projection writer, current-use grant or atomic reconciliation is installed.
 
 ## Inert trade-audit origin storage
 
