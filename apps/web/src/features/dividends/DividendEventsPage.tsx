@@ -17,6 +17,7 @@ import { usePageState } from "../settings/data";
 import { SourceLink, SourceReadState, SourceValues } from "../sources/details";
 import { CandidateEventMatchForm } from "./CandidateEventMatchForm";
 import { DividendEstimatePanel } from "./DividendEstimatePanel";
+import { DividendProjectionPanel } from "./DividendProjectionPanel";
 import { EstimateWriteForm, type EstimateTarget } from "./EstimateWriteForm";
 import { AcceptEventForm, WithdrawEventForm } from "./CitedEventDecisionForm";
 import { ManualEventCreateForm, ManualEventOverrideForm, ManualEventRevisionForm } from "./ManualEventForm";
@@ -145,6 +146,7 @@ function EventCard({ record, disabled, associationDisabled, onOpen, estimateRefr
   const [revisions, setRevisions] = useState(false);
   const [rejections, setRejections] = useState(false);
   const [estimates, setEstimates] = useState(false);
+  const [projections, setProjections] = useState(false);
   return <article className="grid min-w-0 gap-4" aria-label={`股息事件 ${record.id}`}>
     <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h2 className="font-semibold"><SecurityName id={record.security_id} /></h2>
       <p className="mt-2 break-all text-sm">除淨日 {record.ex_date}；每股 <span className="font-medium">{record.currency} {record.dps}</span></p></div>
@@ -155,9 +157,11 @@ function EventCard({ record, disabled, associationDisabled, onOpen, estimateRefr
       <EventTerms record={record} /><RejectionState record={record} disabled={disabled} associationDisabled={associationDisabled} onOpen={onOpen} />
       <div className="flex flex-wrap gap-3"><Button variant="outline" aria-expanded={revisions} onClick={() => setRevisions(value => !value)}>{revisions ? "收合事件修訂歷史" : "查看事件修訂歷史"}</Button>
         <Button variant="outline" aria-expanded={rejections} onClick={() => setRejections(value => !value)}>{rejections ? "收合拒絕歷史" : "查看拒絕歷史"}</Button>
-        <Button variant="outline" aria-expanded={estimates} onClick={() => setEstimates(value => !value)}>{estimates ? "收合帳戶稅費估算" : "查看帳戶稅費估算"}</Button></div>
+        <Button variant="outline" aria-expanded={estimates} onClick={() => setEstimates(value => !value)}>{estimates ? "收合帳戶稅費估算" : "查看帳戶稅費估算"}</Button>
+        <Button variant="outline" aria-expanded={projections} onClick={() => setProjections(value => !value)}>{projections ? "收合帳戶投影歷史" : "查看帳戶投影歷史"}</Button></div>
       {revisions && <RevisionHistory record={record} />}{rejections && <RejectionHistory record={record} />}
       {estimates && <DividendEstimatePanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={estimateRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "estimate", target })} />}
+      {projections && <DividendProjectionPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} />}
       <Link to={`/settings/securities/${record.security_id}`} className="inline-flex min-h-11 items-center text-sm text-primary underline">核對穩定證券身分</Link>
     </div>}
   </article>;

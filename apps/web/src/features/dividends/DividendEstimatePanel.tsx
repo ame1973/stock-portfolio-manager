@@ -28,30 +28,30 @@ function checkedAccounts(page: Page<Account>): Page<Account> {
   return page;
 }
 
-function AccountPicker({ selected, onSelect }: { selected: Account | null; onSelect: (record: Account) => void }) {
+export function DividendAccountPicker({ selected, onSelect, purpose = "估算" }: { selected: Account | null; onSelect: (record: Account) => void; purpose?: "估算" | "投影" }) {
   const page = usePageState();
   const load = useCallback(async (cursor: string | undefined, signal: AbortSignal) => checkedAccounts(checked(await api.GET("/api/v1/accounts", { params: { query: { cursor, limit: 25 } }, signal }))), []);
-  const result = usePrivatePage("dividend-estimate-accounts", page.cursor, load);
+  const result = usePrivatePage(`dividend-${purpose}-accounts`, page.cursor, load);
   const ready = !!result.data && !result.isFetching && !result.isPaused && !result.isError;
-  return <section aria-label="選擇估算帳戶" className="grid min-w-0 gap-3 rounded-md border border-border p-4">
+  return <section aria-label={`選擇${purpose}帳戶`} className="grid min-w-0 gap-3 rounded-md border border-border p-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-medium">選擇帳戶</h4>
-      <Button type="button" variant="outline" disabled={result.isFetching} onClick={() => result.refetch()}>重新載入估算帳戶</Button></div>
+      <Button type="button" variant="outline" disabled={result.isFetching} onClick={() => result.refetch()}>重新載入{purpose}帳戶</Button></div>
     <p className="text-sm leading-7 text-secondary">這只選擇已記錄帳戶；不代表持有此證券、符合股息資格或收到款項。</p>
     {result.isPaused ? <p role="status" className="text-sm text-secondary">連線已暫停，不能選擇新帳戶。</p>
       : result.isPending ? <p role="status" className="text-sm text-secondary">正在載入帳戶…</p>
         : result.isFetching ? <p role="status" className="text-sm text-secondary">正在重新核對帳戶。</p> : null}
     {result.isError && <div role="alert" className="grid gap-3 text-sm text-danger"><p>{failureMessage(result.error)}</p>
       {result.data && <p>以下是上次載入內容，尚未重新核對。</p>}
-      <Button type="button" variant="outline" onClick={() => result.refetch()}>重試載入估算帳戶</Button></div>}
+      <Button type="button" variant="outline" onClick={() => result.refetch()}>重試載入{purpose}帳戶</Button></div>}
     {result.data && <>{result.data.items.length === 0 ? <p className="text-sm text-secondary">此頁沒有帳戶；不代表沒有持倉或股息。</p>
       : <ul className="grid gap-3">{result.data.items.map(record => <li key={record.id} className="grid min-w-0 gap-2 rounded-md border border-border p-3 text-sm leading-7">
         <p>{record.name}；帳戶預設幣別 {record.default_currency}；{record.status === "ARCHIVED" ? "已封存，仍可查閱歷史" : "有效帳戶"}。</p>
         <p className="break-all">帳戶 {record.id}；組合 {record.portfolio_id}；券商 {record.broker_id}。</p>
         <div><Button type="button" variant="outline" disabled={!ready || selected?.id.toLowerCase() === record.id.toLowerCase()} onClick={() => onSelect(structuredClone(record))}>
-          {selected?.id.toLowerCase() === record.id.toLowerCase() ? "已選此估算帳戶" : `選擇估算帳戶 ${record.name}`}</Button></div></li>)}</ul>}
-      <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" disabled={!ready || page.number === 1} onClick={page.previous}>上一頁估算帳戶</Button>
+          {selected?.id.toLowerCase() === record.id.toLowerCase() ? `已選此${purpose}帳戶` : `選擇${purpose}帳戶 ${record.name}`}</Button></div></li>)}</ul>}
+      <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" disabled={!ready || page.number === 1} onClick={page.previous}>上一頁{purpose}帳戶</Button>
         <p className="text-sm text-secondary">第 {page.number} 頁；本頁 {result.data.items.length} 筆，非全部帳戶。</p>
-        <Button type="button" variant="outline" disabled={!ready || !result.data.next_cursor} onClick={() => { if (result.data?.next_cursor) page.next(result.data.next_cursor); }}>下一頁估算帳戶</Button></div></>}
+        <Button type="button" variant="outline" disabled={!ready || !result.data.next_cursor} onClick={() => { if (result.data?.next_cursor) page.next(result.data.next_cursor); }}>下一頁{purpose}帳戶</Button></div></>}
   </section>;
 }
 
@@ -156,7 +156,7 @@ export function DividendEstimatePanel({ event: observed, onWrite, writeDisabled 
   if (!validEstimateEvent(event)) return <p role="alert" className="text-sm text-danger">事件版本無法安全核對；請重新載入後再查閱估算。</p>;
   return <section aria-label="帳戶稅費估算" className="grid min-w-0 gap-4 rounded-md border border-border p-4"><h3 className="font-semibold">帳戶稅費估算</h3>
     <p className="break-all text-sm leading-7 text-secondary">固定事件 {event.id}；版本 {event.version}；實體修訂 {event.current_revision_id}。查閱不會建立持倉、應收、實收或換匯。</p>
-    <AccountPicker selected={account} onSelect={setAccount} />
+    <DividendAccountPicker selected={account} onSelect={setAccount} />
     {account && <><p className="break-all text-sm">所選帳戶：{account.name}；{account.id}。</p><Field label="查閱估算生效日" type="date" value={effective} onChange={change => setEffective(change.target.value)} help="請明確選擇查閱日期，不由除淨日或今天自動推定。" />
       {date.safeParse(effective).success && <SelectionDetails key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${effective}`} event={event} account={account} effective={effective} onWrite={onWrite} writeDisabled={writeDisabled} refresh={refresh} />}</>}
   </section>;

@@ -1513,6 +1513,26 @@ the original writer, and are neither current entitlement nor received income. Th
 never appends projections, contacts providers, posts cash or modifies receipts/FX. The
 separate writer below does not establish a current-use grant or atomic reconciliation.
 
+## Projection history in the browser
+
+In the dividend event workspace, expand an event and select **View account projection
+history**. Choose an account explicitly; the browser then reads bounded pages of that
+stable event/account's recorded versions. It displays exact string-valued versions,
+historical physical event revision, as-of/ex-date timing, recorded shares and estimated
+components only when present, and separate missing/unknown tax and fee provenance. A
+pre-ex-date snapshot is labeled recorded holdings, not accrued income. Missing HKD FX
+is shown as unknown rather than zero. A different historical event revision or prior
+account/broker scope is not silently relabeled as current, and versions are not summed.
+
+The component validates response identity, ordering, state, labels, exact decimal bounds,
+component arithmetic and basic FX/provenance consistency before display. Account/page
+scopes and results remain in mounted component memory rather than persistent browser
+storage or a query cache. Failed or offline reads are labeled stale and disable pagination;
+late responses from a previously selected account are discarded. Reading this view does
+not create a projection, entitlement, receipt, cash entry or current-use grant. Projection
+creation and the revision-fence acknowledgment remain available through the protected API;
+a browser write workflow is not yet provided.
+
 ## Protected projection-input snapshot
 
 `GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/projection-inputs`

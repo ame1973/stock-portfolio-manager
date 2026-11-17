@@ -54,6 +54,12 @@ async function openEvent() {
 }
 
 describe("dividend event workspace", () => {
+  it("opens recorded projection history without creating a projection", async () => {
+    reads({ "/api/v1/accounts": empty }); const post = vi.spyOn(api, "POST"); renderPage(); await openEvent();
+    fireEvent.click(screen.getByRole("button", { name: "查看帳戶投影歷史" }));
+    const panel = await screen.findByRole("region", { name: "已記錄股息投影" });
+    expect(panel).toHaveTextContent("查閱不會建立持倉、應收或實收"); expect(post).not.toHaveBeenCalled();
+  });
   it("opens account-scoped estimate reads without posting or assuming eligibility", async () => {
     reads({ "/api/v1/accounts": empty }); const post = vi.spyOn(api, "POST"); renderPage(); await openEvent();
     fireEvent.click(screen.getByRole("button", { name: "查看帳戶稅費估算" }));
