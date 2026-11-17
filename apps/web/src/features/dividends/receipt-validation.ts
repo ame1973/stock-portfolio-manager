@@ -15,7 +15,7 @@ const receipt = z.object({
   id, event_id: id, account_id: id, entitlement_id: id, revision_id: id, current_revision_id: id,
   revision_no: z.int().min(1).max(2_147_483_647), received_date: date,
   recorded_amount: signedMoney.max(50), currency: z.enum(["HKD", "USD"]),
-  recorded_tax: money.max(50), recorded_fee: money.max(50), fx_rate_hkd: fx.max(50).nullable(), received_hkd: signedMoney.max(50).nullable(),
+  recorded_tax: money.max(50).nullable(), recorded_fee: money.max(50).nullable(), fx_rate_hkd: fx.max(50).nullable(), received_hkd: signedMoney.max(50).nullable(),
   source: z.enum(["MANUAL", "IMPORT"]), status: z.enum(["ACTIVE", "VOID"]), version: positiveOrdinal,
   created_at: timestamp, voided_at: timestamp.nullable(),
   cash_scope: z.enum(["CASH_NOT_RECORDED", "CASH_REVERSAL_NOT_RECORDED", "MATCHING_CASH_RECORDED_UNVERIFIED", "MATCHING_CASH_REVERSAL_RECORDED_UNVERIFIED"]),

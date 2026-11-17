@@ -1640,10 +1640,27 @@ Calculated money is rounded only at its scaled INT64 boundary, and every cash am
 must remain exactly reversible.
 
 This isolated calculation neither authenticates a person nor establishes ownership,
-payment or eligibility; it creates no receipt, cash, audit, idempotency entry or grant. The
-legacy receipt table does not yet store unknown tax or fee as `null`, and this calculation
-must not be used to store unknown components as legacy zero. A safe persistence contract,
-a protected receipt writer/void, and atomic event reconciliation remain unfinished.
+payment or eligibility; it creates no receipt, cash, audit, idempotency entry or grant.
+Migration `0027_receipt_unknowns` permits new receipt rows to retain unknown tax or fee
+as `null`; it does not backfill older zeros or introduce an authenticated writer. A protected
+receipt writer/void and atomic event reconciliation remain unfinished.
+
+## Receipt unknowns storage migration
+
+Migration `0027_receipt_unknowns` changes the existing receipt table's tax and fee columns
+to nullable with no implicit zero default. Existing amounts, row identities, ordering, cash
+links, locked FX and audit rows are preserved; no prior value is reinterpreted or backfilled.
+The migration rebuilds the receipt table within the migration transaction, verifies copied
+row identities, values and SQLite types before replacing the original, restores its indexes
+and triggers, and adds the usual per-owner schema audit. It refuses an inbound foreign key
+to the receipt table, including differently cased names, or a custom column shadowing a
+rowid alias, rather than risking data loss. A validated private pre-migration backup is
+required for rollback.
+
+The scoped history API and browser preserve `null` as unknown and display an explicit
+recorded zero separately. Historical zeros remain unverified legacy fields, not proof of
+actual tax or fee. This schema and its guards do not authenticate a receipt or confirm
+payment, and they do not install a receipt writer, FX provenance, or event reconciliation.
 
 ## Internal retained-receipt link reader
 

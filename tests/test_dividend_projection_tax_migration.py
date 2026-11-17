@@ -185,7 +185,7 @@ def test_current_tax_writer_fails_closed_without_rejection_schema(previous_engin
 
 
 def test_current_head_starts_without_settings_or_projection_history(engine: Engine) -> None:
-    assert schema_head() == "0026_dividend_projection_fee"
+    assert schema_head() == "0027_receipt_unknowns"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql("SELECT count(*) FROM dividend_tax_settings").scalar_one() == 0
         assert (

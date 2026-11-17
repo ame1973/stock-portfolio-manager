@@ -24,7 +24,7 @@ function Record({ value }: { value: Receipt }) {
     <h5 className="font-semibold">{value.status === "VOID" ? "已作廢" : "已記錄"}收款；歷史稽核及付款均未驗證。</h5>
     <p>記錄收款日 {value.received_date}；原幣金額 {value.currency} {value.recorded_amount}；{value.received_hkd === null ? "港幣金額未知" : `記錄港幣金額 ${value.received_hkd}`}。</p>
     <p>{value.fx_rate_hkd === null ? "記錄匯率未提供" : `原紀錄港幣匯率 ${value.fx_rate_hkd}`}；來源與實際換匯尚未驗證。</p>
-    <p>記錄稅額 {value.currency} {value.recorded_tax}；記錄費用 {value.currency} {value.recorded_fee}；稅費欄位僅為舊紀錄，不代表已確認扣款。</p>
+    <p>{value.recorded_tax === null ? "記錄稅額未知，不是零" : `記錄稅額 ${value.currency} ${value.recorded_tax}`}；{value.recorded_fee === null ? "記錄費用未知，不是零" : `記錄費用 ${value.currency} ${value.recorded_fee}`}；稅費欄位僅為舊紀錄，不代表已確認扣款。</p>
     <p>{cashLabels[value.cash_scope]}</p>
     <p className="break-all">原事件修訂 {value.revision_no}／{value.revision_id}；原應收識別碼 {value.entitlement_id}；收款識別碼 {value.id}；版本 {value.version}。</p>
     <p>來源：{value.source === "MANUAL" ? "人工記錄" : "匯入紀錄"}；記錄時間 {value.created_at}；作廢時間 {value.voided_at ?? "未記錄"}。</p>

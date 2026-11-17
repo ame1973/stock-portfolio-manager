@@ -46,6 +46,14 @@ describe("recorded dividend receipt history", () => {
     expect(localStorage.length + sessionStorage.length).toBe(0);
   });
 
+  it("keeps unknown tax distinct from an explicitly recorded zero fee", async () => {
+    reads({ items: [{ ...receipt, recorded_tax: null, recorded_fee: "0.000000" }], next_cursor: null });
+    renderPanel(); await selectAccount(); const panel = await screen.findByRole("region", { name: "帳戶收款紀錄歷史" });
+    expect(await within(panel).findByText(/記錄稅額未知/)).toBeVisible();
+    expect(panel).toHaveTextContent("記錄費用 USD 0.000000");
+    expect(panel).not.toHaveTextContent("記錄稅額 USD 0.000000");
+  });
+
   it("does not interpret an empty page as confirmed zero or complete history", async () => {
     reads({ items: [], next_cursor: null }); renderPanel(); await selectAccount();
     expect(await screen.findByText(/此頁沒有已記錄的收款；不代表實收為零或歷史完整/)).toBeVisible();

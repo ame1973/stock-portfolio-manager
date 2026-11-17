@@ -34,7 +34,7 @@ def main() -> None:
     try:
         with unit_of_work(engine, write=True) as con:
             if con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() != (
-                "0026_dividend_projection_fee"
+                "0027_receipt_unknowns"
             ):
                 raise RuntimeError("SYNTHETIC_RECEIPT_FIXTURE_REQUIRED")
             scope = con.execute(
@@ -104,9 +104,10 @@ def main() -> None:
                 con.execute(
                     text("""
                         INSERT INTO dividend_receipts(id,entitlement_id,account_id,received_date,
-                            received_micro,currency,fx_rate_hkd_e12,received_hkd_micro,created_at)
+                            received_micro,currency,tax_micro,fee_micro,fx_rate_hkd_e12,
+                            received_hkd_micro,created_at)
                         VALUES (:id,:entitlement,:account,:day,:amount,:currency,
-                            :rate,:hkd,:created)
+                            :tax,:fee,:rate,:hkd,:created)
                     """),
                     {
                         "id": identifier,
@@ -115,6 +116,8 @@ def main() -> None:
                         "day": day,
                         "amount": amount,
                         "currency": currency,
+                        "tax": 0 if day == "2026-11-05" else None,
+                        "fee": None if day == "2026-11-06" else 0,
                         "rate": rate,
                         "hkd": hkd,
                         "created": stamp(),

@@ -252,6 +252,31 @@ async def test_search_is_literal_and_receipts_from_other_owned_accounts_stay_sep
     assert database_snapshot(engine) == before
 
 
+async def test_unknown_tax_and_fee_remain_null_and_explicit_zero_remains_zero(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    unknown, zero = str(uuid4()), str(uuid4())
+    with unit_of_work(engine, write=True) as con:
+        base = {
+            "entitlement_id": book["older"]["id"],
+            "account_id": str(book["account_id"]),
+            "received_date": "2026-01-10",
+            "received_micro": 2_000_000,
+            "currency": "USD",
+            "created_at": stamp(),
+        }
+        insert(con, "dividend_receipts", {**base, "id": unknown})
+        insert(con, "dividend_receipts", {**base, "id": zero, "tax_micro": 0, "fee_micro": 0})
+    before = database_snapshot(engine)
+    response = await client.get(path(book))
+    assert response.status_code == 200
+    safe(response)
+    rows = {row["id"]: row for row in response.json()["items"]}
+    assert rows[unknown]["recorded_tax"] is None and rows[unknown]["recorded_fee"] is None
+    assert rows[zero]["recorded_tax"] == rows[zero]["recorded_fee"] == "0.000000"
+    assert database_snapshot(engine) == before
+
+
 async def test_exact_int64_limits_are_serialized_as_decimal_strings(
     client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
 ) -> None:

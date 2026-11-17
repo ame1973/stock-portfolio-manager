@@ -8594,16 +8594,30 @@
             "type": "string"
           },
           "recorded_fee": {
-            "maxLength": 50,
-            "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
-            "title": "Recorded Fee",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Fee"
           },
           "recorded_tax": {
-            "maxLength": 50,
-            "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
-            "title": "Recorded Tax",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Tax"
           },
           "revision_id": {
             "format": "uuid",

@@ -24,8 +24,8 @@ class RecordedReceipt(Model):
     received_date: IsoDate = Field(repr=False)
     recorded_amount: Money = Field(repr=False)
     currency: Currency
-    recorded_tax: NonNegativeMoney = Field(repr=False)
-    recorded_fee: NonNegativeMoney = Field(repr=False)
+    recorded_tax: NonNegativeMoney | None = Field(repr=False)
+    recorded_fee: NonNegativeMoney | None = Field(repr=False)
     fx_rate_hkd: FxRate | None = Field(repr=False)
     received_hkd: Money | None = Field(repr=False)
     source: Literal["MANUAL", "IMPORT"]

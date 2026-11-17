@@ -33,8 +33,8 @@ class RetainedReceipt:
     received_date: date = field(repr=False)
     received: Decimal = field(repr=False)
     currency: Currency = field(repr=False)
-    tax: Decimal = field(repr=False)
-    fee: Decimal = field(repr=False)
+    tax: Decimal | None = field(repr=False)
+    fee: Decimal | None = field(repr=False)
     fx_rate_hkd: Decimal | None = field(repr=False)
     received_hkd: Decimal | None = field(repr=False)
     source: Literal["MANUAL", "IMPORT"]
@@ -209,8 +209,8 @@ def _receipt(con: Connection, row: RowMapping, account_id: UUID) -> RetainedRece
         received_date=_day(row["received_date"]),
         received=_decimal(row["received_micro"], 6),
         currency=_currency(row["currency"]),
-        tax=_decimal(row["tax_micro"], 6, 0),
-        fee=_decimal(row["fee_micro"], 6, 0),
+        tax=_optional_decimal(row["tax_micro"], 6, 0),
+        fee=_optional_decimal(row["fee_micro"], 6, 0),
         fx_rate_hkd=_optional_decimal(row["fx_rate_hkd_e12"], 12, 1),
         received_hkd=_optional_decimal(row["received_hkd_micro"], 6),
         source=cast(Literal["MANUAL", "IMPORT"], row["source"]),

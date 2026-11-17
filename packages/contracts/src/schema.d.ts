@@ -4835,9 +4835,9 @@ export interface components {
             /** Recorded Amount */
             recorded_amount: string;
             /** Recorded Fee */
-            recorded_fee: string;
+            recorded_fee: string | null;
             /** Recorded Tax */
-            recorded_tax: string;
+            recorded_tax: string | null;
             /**
              * Revision Id
              * Format: uuid

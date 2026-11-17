@@ -43,6 +43,8 @@ test("recorded receipt history stays private and preserves original event revisi
   expect(received.items).toHaveLength(3); expect(received.items.map(item => item.revision_no)).toEqual([2, 2, 1]);
   expect(received.items[0]?.cash_scope).toBe("MATCHING_CASH_REVERSAL_RECORDED_UNVERIFIED");
   expect(received.items[1]?.recorded_amount).toBe("9223372036854.775807");
+  expect(received.items[1]?.recorded_tax).toBeNull(); expect(received.items[1]?.recorded_fee).toBeNull();
+  expect(received.items[2]?.recorded_tax).toBe("0.000000"); expect(received.items[2]?.recorded_fee).toBe("0.000000");
   expect(received.items[2]?.cash_scope).toBe("MATCHING_CASH_RECORDED_UNVERIFIED");
   const before = database(); expect(before.dividend_receipts).toHaveLength(3); expect(before.dividend_entitlements).toHaveLength(2);
   expect(before.cash_ledger_entries).toHaveLength(3); expect(before.dividend_projection_versions).toEqual([]);
@@ -64,6 +66,7 @@ test("recorded receipt history stays private and preserves original event revisi
     await expect(history).toContainText("原事件修訂 1"); await expect(history).toContainText("原事件修訂 2");
     await expect(history).toContainText("USD 6.000000"); await expect(history).toContainText("7.800000000000");
     await expect(history).toContainText("HKD 9223372036854.775807"); await expect(history).toContainText("港幣金額未知");
+    await expect(history).toContainText("記錄稅額未知，不是零"); await expect(history).toContainText("記錄稅額 USD 0.000000");
     await expect(history).toContainText("已記錄現金關聯，尚未驗證"); await expect(history).toContainText("已記錄現金沖銷關聯，尚未驗證");
     await expect(history).toContainText("歷史稽核及付款均未驗證"); await expect(history).toContainText("不同幣別及歷史版本不在此相加");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

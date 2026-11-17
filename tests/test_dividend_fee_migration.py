@@ -117,7 +117,7 @@ def setting_values(
 def test_fee_setting_migration_starts_empty_without_backfilling_a_broker_default(
     engine: Engine,
 ) -> None:
-    assert schema_head() == "0026_dividend_projection_fee"
+    assert schema_head() == "0027_receipt_unknowns"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql("SELECT count(*) FROM dividend_fee_settings").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
