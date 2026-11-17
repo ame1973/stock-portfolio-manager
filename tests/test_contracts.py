@@ -102,6 +102,10 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "get",
         ): "list_dividend_tax_estimate_history",
         (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projection-inputs",
+            "get",
+        ): "get_dividend_projection_inputs",
+        (
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projections",
             "get",
         ): "list_dividend_projection_history",

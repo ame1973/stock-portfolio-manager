@@ -1513,6 +1513,31 @@ the original writer, and are neither current entitlement nor received income. Th
 never appends projections, contacts providers, posts cash or modifies receipts/FX; no
 protected projection writer, current-use grant or atomic reconciliation is installed.
 
+## Protected projection-input snapshot
+
+`GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/projection-inputs`
+requires an owner session and the explicit query parameters `as_of`, `eligibility_rule`,
+`tax_effective_on` and `fee_effective_on`. The response is private and `no-store`.
+It returns the current physical event revision, event ex-date/currency, owned account,
+portfolio and broker identities, exact-string account/broker/data versions, and the
+latest retained projection head. The selected eligibility rule and all requested dates
+are echoed without choosing them for the owner.
+
+The same WAL snapshot validates the complete retained projection, tax, fee and rejection
+histories before reporting each explicit effective-day selection, observed setting head,
+selected physical setting ID, status and account-scope match. `MISSING`, `UNKNOWN`
+and `ESTIMATED` remain distinct; a future-dated head does not imply a selected setting.
+An independently rejected current revision is labeled `REJECTED`; `NOT_REJECTED` is
+not event acceptance. An absent or foreign event/account returns 404, while an unreadable
+or inconsistent history returns a fixed private 503. A subsequent write must recheck
+all pins in its own serialized transaction; these reads may become stale immediately.
+
+The response states `RECORDED_PROJECTION_INPUTS_ONLY`, `REVALIDATION_REQUIRED`,
+`CURRENT_SOURCE_NOT_REVALIDATED` and `eligibility_scope=NOT_ESTABLISHED`. It does not
+verify current sources or historical share ownership, compute eligibility, choose exchange
+rates, post income, change receipts or contact providers. No protected projection writer or atomic
+event-revision/receipt reconciliation is installed.
+
 ## Inert trade-audit origin storage
 
 Migration `0017_trade_audit_origins` adds one initially empty append-only table

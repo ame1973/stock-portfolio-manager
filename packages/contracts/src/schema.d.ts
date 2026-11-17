@@ -538,6 +538,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projection-inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Projection Inputs */
+        get: operations["get_dividend_projection_inputs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projections": {
         parameters: {
             query?: never;
@@ -4040,6 +4057,122 @@ export interface components {
             rounding_delta_local: string;
             /** Tax Local */
             tax_local: string;
+        };
+        /** ProjectionInputSelection */
+        ProjectionInputSelection: {
+            /**
+             * Effective On
+             * Format: date
+             */
+            effective_on: string;
+            /** Head Id */
+            head_id: string | null;
+            /** Head No */
+            head_no: string;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "OWNER_ESTIMATE_ONLY";
+            /** Selected Id */
+            selected_id: string | null;
+            /**
+             * Selected Scope
+             * @enum {string}
+             */
+            selected_scope: "NO_SELECTED_SETTING" | "ACCOUNT_SCOPE_MATCH" | "ACCOUNT_SCOPE_CHANGED";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "MISSING" | "UNKNOWN" | "ESTIMATED";
+        };
+        /** ProjectionInputs */
+        ProjectionInputs: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Account Version */
+            account_version: string;
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Eligibility Rule
+             * @enum {string}
+             */
+            eligibility_rule: "ORDINARY_PRE_EX_DATE" | "REQUIRES_REVIEW";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+            fee: components["schemas"]["ProjectionInputSelection"];
+            /** Portfolio Data Revision */
+            portfolio_data_revision: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Projection Head Id */
+            projection_head_id: string | null;
+            /** Projection Head No */
+            projection_head_no: string;
+            /**
+             * Rejection State
+             * @enum {string}
+             */
+            rejection_state: "NOT_REJECTED" | "REJECTED";
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "RECORDED_PROJECTION_INPUTS_ONLY";
+            /**
+             * Source Scope
+             * @constant
+             */
+            source_scope: "CURRENT_SOURCE_NOT_REVALIDATED";
+            tax: components["schemas"]["ProjectionInputSelection"];
         };
         /** ProjectionProvenance */
         ProjectionProvenance: {
@@ -10708,6 +10841,79 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_dividend_projection_inputs: {
+        parameters: {
+            query: {
+                as_of: string;
+                eligibility_rule: "ORDINARY_PRE_EX_DATE" | "REQUIRES_REVIEW";
+                tax_effective_on: string;
+                fee_effective_on: string;
+            };
+            header?: never;
+            path: {
+                event_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectionInputs"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
