@@ -230,6 +230,45 @@ checks are not cryptographic protection against a privileged database writer
 replacing multiple mutually consistent records. These operations never create
 canonical dividends, entitlements, receipts, cash or action changes.
 
+## Create a declaration in the browser
+
+From `/data-center/dividends`, expand a dated v1 `SPLIT_ADJUSTED` observation and
+choose **Record this source's split basis**. The action is unavailable offline,
+while the list is refreshing or failed, or when its scope or identities cannot be
+checked. The form freezes the observation ID, security, original hash and ex-date;
+it does not infer a basis date, DPS, currency, action or source citation.
+
+Enter the documented source share-basis date. The bounded action picker shows
+recorded current actions for the security and date span. Explicitly add each
+applicable confirmed split or reverse split, reviewing its physical and root ID,
+exact ratio and canonical `version_exact` string. Unconfirmed, void, unallocated,
+out-of-window or other action types are not selectable; their presence is not
+silently converted into an empty chain. Changing the basis date retains selected
+actions for review and resets the scope confirmations. Exact boundaries are
+`[ex-date, basis-date]` for a basis on/after ex-date and `(basis-date, ex-date)`
+for an earlier basis. The list is paged and can change between reads; it is not
+proof of complete market history. Picker scopes and results stay in mounted
+component memory and are not stored in query caches or browser storage.
+
+Provide an explicit citation and explanation, then independently confirm the
+complete recorded action scope, split-only scope and the no-grant boundary. An
+empty action set needs a separate explicit confirmation. The server rechecks the
+original source and complete recorded action chain in its writer; a competing
+revision or omitted action rejects the new declaration without writes. The form
+preserves an unchanged uncertain request and idempotency key even if a later
+picker refresh fails. Its successful response is checked against the frozen source,
+exact selected action pins/terms, reference redaction and no-grant labels, but
+may be a historical replay rather than currently usable evidence.
+
+The isolated `npm run test:e2e:candidate-basis-picker` browser fixture creates a
+synthetic source and split, records the basis through the actual form, checks its
+string version and INT64-limit ratio, private no-store reads, responsive layout,
+busy-close and a held/lost response with zero-write replay. It then opens a second
+basis form, revises the action through the actual editor, verifies a new stale
+basis attempt is rejected without writes and retains input, and checks candidate
+historical replay and new-use rejection. It uses no provider network, worker,
+deployment data or screenshot.
+
 ## Date moments follow the ordinary eligibility contract
 
 The ordinary dividend entitlement basis includes effective events **strictly

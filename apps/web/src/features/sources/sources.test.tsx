@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { api, type components } from "@spm/contracts";
@@ -172,6 +172,31 @@ describe("explicit source-only intent and truthful observation UI", () => {
 
 describe("exact immutable source presentations", () => {
   const observationPage = (items: object[]) => ({ items, next_cursor: null, legacy_records_omitted: 0, scope: "IMMUTABLE_SOURCE_V1" });
+  it("offers basis creation only for an explicit dated split-adjusted original source", async () => {
+    reads({ "/api/v1/dividends/observations": observationPage([{ ...dividend, ex_date: "2026-11-01", adjustment_basis: "SPLIT_ADJUSTED" }]) });
+    renderUI(<ObservationsPage mode="dividends" />);
+    const button = await screen.findByRole("button", { name: "記錄此來源的拆股基準" }); fireEvent.click(button);
+    const dialog = screen.getByRole("dialog", { name: "記錄拆股基準聲明" });
+    expect(within(dialog).getByText(new RegExp(dividend.id))).toBeVisible();
+    expect(within(dialog).getByLabelText("來源股數基準日")).toHaveValue("");
+  });
+  it("disables basis creation when a source page repeats an identity regardless of UUID case", async () => {
+    const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const dated = { ...dividend, id, ex_date: "2026-11-01", adjustment_basis: "SPLIT_ADJUSTED" };
+    reads({ "/api/v1/dividends/observations": observationPage([dated, { ...dated, id: id.toUpperCase() }]) }); renderUI(<ObservationsPage mode="dividends" />);
+    expect((await screen.findAllByRole("button", { name: "記錄此來源的拆股基準" })).every(button => button.hasAttribute("disabled"))).toBe(true);
+  });
+  it("does not start basis creation from a previously loaded source while offline", async () => {
+    reads({ "/api/v1/dividends/observations": observationPage([{ ...dividend, ex_date: "2026-11-01", adjustment_basis: "SPLIT_ADJUSTED" }]) });
+    renderUI(<ObservationsPage mode="dividends" />); const button = await screen.findByRole("button", { name: "記錄此來源的拆股基準" });
+    expect(button).toBeEnabled();
+    try { await act(async () => onlineManager.setOnline(false)); expect(button).toBeDisabled(); }
+    finally { await act(async () => onlineManager.setOnline(true)); }
+  });
+  it("does not offer basis creation for a source without a dated adjusted basis", async () => {
+    reads({ "/api/v1/dividends/observations": observationPage([dividend]) }); renderUI(<ObservationsPage mode="dividends" />);
+    await screen.findByText(/每股來源金額/); expect(screen.queryByRole("button", { name: "記錄此來源的拆股基準" })).not.toBeInTheDocument();
+  });
   it("preserves every scaled-INT64 DPS digit and never fills dividend currency or ex date from the security", async () => {
     const get = reads({ "/api/v1/dividends/observations": observationPage([dividend]) });
     renderUI(<ObservationsPage mode="dividends" />);

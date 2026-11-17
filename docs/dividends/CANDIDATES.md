@@ -400,6 +400,7 @@ let the owner create a distinct event or explicitly associate the current candid
 with one selected existing event. Both candidate identity and physical revision are
 pinned and revalidated; the review response's `NOT_ADOPTED` label is still not a
 linkage query. Adoption records an owner decision, not verified market history,
-eligible shares, confirmed income or a receipt. A browser workflow for creating new
-basis declarations, atomic entitlement rebuilding, verification and the actual receipt
-workflow remain unfinished.
+eligible shares, confirmed income or a receipt. The source workspace separately
+supports [explicit basis declaration creation](BASIS.md#create-a-declaration-in-the-browser).
+Atomic entitlement rebuilding, verification and the actual receipt workflow remain
+unfinished.

@@ -45,6 +45,7 @@ app.mount("/assets", StaticFiles(directory=build / "assets"), name="fixture-buil
 @app.get("/corporate-actions", include_in_schema=False)
 @app.get("/dividends", include_in_schema=False)
 @app.get("/dividends/candidates", include_in_schema=False)
+@app.get("/data-center/dividends", include_in_schema=False)
 @app.get("/settings/providers", include_in_schema=False)
 @app.get("/settings/providers/{provider_id}", include_in_schema=False)
 def spa() -> FileResponse:

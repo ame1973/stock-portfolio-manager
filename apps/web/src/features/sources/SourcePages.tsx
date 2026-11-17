@@ -1,11 +1,14 @@
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useSyncExternalStore } from "react";
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, Outlet } from "react-router";
+import type { components } from "@spm/contracts";
 import { Field, SelectField } from "../../components/forms/fields";
 import { FilterChips } from "../../components/forms/filter-chips";
 import { Button } from "../../components/ui/button";
 import { EditorSheet } from "../../components/ui/editor-sheet";
 import { useViewState } from "../../lib/view-state";
+import { BasisCreateForm } from "../dividends/BasisCreateForm";
+import { validBasisSource, validBasisSourcePage } from "../dividends/basis-validation";
 import { SecurityName } from "../ledger/ReferenceName";
 import { RecordList } from "../settings/RecordList";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
@@ -94,6 +97,9 @@ export function ObservationsPage({ mode }: { mode: ObservationKind }) {
   const cache = useQueryClient();
   const [editor, setEditor] = useState(false);
   const [created, setCreated] = useState<CitedResult | null>(null);
+  const [basisTarget, setBasisTarget] = useState<components["schemas"]["DividendObservationRecord"] | null>(null);
+  const [basisCreated, setBasisCreated] = useState<{ id: string; observation_id: string } | null>(null);
+  const online = useSyncExternalStore(listener => onlineManager.subscribe(listener), () => onlineManager.isOnline(), () => true);
   const page = usePageState(`sources:observations:${mode}`);
   const initial: SourceFilters = { security_id: "", provider_id: "", from_date: "", to_date: "" };
   const [filters, setFilters] = useViewState(`filters:sources:observations:${mode}`, initial);
@@ -101,8 +107,10 @@ export function ObservationsPage({ mode }: { mode: ObservationKind }) {
   const title = mode === "dividends" ? "股息來源觀測" : "provider-only 拆股因子";
   const dateLabel = mode === "dividends" ? "除淨" : "生效";
   function filter(change: Partial<SourceFilters>) { setFilters(previous => ({ ...previous, ...change })); page.search(page.q); }
-  return <div className="grid min-w-0 gap-5"><div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-7 text-secondary">只列 immutable v1 來源證據（SOURCE_ONLY / NOT_ADOPTED，僅指來源列）；未查詢目前或過往關聯。{mode === "dividends" ? "每股金額、幣別及日期原樣保留；未知不是零，報價幣別不會補成股息幣別。" : "精確比例字串只供核對，不會採納股數、成本或現金。"}重複觀測不會變成多筆收入。</p></div><Button data-editor-create disabled={editor} onClick={() => setEditor(true)}>{citationTitle(mode)}</Button></div>
+  return <div className="grid min-w-0 gap-5"><div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-7 text-secondary">只列 immutable v1 來源證據（SOURCE_ONLY / NOT_ADOPTED，僅指來源列）；未查詢目前或過往關聯。{mode === "dividends" ? "每股金額、幣別及日期原樣保留；未知不是零，報價幣別不會補成股息幣別。" : "精確比例字串只供核對，不會採納股數、成本或現金。"}重複觀測不會變成多筆收入。</p></div><Button data-editor-create disabled={editor || basisTarget !== null} onClick={() => setEditor(true)}>{citationTitle(mode)}</Button></div>
     {created && <section role="status" className="panel grid min-w-0 gap-3 text-sm leading-7"><p>伺服器已確認來源引用，可能是原鍵回覆；不是文件驗證、財務採納或實收。請以符合的篩選重新載入核對，不把回覆當成最新版本。</p><SourceValues values={[["確認引用識別碼", created.citation_id], ["確認觀測識別碼", created.observation_id]]} /></section>}
+    {basisCreated && <section role="status" className="panel grid min-w-0 gap-3 text-sm leading-7"><p>伺服器已確認基準聲明，可能是歷史重播；不代表目前可用、已驗證市場歷史或已採納股息。</p><SourceValues values={[["確認基準聲明識別碼", basisCreated.id], ["所記錄來源觀測", basisCreated.observation_id]]} /></section>}
+    {basisTarget && <EditorSheet title="記錄拆股基準聲明" onClose={() => setBasisTarget(null)}><BasisCreateForm key={basisTarget.id} record={basisTarget} onCancel={() => setBasisTarget(null)} onSaved={record => { setBasisTarget(null); setBasisCreated({ id: record.id, observation_id: record.observation_id }); }} /></EditorSheet>}
     {editor && <EditorSheet title={citationTitle(mode)} onClose={() => setEditor(false)}><CitedForm key={mode} mode={mode} onCancel={() => setEditor(false)} onSaved={record => { setEditor(false); setCreated(record); void refreshSources(cache); }} /></EditorSheet>}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選{title}</summary><div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       <ReferenceSelect kind="securities" activeOnly={false} label="觀測證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
@@ -113,12 +121,15 @@ export function ObservationsPage({ mode }: { mode: ObservationKind }) {
     </div></details>
     <FilterChips values={filters} labels={{ security_id: "觀測證券", provider_id: "觀測來源", from_date: `${dateLabel}起日`, to_date: `${dateLabel}迄日` }} onRemove={key => filter({ [key]: "" })} />
     {result.data && <p className="text-sm leading-7 text-secondary">IMMUTABLE_SOURCE_V1；保留的舊來源 {result.data.legacy_records_omitted} 筆未列入，不會推定驗證或重寫。排序固定首次擷取時間／ID 倒序，後續觀測不會改變首次時間或頁面順序。</p>}
+    {mode === "dividends" && !online && <p role="status" className="text-sm text-secondary">連線已暫停，不能從已載入來源開始新的基準聲明。</p>}
+    {mode === "dividends" && result.data && !validBasisSourcePage(result.data, filters.security_id) && <p role="alert" className="text-sm text-danger">來源清單範圍或識別碼無法安全核對；請重新載入，不能記錄基準聲明。</p>}
     <RecordList title={title} page={page} result={result} filtered={Object.values(filters).some(value => value !== "")} emptyMessage="尚無可顯示的 v1 來源觀測；這不是已確認沒有股息或拆股。請核對來源設定、證券代號期間與明確擷取工作。" order={{ description: "首次擷取時間／ID 倒序（非事件日期）", direction: "descending" }} columns={[
       { id: "retrieved", header: "首次擷取時間（UTC）", cell: ({ row }) => row.original.retrieved_at },
       { id: "source", header: "來源／當次代號", cell: ({ row }) => <>{providerNames[row.original.provider_id]}<span className="block text-secondary">{row.original.provider_symbol}</span></> },
       { id: "date", header: `${dateLabel}日期`, cell: ({ row }) => isDividend(row.original) ? row.original.ex_date ?? "未知，不用擷取日代替" : row.original.effective_date },
       { id: "terms", header: mode === "dividends" ? "每股來源金額／幣別" : "精確因子，非採納股數", cell: ({ row }) => <span className="break-all">{observationTerms(row.original)}</span> },
       { id: "basis", header: "來源口徑（非事件狀態）", cell: ({ row }) => isDividend(row.original) ? row.original.adjustment_basis : row.original.effect_scope },
-    ]}>{record => <ObservationDetails record={record} />}</RecordList>
+    ]}>{record => <><ObservationDetails record={record} />{isDividend(record) && validBasisSource(record) && <div className="mt-4"><Button type="button" variant="outline" disabled={editor || basisTarget !== null || !online || result.isFetching || result.isPaused || result.isError || !validBasisSourcePage(result.data, filters.security_id)}
+      onClick={() => { setBasisCreated(null); setBasisTarget(structuredClone(record)); }}>記錄此來源的拆股基準</Button></div>}</>}</RecordList>
   </div>;
 }

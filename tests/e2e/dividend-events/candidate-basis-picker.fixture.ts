@@ -43,16 +43,54 @@ test("candidate basis selection pins a historical declaration and rechecks later
   expect(actionResponse.status()).toBe(201);
   const originalAction = await actionResponse.json() as { id: string; version: number; version_exact: string };
   expect(originalAction.version_exact).toBe("1");
-  const basisResponse = await page.request.post("/api/v1/dividends/basis-assertions", { headers: await headers(page), data: {
-    observation_id: source.id, source_sha256: source.normalized_sha256, share_basis_date: "2026-11-02",
-    source_basis: "AFTER_EFFECTIVE_DATE_ACTIONS", target_basis: "PRE_EX_DATE_EVENTS", complete: true, split_only: true,
-    actions: [{ action_id: originalAction.id, version: originalAction.version }],
-    citation: { citation: "Synthetic declaration scope", reason: "Synthetic explicit complete split-only basis declaration.", url: "https://example.test/basis?private=synthetic-secret#scope" },
-  } });
-  expect(basisResponse.status()).toBe(201); const basis = await basisResponse.json() as Basis;
-  expect(basis.source_sha256).toBe(source.normalized_sha256); expect(basis.actions).toHaveLength(1); expect(basis.citation.url_withheld).toBe(true);
+  const beforeBasis = database(); for (const table of financialTables) expect(beforeBasis[table]).toEqual([]);
+  stage("NAVIGATE"); await page.setViewportSize({ width: 360, height: 900 }); await page.goto("/data-center/dividends");
+  await page.getByRole("button", { name: "記錄此來源的拆股基準" }).click();
+  const basisSheet = page.getByRole("dialog", { name: "記錄拆股基準聲明" }); const basisForm = basisSheet.getByRole("form", { name: "記錄拆股基準聲明" });
+  await expect(basisSheet.getByRole("button", { name: "關閉編輯" })).toBeFocused();
+  await expect(basisForm).toContainText(source.id); await expect(basisForm).toContainText(source.normalized_sha256);
+  const actionRead = page.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/corporate-actions" && response.request().method() === "GET");
+  await basisForm.getByLabel("來源股數基準日").fill("2026-11-02"); const actionList = await actionRead;
+  expect(actionList.status()).toBe(200); expect(actionList.headers()["cache-control"]).toBe("no-store");
+  const actionCard = basisForm.getByRole("article", { name: `可選企業行動 ${originalAction.id}` });
+  await expect(actionCard).toContainText("9223372036854775807 / 9223372036854775806"); await expect(actionCard).toContainText("精確版本 1");
+  await actionCard.getByRole("button", { name: "加入此行動" }).click();
+  await basisForm.getByLabel("基準引用參考").fill("Synthetic declaration scope");
+  await basisForm.getByLabel("基準引用網址（選填）").fill("https://example.test/basis?private=synthetic-secret#scope");
+  await basisForm.getByLabel("基準聲明依據").fill("Synthetic explicit complete split-only basis declaration.");
+  await basisForm.getByRole("checkbox", { name: /我已核對此範圍的已記錄行動/ }).check();
+  await basisForm.getByRole("checkbox", { name: /我明確聲明此範圍只涉及拆股與合股/ }).check();
+  await basisForm.getByRole("checkbox", { name: /我明白這不是市場完整性、文件驗證或收入/ }).check();
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 }); const box = (await basisSheet.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  let releaseBasis!: () => void; let basisCommitted!: () => void;
+  const basisHeld = new Promise<void>(resolve => { releaseBasis = resolve; }); const basisSaved = new Promise<void>(resolve => { basisCommitted = resolve; });
+  let basis!: Basis; let basisBody = ""; let basisKey = ""; let basisRetryBody = ""; let basisRetryKey = ""; let basisAttempts = 0;
+  const basisPath = "**/api/v1/dividends/basis-assertions";
+  await page.route(basisPath, async route => {
+    if (route.request().method() !== "POST") { await route.continue(); return; }
+    basisAttempts++; const response = await route.fetch(); expect(response.status()).toBe(201); expect(response.headers()["cache-control"]).toBe("no-store");
+    const body = route.request().postData()!; const key = route.request().headers()["idempotency-key"]!;
+    if (basisAttempts === 1) { basis = await response.json() as Basis; basisBody = body; basisKey = key; basisCommitted(); await basisHeld; await route.abort("failed"); }
+    else { basisRetryBody = body; basisRetryKey = key; await route.fulfill({ response }); }
+  });
+  stage("COMMIT_HELD");
+  try {
+    await basisForm.getByRole("button", { name: "記錄基準聲明" }).click(); await basisSaved;
+    expect(basis.source_sha256).toBe(source.normalized_sha256); expect(basis.actions).toHaveLength(1); expect(basis.citation.url_withheld).toBe(true);
+    expect(basis.actions[0]!.observed_version_exact).toBe("1");
+    await page.keyboard.press("Escape"); await basisSheet.getByRole("button", { name: "關閉編輯" }).click(); await expect(basisSheet).toBeVisible();
+  } finally { releaseBasis(); }
+  stage("LOST"); await expect(basisForm.getByRole("alert")).toContainText("網絡連線中斷"); const beforeBasisReplay = database();
+  await basisForm.getByRole("button", { name: "記錄基準聲明" }).click(); await expect(basisSheet).toHaveCount(0); await page.unroute(basisPath);
+  expect(basisAttempts).toBe(2); expect(basisRetryKey).toBe(basisKey); expect(basisRetryBody).toBe(basisBody); expect(database()).toEqual(beforeBasisReplay);
+  const submittedBasis = JSON.parse(basisBody) as components["schemas"]["DividendBasisCreate"];
+  expect(submittedBasis.actions).toEqual([{ action_id: originalAction.id, version: "1" }]);
   const before = database(); for (const table of financialTables) expect(before[table]).toEqual([]);
-  stage("NAVIGATE"); await page.setViewportSize({ width: 360, height: 900 }); await page.goto("/dividends/candidates");
+  await page.setViewportSize({ width: 360, height: 900 }); await page.goto("/dividends/candidates");
   await page.getByRole("button", { name: "新增股息候選" }).click();
   const sheet = page.getByRole("dialog", { name: "新增股息候選" }); const form = sheet.getByRole("form", { name: "新增股息候選" });
   await expect(sheet.getByRole("button", { name: "關閉編輯" })).toBeFocused();
@@ -104,6 +142,16 @@ test("candidate basis selection pins a historical declaration and rechecks later
     await page.keyboard.press("Escape"); await sheet.getByRole("button", { name: "關閉編輯" }).click(); await expect(sheet).toBeVisible();
   } finally { release(); }
   stage("LOST"); await expect(form.getByRole("alert")).toContainText("網絡連線中斷");
+  const staleBasisPage = await page.context().newPage(); await staleBasisPage.setViewportSize({ width: 360, height: 900 }); await staleBasisPage.goto("/data-center/dividends");
+  await staleBasisPage.getByRole("button", { name: "記錄此來源的拆股基準" }).click();
+  const staleBasisForm = staleBasisPage.getByRole("form", { name: "記錄拆股基準聲明" });
+  await staleBasisForm.getByLabel("來源股數基準日").fill("2026-11-02");
+  await staleBasisForm.getByRole("article", { name: `可選企業行動 ${originalAction.id}` }).getByRole("button", { name: "加入此行動" }).click();
+  await staleBasisForm.getByLabel("基準引用參考").fill("Synthetic stale declaration reference");
+  await staleBasisForm.getByLabel("基準聲明依據").fill("Synthetic basis selected before the action is revised.");
+  await staleBasisForm.getByRole("checkbox", { name: /我已核對此範圍的已記錄行動/ }).check();
+  await staleBasisForm.getByRole("checkbox", { name: /我明確聲明此範圍只涉及拆股與合股/ }).check();
+  await staleBasisForm.getByRole("checkbox", { name: /我明白這不是市場完整性、文件驗證或收入/ }).check();
   const actionPage = await page.context().newPage();
   await actionPage.setViewportSize({ width: 360, height: 900 }); await actionPage.goto("/corporate-actions");
   await actionPage.getByRole("button", { name: "更正企業行動" }).click();
@@ -115,6 +163,13 @@ test("candidate basis selection pins a historical declaration and rechecks later
   await actionForm.getByRole("button", { name: "儲存" }).click();
   const action = await revised; expect(action.status()).toBe(200); expect(action.request().headers()["if-match"]).toBe('"1"');
   await expect(actionPage.getByRole("dialog", { name: "更正企業行動" })).toHaveCount(0); await actionPage.close();
+  stage("CHANGED_EVIDENCE"); const beforeStaleBasis = database();
+  const staleBasisResponse = staleBasisPage.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/dividends/basis-assertions" && response.request().method() === "POST");
+  await staleBasisForm.getByRole("button", { name: "記錄基準聲明" }).click(); const staleBasis = await staleBasisResponse;
+  expect(staleBasis.status()).toBe(409); expect((await staleBasis.json() as { code: string }).code).toBe("BASIS_ACTIONS_CHANGED");
+  await expect(staleBasisForm.getByRole("alert")).toContainText("已記錄企業行動與本次聲明不符或已變更");
+  await expect(staleBasisForm.getByRole("list", { name: "已選基準行動" })).toContainText(originalAction.id);
+  expect(database()).toEqual(beforeStaleBasis); await staleBasisPage.close();
   const beforeReplay = database(); stage("REPLAY");
   await form.getByRole("button", { name: "儲存候選資料" }).click(); await expect(sheet).toHaveCount(0); await page.unroute(path);
   expect(attempts).toBe(2); expect(retryKey).toBe(firstKey); expect(retryBody).toBe(firstBody); expect(database()).toEqual(beforeReplay);
