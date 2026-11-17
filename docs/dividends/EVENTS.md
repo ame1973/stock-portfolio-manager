@@ -1627,6 +1627,27 @@ tax, fee or FX. The writer posts no receipt or cash, does not rewrite historical
 locked FX, and cannot advance a financially fenced event revision. Atomic event-revision
 rebuild and stable-event/account/currency receipt reconciliation are still required.
 
+## Internal retained-receipt link reader
+
+The internal `dividend_receipt_history.history` reader resolves all retained entitlement
+and receipt rows for an owned managed event and account through their original physical
+revisions, rather than joining receipts only to the current event revision. It preserves
+original currencies, amounts, status, tax/fee fields and locked FX without netting unlike
+currencies or adding historical entitlements together. Missing recorded HKD values remain
+unknown. A receipt with no cash link is explicitly `CASH_NOT_RECORDED`; a void whose
+matching primary lacks a reversal is `CASH_REVERSAL_NOT_RECORDED`. Matching primary and
+reversal cash structures have explicitly **unverified** labels, not a claim that the
+receipt, actor or financial history is authentic. Contradictory account or cash links and
+malformed retained values fail closed rather than being silently skipped.
+
+The entire read requires an existing database transaction and validates the managed
+event revision chain and current account ownership in one snapshot. It cannot prove
+historical account ownership, the completeness of receipt or cash history, external
+payment or the legacy receipt/entitlement audit content. Even a retained legacy quality
+called `CONFIRMED` is only a recorded label, not newly established eligibility. This is an
+internal building block, not a session-authorized API, current-use grant, receipt writer or
+reconciliation result. It does not modify facts, cash, FX, audits, providers or event fences.
+
 ## Inert trade-audit origin storage
 
 Migration `0017_trade_audit_origins` adds one initially empty append-only table
