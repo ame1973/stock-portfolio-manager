@@ -71,8 +71,9 @@ def mutate[M: Model](
     status: int = 200,
     reauth: bool = False,
     validate_replay: Callable[[Connection, Auth, M], None] | None = None,
+    validate_commit: Callable[[Connection, Auth, M], None] | None = None,
 ) -> M:
-    """Serialize before commit so response validation cannot leave a partial financial write."""
+    """Verify idempotency before commit; an optional final validator must be read-only."""
     route = f"{request.method} {request.url.path}"
     fingerprint = digest(canonical(payload))
     with unit_of_work(request.app.state.engine, write=True) as con:
@@ -85,24 +86,65 @@ def mutate[M: Model](
             return result
         result = action(con, auth)
         encoded = result.model_dump_json()
-        con.execute(
+        created = now()
+        values = {
+            "id": str(uuid4()),
+            "owner": owner,
+            "route": route,
+            "key": headers.key,
+            "hash": fingerprint,
+            "status": status,
+            "response": encoded,
+            "now": stamp(created),
+            "expiry": stamp(created + timedelta(days=30)),
+        }
+        inserted = con.execute(
             text("""
             INSERT INTO idempotency_keys(id,owner_id,route,idem_key,request_sha256,
                 response_status,response_json,created_at,expires_at)
             VALUES (:id,:owner,:route,:key,:hash,:status,:response,:now,:expiry)
         """),
-            {
-                "id": str(uuid4()),
-                "owner": owner,
-                "route": route,
-                "key": headers.key,
-                "hash": fingerprint,
-                "status": status,
-                "response": encoded,
-                "now": stamp(),
-                "expiry": stamp(now() + timedelta(days=30)),
-            },
+            values,
         )
+        retained = con.execute(
+            text("""
+            SELECT owner_id,route,idem_key,request_sha256,response_status,response_json,
+                   created_at,expires_at FROM idempotency_keys WHERE id=:id
+        """),
+            {"id": values["id"]},
+        ).one_or_none()
+        if (
+            inserted.rowcount != 1
+            or retained is None
+            or type(retained.response_status) is not int
+            or tuple(retained)
+            != (
+                owner,
+                route,
+                headers.key,
+                fingerprint,
+                status,
+                encoded,
+                values["now"],
+                values["expiry"],
+            )
+        ):
+            raise ApiError(
+                503, "IDEMPOTENCY_UNAVAILABLE", "The transaction cannot be recorded safely"
+            )
+        if validate_commit is not None:
+            current, current_key = _checked_request(
+                con, request, headers, fingerprint, reauth=reauth
+            )
+            if (
+                current_key is None
+                or current.owner.id != auth.owner.id
+                or current.session_id != auth.session_id
+            ):
+                raise ApiError(
+                    503, "IDEMPOTENCY_UNAVAILABLE", "The transaction cannot be recorded safely"
+                )
+            validate_commit(con, current, result)
         return result
 
 
