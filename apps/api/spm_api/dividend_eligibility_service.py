@@ -248,13 +248,17 @@ def _audited(
                         "lifecycle_status": "CURRENT",
                         "is_current": True,
                         "version": 1,
+                        "version_exact": "1",
                         "effect_scope": scope,
                         "review_required": reviewed,
                     }
                 )
-                fingerprint = digest(canonical(record.model_dump(mode="json")))
-                hashes.add(fingerprint)
-                if fingerprint == creation["after_sha256"]:
+                current = record.model_dump(mode="json")
+                legacy = {key: value for key, value in current.items() if key != "version_exact"}
+                # Older action audits predate the additive exact-version response field.
+                fingerprints = {digest(canonical(current)), digest(canonical(legacy))}
+                hashes.update(fingerprints)
+                if creation["after_sha256"] in fingerprints:
                     matching_statuses.add(status)
     if hashes is not None and creation["after_sha256"] not in hashes:
         raise ValueError("Inconsistent fact audit")
