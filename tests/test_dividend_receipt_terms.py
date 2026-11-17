@@ -7,7 +7,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from spm_api.dividend_receipt_terms import ReceiptTerms, calculate_receipt
+from spm_api.dividend_receipt_terms import (
+    ReceiptComponents,
+    ReceiptTerms,
+    calculate_components,
+    calculate_receipt,
+)
 from spm_api.finance import FinanceError
 
 
@@ -24,6 +29,21 @@ def terms(**changes: Any) -> dict[str, Any]:
         "actual_hkd_reason": None,
         **changes,
     }
+
+
+def test_undated_components_are_only_arithmetic_and_cannot_replace_dated_booking_terms() -> None:
+    values = terms(fx_rate_hkd="7.8", fx_source="Synthetic FX")
+    del values["received_date"]
+    components = ReceiptComponents.model_validate(values)
+    assert calculate_components(components).received_hkd_micro == 46_800_000
+    with pytest.raises(ValueError, match="^INVALID_DIVIDEND_RECEIPT_TERMS$"):
+        calculate_receipt(components)  # type: ignore[arg-type]
+    forged = components.model_copy(update={"received_amount": 0.1})
+    with pytest.raises(ValidationError):
+        calculate_components(forged)
+    untyped: Any = {"synthetic-private": "do-not-log"}
+    with pytest.raises(ValueError, match="^INVALID_DIVIDEND_RECEIPT_TERMS$"):
+        calculate_components(untyped)
 
 
 def test_unknown_tax_and_fx_are_not_zeros_and_explicit_zero_fee_is_retained() -> None:

@@ -1637,7 +1637,9 @@ currency needs an explicitly sourced historical FX rate for an HKD amount; missi
 remains unknown. HKD identity is mathematical, not an external quote. A broker actual HKD
 override requires both the historical rate and a reason and keeps the original rate.
 Calculated money is rounded only at its scaled INT64 boundary, and every cash amount
-must remain exactly reversible.
+must remain exactly reversible. Dated receipt inputs reject future dates; the separate
+component-only recomputation has no date or booking authority and lets historical reads
+remain stable if the current system clock moves backward.
 
 This isolated calculation neither authenticates a person nor establishes ownership,
 payment or eligibility; it creates no receipt, cash, audit, idempotency entry or grant.
@@ -1677,12 +1679,12 @@ native/HKD sign consistency. It first checks existing origin-linked receipts and
 upgrade without changing them if any contradict those rules; it never deletes or relabels a
 record. Unknown USD FX and HKD values remain unknown. The combined guards check current
 relational scope, matching cash and audit shapes, chronology, and prevent replacement, updates
-or deletion. They cannot prove that records were created in
-the same transaction, that the actor was authenticated, that the retained audit fingerprint
-matches its original intent, that the FX calculation is correct, or that a payment or
-historical entitlement is genuine. No
-application writer or reader of this new table is installed yet. Do not insert origins or
-invoke internal writers on deployment data. A future protected receipt writer must bind and
+or deletion. SQL alone cannot prove that records were created in the same transaction, that
+the actor was authenticated, that the retained audit fingerprint matches its original intent,
+that the FX calculation is correct, or that a payment or historical entitlement is genuine.
+The separate internal audit reader described below rechecks recorded origins without granting
+current use. No application receipt writer is installed; do not insert origins or invoke
+internal writers on deployment data. A future protected receipt writer must bind and
 revalidate the complete intent, session, idempotency, cash, audit and invalidation atomically;
 receipt creation/void, economic authorization and atomic reconciliation remain unfinished.
 
@@ -1707,6 +1709,30 @@ called `CONFIRMED` is only a recorded label, not newly established eligibility. 
 internal building block, not itself session authorization, a current-use grant, receipt
 writer or reconciliation result. It does not modify facts, cash, FX, audits, providers or
 event fences.
+
+## Internal receipt-origin audit reader
+
+`dividend_receipt_audit.history` reuses the retained-link reader and verifies each available
+origin in the same database snapshot. It reconstructs the canonical original receipt,
+explicit FX/source and override reason, observed account/event scope and matching primary
+cash input, and checks the correlated creation-audit fingerprint. It checks the original and
+observed physical revisions and their audit chronology independently; the observed revision
+cannot precede the entitlement's original revision. It caches each revision only within that
+snapshot. For a void it also checks
+the exact reversal and the before/after void-audit fingerprints, retaining the original
+receipt, cash and locked FX. It recomputes HKD cash with the existing exact Decimal rules;
+unknown FX stays unknown, and current system-clock changes do not relabel historical dates.
+Historical portfolio/broker pins remain unchanged when an account moves within the same
+owner's scope.
+
+A receipt with no origin remains `RECEIPT_AUDIT_NOT_VERIFIED`; an inconsistent origin or
+audit fails the entire owned read instead of being omitted. A matching fingerprint is only
+`RECORDED_AUDIT_MATCHED_ONLY`: it does not prove the actor's session, external payment,
+historical ownership, receipt completeness, current source validity, entitlement, or a
+financial grant. This internal reader performs no writes and does not remove any event
+fence. The existing HTTP receipt-history API and browser continue to report audit status as
+unverified; they do not consume this reader. Protected receipt creation/void, HTTP-intent
+binding and atomic reconciliation remain unfinished.
 
 ## Protected recorded-receipt history read API
 
