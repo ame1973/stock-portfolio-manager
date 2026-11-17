@@ -6286,6 +6286,34 @@
         "title": "Page[ProviderSymbol]",
         "type": "object"
       },
+      "Page_RecordedReceipt_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecordedReceipt"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[RecordedReceipt]",
+        "type": "object"
+      },
       "Page_RejectionHistoryItem_": {
         "additionalProperties": false,
         "properties": {
@@ -8454,6 +8482,208 @@
           "reason"
         ],
         "title": "PublicCitation",
+        "type": "object"
+      },
+      "RecordedReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "audit_scope": {
+            "const": "RECEIPT_AUDIT_NOT_VERIFIED",
+            "title": "Audit Scope",
+            "type": "string"
+          },
+          "cash_scope": {
+            "enum": [
+              "CASH_NOT_RECORDED",
+              "CASH_REVERSAL_NOT_RECORDED",
+              "MATCHING_CASH_RECORDED_UNVERIFIED",
+              "MATCHING_CASH_REVERSAL_RECORDED_UNVERIFIED"
+            ],
+            "title": "Cash Scope",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "HKD",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "current_revision_id": {
+            "format": "uuid",
+            "title": "Current Revision Id",
+            "type": "string"
+          },
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "entitlement_id": {
+            "format": "uuid",
+            "title": "Entitlement Id",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "fx_rate_hkd": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Rate Hkd"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "received_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Received Date",
+            "type": "string"
+          },
+          "received_hkd": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received Hkd"
+          },
+          "recorded_amount": {
+            "maxLength": 50,
+            "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+            "title": "Recorded Amount",
+            "type": "string"
+          },
+          "recorded_fee": {
+            "maxLength": 50,
+            "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+            "title": "Recorded Fee",
+            "type": "string"
+          },
+          "recorded_tax": {
+            "maxLength": 50,
+            "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+            "title": "Recorded Tax",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "UNVERIFIED_RECEIPT_HISTORY_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "MANUAL",
+              "IMPORT"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "VOID"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Version",
+            "type": "string"
+          },
+          "voided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voided At"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "account_id",
+          "entitlement_id",
+          "revision_id",
+          "revision_no",
+          "current_revision_id",
+          "received_date",
+          "recorded_amount",
+          "currency",
+          "recorded_tax",
+          "recorded_fee",
+          "fx_rate_hkd",
+          "received_hkd",
+          "source",
+          "status",
+          "version",
+          "created_at",
+          "voided_at",
+          "cash_scope",
+          "audit_scope",
+          "history_completeness",
+          "scope",
+          "current_use_scope",
+          "eligibility_scope"
+        ],
+        "title": "RecordedReceipt",
         "type": "object"
       },
       "RecordedSourcePage": {
@@ -19852,6 +20082,144 @@
         "summary": "Create Projection",
         "tags": [
           "Dividend projection history"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts": {
+      "get": {
+        "operationId": "list_recorded_dividend_receipts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_RecordedReceipt_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Receipt History",
+        "tags": [
+          "Recorded dividend receipt history"
         ]
       }
     },

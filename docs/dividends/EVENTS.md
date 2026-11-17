@@ -1645,8 +1645,34 @@ event revision chain and current account ownership in one snapshot. It cannot pr
 historical account ownership, the completeness of receipt or cash history, external
 payment or the legacy receipt/entitlement audit content. Even a retained legacy quality
 called `CONFIRMED` is only a recorded label, not newly established eligibility. This is an
-internal building block, not a session-authorized API, current-use grant, receipt writer or
-reconciliation result. It does not modify facts, cash, FX, audits, providers or event fences.
+internal building block, not itself session authorization, a current-use grant, receipt
+writer or reconciliation result. It does not modify facts, cash, FX, audits, providers or
+event fences.
+
+## Protected recorded-receipt history read API
+
+`GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts` requires an
+active owner session and returns private `Cache-Control: no-store` keyset pages of retained
+receipt records for the explicit event/account. The complete linked history is checked
+before applying the receipt-ID search or page limit. An absent or foreign event/account
+returns 404; an owned scope without records returns an empty page, not a confirmed zero
+or proof that all historical payments are present. Pages are individually consistent reads,
+not one shared snapshot across requests; reload if records or their status may have changed.
+
+Each record carries the stable event/account, the original entitlement and physical event
+revision, the current revision observed in that read, exact string-valued receipt version,
+original amount/currency, recorded tax and fee, original locked FX/HKD amount where present,
+and the retained `ACTIVE` or `VOID` lifecycle. Prior revisions and their receipts are not
+silently reassigned, mixed currencies are not netted, and an absent cash primary or reversal
+remains explicit. The cash-link and legacy-audit labels describe structural evidence only;
+all records carry `UNVERIFIED`, `UNVERIFIED_RECEIPT_HISTORY_ONLY`,
+`REVALIDATION_REQUIRED` and `eligibility_scope=NOT_ESTABLISHED`. Neither this read nor a
+matching cash link proves payment, authenticated historical intent or eligible income.
+
+Inconsistent retained history returns a fixed private 503; no partial page is returned.
+The endpoint does not create, confirm or void receipts, change cash or locked FX, calculate
+reconciliation, contact providers or relax the event-revision fence. Those workflows remain
+unfinished.
 
 ## Inert trade-audit origin storage
 
