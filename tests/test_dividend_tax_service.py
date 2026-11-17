@@ -14,6 +14,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.dividend_candidate_service as candidates
 import spm_api.dividend_event_service as events
+import spm_api.dividend_rejection_service as rejections
+import spm_api.dividend_rejection_writer as rejection_writer
 import spm_api.dividend_tax_service as tax
 from spm_api.audit import audit
 from spm_api.db import unit_of_work
@@ -42,6 +44,7 @@ from tests.test_dividend_event_writer import (
     submit,
 )
 from tests.test_dividend_projection_migration import snapshot_values
+from tests.test_dividend_rejection_writer import intent as rejection_intent
 from tests.test_dividend_tax_migration import TABLE, setting_values
 
 
@@ -805,6 +808,86 @@ def test_current_setting_must_be_rechecked_after_same_transaction_change(
         )
         assert selected.selected == second and selected.status == "UNKNOWN"
     assert history(engine, book) == (first, second)
+
+
+def test_current_setting_rechecks_rejection_in_the_same_writer(
+    engine: Engine, book: dict[str, Any]
+) -> None:
+    event = book["event"]
+    with unit_of_work(engine, write=True) as con:
+        args = (con, OWNER, event.event_id, event.revision_id, 1, book["account_id"])
+        pins: dict[str, Any] = {
+            "effective_on": date(2026, 1, 8),
+            "expected_setting_no": 0,
+            "expected_head_id": None,
+        }
+        assert tax.require_current(*args, **pins).status == "MISSING"
+        rejection_writer.save(con, OWNER, rejection_intent(event), request_id=uuid4())
+        before = con.exec_driver_sql(
+            "SELECT (SELECT count(*) FROM audit_events), "
+            "(SELECT count(*) FROM dividend_tax_settings), "
+            "(SELECT count(*) FROM projection_invalidations)"
+        ).one()
+        with pytest.raises(tax.TaxSettingError, match="^DIVIDEND_REVISION_REJECTED$"):
+            tax.require_current(*args, **pins)
+        with pytest.raises(tax.TaxSettingError, match="^DIVIDEND_REVISION_REJECTED$"):
+            tax.save(con, OWNER, intent(book), request_id=uuid4())
+        after = con.exec_driver_sql(
+            "SELECT (SELECT count(*) FROM audit_events), "
+            "(SELECT count(*) FROM dividend_tax_settings), "
+            "(SELECT count(*) FROM projection_invalidations)"
+        ).one()
+        assert before == after
+    assert history(engine, book) == ()
+
+
+def test_rejected_tax_selection_and_historical_replay_after_resolution(
+    engine: Engine, book: dict[str, Any]
+) -> None:
+    request, value = uuid4(), intent(book)
+    first = save(engine, value, request=request)
+    with unit_of_work(engine, write=True) as con:
+        rejected = rejection_writer.save(
+            con, OWNER, rejection_intent(book["event"]), request_id=uuid4()
+        )
+    before = database_snapshot(engine)
+    with pytest.raises(tax.TaxSettingError, match="^DIVIDEND_REVISION_REJECTED$"):
+        current(engine, book, date(2026, 1, 8), head_no=1, head_id=first.id)
+    with pytest.raises(tax.TaxSettingError, match="^DIVIDEND_REVISION_REJECTED$"):
+        save(engine, intent(book, expected_setting_no=1))
+    assert save(engine, value, request=request) == first
+    assert history(engine, book) == (first,)
+    assert database_snapshot(engine) == before
+
+    successor = next_intent(book["event"], "VERIFY", resolve_rejection_id=rejected.id)
+    submit(engine, successor, at=datetime.now(UTC))
+    before = database_snapshot(engine)
+    assert save(engine, value, request=request) == first
+    assert history(engine, book) == (first,)
+    fresh = current(engine, {**book, "event": successor}, date(2026, 1, 8), head_no=0, head_id=None)
+    assert fresh.status == "MISSING"
+    assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("DIVIDEND_REVISION_REJECTED", "DIVIDEND_REVISION_REJECTED"),
+        ("DIVIDEND_REJECTION_VERSION_CONFLICT", "DIVIDEND_REJECTION_VERSION_CONFLICT"),
+        ("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE", "DIVIDEND_TAX_HISTORY_UNAVAILABLE"),
+        ("synthetic-private", "DIVIDEND_TAX_HISTORY_UNAVAILABLE"),
+    ],
+)
+def test_rejection_failures_are_private_and_never_append(
+    engine: Engine, book: dict[str, Any], code: str, expected: str
+) -> None:
+    before = database_snapshot(engine)
+    with patch.object(rejections, "require_clear", side_effect=rejections.RejectionError(code)):
+        with pytest.raises(tax.TaxSettingError, match=f"^{expected}$"):
+            current(engine, book, date(2026, 1, 8), head_no=0, head_id=None)
+        with pytest.raises(tax.TaxSettingError, match=f"^{expected}$"):
+            save(engine, intent(book))
+    assert database_snapshot(engine) == before
 
 
 def test_current_setting_rechecks_source_after_same_transaction_candidate_change(

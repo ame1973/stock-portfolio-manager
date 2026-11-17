@@ -890,16 +890,18 @@ can reproduce an earlier view; selection alone does not prove that a caller supp
 the complete database history. Later backdated decisions do not rewrite a retained
 snapshot. No date is guessed from ex-date, exchange, receipt date or `as_of`.
 
-`save` rechecks the active owner, current event source and exact account/portfolio/
-broker versions inside a serialized writer. It appends a reasoned `ESTIMATED` or
-`UNKNOWN` decision, canonical audit and portfolio invalidation together. An explicit
+`save` rechecks the active owner, current event source, independent rejection history
+and exact account/portfolio/broker versions inside a serialized writer. It appends a
+reasoned `ESTIMATED` or `UNKNOWN` decision, canonical audit and portfolio invalidation
+together. An explicit
 zero estimate is valid. A completed identical request replays its original decision
 without writes even after later changes; a new request must pass current checks.
 A caught failure rolls back the decision, audit and invalidation; an uncertain
 savepoint outcome aborts the enclosing transaction. `require_current` independently
-rechecks current event/source, the full setting history, its exact observed head and
-the selected account/broker scope. Callers must repeat that check after a relevant
-change even within the same transaction. Both return `OWNER_ESTIMATE_ONLY`, never
+rechecks current event/source, independent rejection history, the full setting history,
+its exact observed head and the selected account/broker scope. A rejected revision fails
+current use even if an earlier setting exists or no setting applies. Callers must repeat
+that check after a relevant change even within the same transaction. Both return `OWNER_ESTIMATE_ONLY`, never
 confirmed tax. Reasons are retained in the local audit; do not include passwords or
 provider credentials in them.
 
@@ -937,17 +939,22 @@ INT64 limits; clients must preserve their digits without JavaScript `Number` con
 first head is `"0"` with a null ID; later writes must supply both exact observed head
 values. Writes require current session, trusted Origin, CSRF, an idempotency key and
 recent password reauthentication. The short writer transaction rechecks the session,
-reauthentication, event/source, account/broker versions and setting head, then commits
-the decision, audit, idempotency receipt and portfolio invalidation together.
+reauthentication, event/source, independent rejection state, account/broker versions and
+setting head, then commits the decision, audit, idempotency receipt and portfolio
+invalidation together. A new write with otherwise current pins to a rejected revision
+returns `409 DIVIDEND_REVISION_REJECTED`; an unavailable rejection history fails closed.
+The SQL rejection fence remains in place.
 
 An unchanged completed retry returns its original decision after current session and
 reauthentication checks, even if later decisions or event revisions exist, provided
 the owner/account scope and retained history remain readable. A changed
 intent under the same key conflicts; stale observed versions return 412. Results are
 `OWNER_ESTIMATE_ONLY` and `REVALIDATION_REQUIRED`, not confirmed tax, ownership,
-eligibility or income. No endpoint contacts a provider or modifies prior projections,
-receipts, cash or locked FX. Projection rebuilding, receipt workflows and a browser tax
-workspace remain unfinished; these APIs alone do not provide a complete dividend workflow.
+eligibility or income. Tax selection and history reads remain available for a rejected
+revision but do not imply its rejection state or current-use authority. No endpoint
+contacts a provider or modifies prior projections, receipts, cash or locked FX. The
+browser workspace is read-only; setting forms, projection rebuilding and receipt
+workflows remain unfinished.
 
 ## Projection tax provenance
 

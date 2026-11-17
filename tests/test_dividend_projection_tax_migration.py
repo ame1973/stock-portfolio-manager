@@ -2,6 +2,7 @@
 
 import sqlite3
 from collections.abc import Iterator
+from datetime import date
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -14,11 +15,13 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 import spm_api.dividend_event_service as events
 import spm_api.dividend_event_writer as event_writer
 import spm_api.dividend_tax_service as tax
-from spm_api.audit import stamp
+from spm_api.audit import audit, stamp
 from spm_api.cli import migrate
 from spm_api.config import Settings
 from spm_api.db import migration_config, schema_head, unit_of_work
 from spm_api.dividend_projection_history import history
+from spm_api.errors import ApiError
+from spm_api.master_service import invalidate_portfolio
 from tests.helpers import database_snapshot
 from tests.provider_evidence_helpers import insert
 from tests.test_action_opening_migration import schema
@@ -73,27 +76,112 @@ def populate(engine: Engine) -> tuple[Any, str, dict[str, Any]]:
         )
         event_writer.save(con, OWNER, event, at=AT, request_id=uuid4())
         old = append(con, event, account)
-        tax.save(
-            con,
-            OWNER,
-            tax.SettingIntent(
-                id=uuid4(),
-                event_id=event.event_id,
-                revision_id=event.revision_id,
-                revision_no=1,
-                account_id=UUID(account),
-                portfolio_id=UUID(portfolio),
-                broker_id=UUID(broker),
-                account_version=1,
-                broker_version=1,
-                expected_setting_no=0,
-                effective_from="2026-01-01",
-                rate="0",
-                reason=REASON,
-            ),
-            request_id=uuid4(),
+        intent = tax.SettingIntent(
+            id=uuid4(),
+            event_id=event.event_id,
+            revision_id=event.revision_id,
+            revision_no=1,
+            account_id=UUID(account),
+            portfolio_id=UUID(portfolio),
+            broker_id=UUID(broker),
+            account_version=1,
+            broker_version=1,
+            expected_setting_no=0,
+            effective_from="2026-01-01",
+            rate="0",
+            reason=REASON,
         )
+        request = uuid4()
+        version = con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+        if version in {"0021_dividend_tax_settings", "0022_dividend_projection_tax"}:
+            # Seed a canonical pre-rejection decision without disabling current writer guards.
+            values: dict[str, Any] = {
+                "id": str(intent.id),
+                "owner_id": str(OWNER),
+                "event_id": str(event.event_id),
+                "revision_id": str(event.revision_id),
+                "revision_no": 1,
+                "portfolio_id": portfolio,
+                "account_id": account,
+                "broker_id": broker,
+                "account_version": 1,
+                "broker_version": 1,
+                "setting_no": 1,
+                "previous_id": None,
+                "effective_from": intent.effective_from,
+                "tax_status": "ESTIMATED",
+                "rate_ppm": 0,
+                "request_id": str(request),
+            }
+            audit(
+                con,
+                str(OWNER),
+                "dividend_tax_setting",
+                str(intent.id),
+                "DIVIDEND_TAX_SETTING_RECORDED",
+                request_id=str(request),
+                after=tax._payload(values, REASON),
+                reason=REASON,
+            )
+            entry = con.exec_driver_sql(
+                "SELECT id,created_at FROM audit_events "
+                "WHERE entity_type='dividend_tax_setting' AND entity_id=?",
+                (str(intent.id),),
+            ).one()
+            values.update(audit_id=entry.id, created_at=entry.created_at)
+            insert(con, "dividend_tax_settings", values)
+            invalidate_portfolio(
+                con, portfolio, str(intent.id), "DIVIDEND_TAX_SETTING_CHANGED", "2026-01-01"
+            )
+            assert tax.history(con, OWNER, event.event_id, event.revision_id, 1, UUID(account))
+        else:
+            tax.save(con, OWNER, intent, request_id=request)
     return event, account, old
+
+
+def test_current_tax_writer_fails_closed_without_rejection_schema(previous_engine: Engine) -> None:
+    event, account, _ = populate(previous_engine)
+    with unit_of_work(previous_engine) as con:
+        row = con.exec_driver_sql(
+            "SELECT t.id,t.portfolio_id,t.broker_id FROM dividend_tax_settings t "
+            "WHERE t.account_id=?",
+            (account,),
+        ).one()
+    intent = tax.SettingIntent(
+        id=uuid4(),
+        event_id=event.event_id,
+        revision_id=event.revision_id,
+        revision_no=1,
+        account_id=UUID(account),
+        portfolio_id=UUID(row.portfolio_id),
+        broker_id=UUID(row.broker_id),
+        account_version=1,
+        broker_version=1,
+        expected_setting_no=1,
+        effective_from="2026-01-02",
+        rate="0",
+        reason=REASON,
+    )
+    before = database_snapshot(previous_engine)
+    with pytest.raises(ApiError) as error, unit_of_work(previous_engine, write=True):
+        pytest.fail("A regular writer must require the current migration")
+    assert error.value.code == "MIGRATION_REQUIRED"
+    with previous_engine.connect().execution_options(writer=True) as con, con.begin():
+        with pytest.raises(tax.TaxSettingError, match="^DIVIDEND_TAX_HISTORY_UNAVAILABLE$"):
+            tax.require_current(
+                con,
+                OWNER,
+                event.event_id,
+                event.revision_id,
+                1,
+                UUID(account),
+                effective_on=date(2026, 1, 8),
+                expected_setting_no=1,
+                expected_head_id=UUID(row.id),
+            )
+        with pytest.raises(tax.TaxSettingError, match="^DIVIDEND_TAX_HISTORY_UNAVAILABLE$"):
+            tax.save(con, OWNER, intent, request_id=uuid4())
+    assert database_snapshot(previous_engine) == before
 
 
 def test_current_head_starts_without_settings_or_projection_history(engine: Engine) -> None:

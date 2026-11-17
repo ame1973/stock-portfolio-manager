@@ -50,6 +50,8 @@ def _failure(error: events.EventError | tax.TaxSettingError) -> ApiError:
         "DIVIDEND_TAX_CONFLICT",
         "DIVIDEND_TAX_SCOPE_CHANGED",
         "DIVIDEND_TAX_SETTING_CHANGED",
+        "DIVIDEND_REVISION_REJECTED",
+        "DIVIDEND_REJECTION_VERSION_CONFLICT",
         "DIVIDEND_EVENT_SOURCE_CHANGED",
         "CANDIDATE_NOT_FOUND",
         "CANDIDATE_VERSION_CONFLICT",

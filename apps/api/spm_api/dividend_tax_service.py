@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.dividend_event_service as events
 import spm_api.dividend_event_writer as event_writer
+import spm_api.dividend_rejection_service as rejections
 from spm_api.audit import audit, canonical, digest, stamp
 from spm_api.db import savepoint
 from spm_api.decimal_types import INT64_MAX, IsoDate, Rate, from_scaled, to_scaled
@@ -421,6 +422,18 @@ def _current_source(
         raise TaxSettingError(code) from None
 
 
+def _clear(
+    con: Connection, owner: UUID, event_id: UUID, revision_id: UUID, revision_no: int
+) -> None:
+    try:
+        rejections.require_clear(con, owner, event_id, revision_id=revision_id, version=revision_no)
+    except rejections.RejectionError as error:
+        code = str(error)
+        if code not in {"DIVIDEND_REVISION_REJECTED", "DIVIDEND_REJECTION_VERSION_CONFLICT"}:
+            code = "DIVIDEND_TAX_HISTORY_UNAVAILABLE"
+        raise TaxSettingError(code) from None
+
+
 def require_current(
     con: Connection,
     owner: UUID,
@@ -433,7 +446,7 @@ def require_current(
     expected_setting_no: int,
     expected_head_id: UUID | None,
 ) -> TaxSelection:
-    """Recheck source, exact setting head and account now; callers still owe authorization."""
+    """Recheck source, rejection, exact setting head and account; this is not authorization."""
     _writer(con, owner)
     _scope(con, owner, event_id, revision_id, revision_no, account_id)
     if (
@@ -446,6 +459,7 @@ def require_current(
         raise TaxSettingError("INVALID_DIVIDEND_TAX_SCOPE")
     try:
         _current_source(con, owner, event_id, revision_id, revision_no)
+        _clear(con, owner, event_id, revision_id, revision_no)
         settings = history(con, owner, event_id, revision_id, revision_no, account_id)
         account = _account(con, owner, account_id)
         if settings is None or account is None:
@@ -524,6 +538,7 @@ def _save(con: Connection, owner: UUID, intent: SettingIntent, *, request_id: UU
             event = _current_source(
                 con, owner, intent.event_id, intent.revision_id, intent.revision_no
             )
+            _clear(con, owner, intent.event_id, intent.revision_id, intent.revision_no)
             account = _account(con, owner, intent.account_id)
             if account is None:
                 raise TaxSettingError("DIVIDEND_TAX_NOT_FOUND")

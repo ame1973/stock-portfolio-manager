@@ -14,6 +14,7 @@ from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.dividend_event_writer as writer
+import spm_api.dividend_rejection_service as rejections
 import spm_api.dividend_tax_models as models
 import spm_api.dividend_tax_routes as routes
 import spm_api.dividend_tax_service as tax
@@ -252,6 +253,160 @@ async def test_effective_dates_unknown_zero_and_paginated_history_are_distinct(
     assert [row["setting_no"] for row in last.json()["items"]] == ["1"]
     assert last.json()["next_cursor"] is None
     assert database_snapshot(engine) == before
+
+
+async def test_rejection_fences_new_tax_but_not_retained_reads_or_historical_replay(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    scope = await selection(client, book)
+    headers = version_headers(client, 1, key="synthetic-tax-before-rejection")
+    original = await client.post(path(book), json=decision(scope), headers=headers)
+    assert original.status_code == 201
+    event = book["event"]
+    rejected = await client.post(
+        f"/api/v1/dividends/{event.event_id}/verify",
+        json={
+            "revision_id": str(event.revision_id),
+            "decision": "REJECT_REVISION",
+            "citation": "Synthetic rejection reference",
+            "reason": REASON,
+        },
+        headers=version_headers(client, 1),
+    )
+    assert rejected.status_code == 200, rejected.text
+    current = await selection(client, book)
+    assert current["selected"] == original.json()
+    before = database_snapshot(engine)
+    denied = await client.post(
+        path(book), json=decision(current), headers=version_headers(client, 1)
+    )
+    assert denied.status_code == 409 and denied.json()["code"] == "DIVIDEND_REVISION_REJECTED"
+    safe(denied)
+    replay = await client.post(path(book), json=decision(scope), headers=headers)
+    assert replay.status_code == 201 and replay.json() == original.json()
+    history = await client.get(
+        path(book) + "/history", params={"revision_id": str(event.revision_id), "revision_no": 1}
+    )
+    assert history.status_code == 200 and history.json()["items"] == [original.json()]
+    assert database_snapshot(engine) == before
+
+    state = await client.get(f"/api/v1/dividends/events/{event.event_id}/rejection")
+    assert state.status_code == 200 and state.json()["state"] == "REJECTED"
+    successor = writer.EventIntent(
+        event_id=event.event_id,
+        revision_id=uuid4(),
+        revision_no=2,
+        kind="VERIFY",
+        citation="Synthetic rejection resolution",
+        reason=REASON,
+        resolve_rejection_id=UUID(state.json()["rejection"]["id"]),
+    )
+    with unit_of_work(engine, write=True) as con:
+        writer.save(con, UUID(book["owner"]["id"]), successor, at=now(), request_id=uuid4())
+    before = database_snapshot(engine)
+    replay = await client.post(path(book), json=decision(scope), headers=headers)
+    assert replay.status_code == 201 and replay.json() == original.json()
+    current = await selection(client, book)
+    assert current["revision_id"] == str(successor.revision_id)
+    assert current["tax_status"] == "MISSING" and current["head_no"] == "0"
+    assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize(
+    ("code", "status", "reported"),
+    [
+        ("DIVIDEND_REJECTION_VERSION_CONFLICT", 409, "DIVIDEND_REJECTION_VERSION_CONFLICT"),
+        ("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE", 503, "DIVIDEND_TAX_HISTORY_UNAVAILABLE"),
+        ("synthetic-private", 503, "DIVIDEND_TAX_HISTORY_UNAVAILABLE"),
+    ],
+)
+async def test_rejection_failures_do_not_write_or_disclose_private_details(
+    client: httpx.AsyncClient,
+    engine: Engine,
+    book: dict[str, Any],
+    code: str,
+    status: int,
+    reported: str,
+) -> None:
+    scope = await selection(client, book)
+    before = database_snapshot(engine)
+    with patch.object(rejections, "require_clear", side_effect=rejections.RejectionError(code)):
+        response = await client.post(
+            path(book), json=decision(scope), headers=version_headers(client, 1)
+        )
+    assert response.status_code == status and response.json()["code"] == reported
+    safe(response)
+    assert "synthetic-private" not in response.text
+    assert database_snapshot(engine) == before
+
+
+async def test_rejection_read_failure_preserves_the_unchanged_retry_key(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    scope = await selection(client, book)
+    headers = version_headers(client, 1, key="synthetic-tax-rejection-reader-retry")
+    before = database_snapshot(engine)
+    with patch.object(
+        rejections,
+        "require_clear",
+        side_effect=rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE"),
+    ):
+        failed = await client.post(path(book), json=decision(scope), headers=headers)
+    assert failed.status_code == 503 and failed.json()["code"] == "DIVIDEND_TAX_HISTORY_UNAVAILABLE"
+    safe(failed)
+    assert database_snapshot(engine) == before
+    success = await client.post(path(book), json=decision(scope), headers=headers)
+    assert success.status_code == 201
+    after = database_snapshot(engine)
+    replay = await client.post(path(book), json=decision(scope), headers=headers)
+    assert replay.status_code == 201 and replay.json() == success.json()
+    assert database_snapshot(engine) == after
+
+
+async def test_concurrent_tax_and_rejection_never_append_after_rejection(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    scope = await selection(client, book)
+    event = book["event"]
+    before = database_snapshot(engine)
+    estimate, rejected = await asyncio.gather(
+        client.post(
+            path(book),
+            json=decision(scope),
+            headers=version_headers(client, 1, key="synthetic-tax-rejection-race"),
+        ),
+        client.post(
+            f"/api/v1/dividends/{event.event_id}/verify",
+            json={
+                "revision_id": str(event.revision_id),
+                "decision": "REJECT_REVISION",
+                "citation": "Synthetic rejection reference",
+                "reason": REASON,
+            },
+            headers=version_headers(client, 1, key="synthetic-rejection-tax-race"),
+        ),
+    )
+    assert rejected.status_code == 200
+    assert estimate.status_code in {201, 409}
+    safe(estimate)
+    if estimate.status_code == 409:
+        assert estimate.json()["code"] == "DIVIDEND_REVISION_REJECTED"
+    saved = int(estimate.status_code == 201)
+    after = database_snapshot(engine)
+    assert len(after["dividend_tax_settings"]) == len(before["dividend_tax_settings"]) + saved
+    assert len(after["dividend_event_rejections"]) == len(before["dividend_event_rejections"]) + 1
+    assert len(after["audit_events"]) == len(before["audit_events"]) + 2 + saved
+    assert len(after["idempotency_keys"]) == len(before["idempotency_keys"]) + 1 + saved
+    with unit_of_work(engine) as con:
+        rejected_at = con.exec_driver_sql(
+            "SELECT created_at FROM dividend_event_rejections WHERE revision_id=?",
+            (str(event.revision_id),),
+        ).scalar_one()
+        settings = con.exec_driver_sql(
+            "SELECT created_at FROM dividend_tax_settings WHERE revision_id=?",
+            (str(event.revision_id),),
+        ).all()
+    assert len(settings) == saved and all(row.created_at <= rejected_at for row in settings)
 
 
 async def test_account_scope_change_is_labeled_and_stale_input_cannot_write(
