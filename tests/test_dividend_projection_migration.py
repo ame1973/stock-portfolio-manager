@@ -144,7 +144,7 @@ def staged_event(
 
 
 def test_head_adds_an_empty_projection_history(engine: Engine) -> None:
-    assert schema_head() == "0027_receipt_unknowns"
+    assert schema_head() == "0028_receipt_origins"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []

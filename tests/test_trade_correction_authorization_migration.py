@@ -184,7 +184,7 @@ def previous_engine(old_engine: Engine, tmp_path: Path) -> Iterator[Engine]:
 
 def test_head_starts_with_no_correction_authorizations(engine: Engine) -> None:
     with unit_of_work(engine) as con:
-        assert schema_head() == "0027_receipt_unknowns"
+        assert schema_head() == "0028_receipt_origins"
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
 
 

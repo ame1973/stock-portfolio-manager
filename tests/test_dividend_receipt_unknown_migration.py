@@ -55,7 +55,7 @@ def populated(engine: Engine) -> tuple[Any, str, dict[str, Any], dict[str, Any]]
 
 
 def test_schema_head_allows_unknown_tax_and_fee_without_defaulting_to_zero(engine: Engine) -> None:
-    assert schema_head() == HEAD
+    assert schema_head() == "0028_receipt_origins"
     with unit_of_work(engine) as con:
         columns = {
             row.name: (row.notnull, row.dflt_value)
@@ -113,7 +113,8 @@ def test_upgrade_preserves_financial_rows_rowids_audits_cash_fx_and_schema_guard
         ).scalar_one() == len(before["owners"])
     with (
         pytest.raises(IntegrityError, match="SYNTHETIC_GUARD"),
-        unit_of_work(previous_engine, write=True) as con,
+        previous_engine.connect().execution_options(writer=True) as con,
+        con.begin(),
     ):
         insert(
             con,
@@ -138,7 +139,7 @@ def test_new_unknown_and_explicit_zero_remain_distinct_without_touching_old_rows
 ) -> None:
     _event, account, entitlement, old = populated(previous_engine)
     upgrade_to(previous_engine, HEAD)
-    with unit_of_work(previous_engine, write=True) as con:
+    with previous_engine.connect().execution_options(writer=True) as con, con.begin():
         unknown, zero = str(uuid4()), str(uuid4())
         base = {
             "entitlement_id": entitlement["id"],
@@ -172,7 +173,11 @@ def test_nullable_components_do_not_weaken_numeric_guards(
     _event, account, entitlement, _ = populated(previous_engine)
     upgrade_to(previous_engine, HEAD)
     before = database_snapshot(previous_engine)
-    with pytest.raises(IntegrityError), unit_of_work(previous_engine, write=True) as con:
+    with (
+        pytest.raises(IntegrityError),
+        previous_engine.connect().execution_options(writer=True) as con,
+        con.begin(),
+    ):
         insert(
             con,
             "dividend_receipts",

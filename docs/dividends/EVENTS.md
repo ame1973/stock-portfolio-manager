@@ -1660,7 +1660,27 @@ required for rollback.
 The scoped history API and browser preserve `null` as unknown and display an explicit
 recorded zero separately. Historical zeros remain unverified legacy fields, not proof of
 actual tax or fee. This schema and its guards do not authenticate a receipt or confirm
-payment, and they do not install a receipt writer, FX provenance, or event reconciliation.
+payment, and they do not install a receipt writer or event reconciliation.
+
+## Receipt origin provenance storage
+
+Migration `0028_receipt_origins` adds an initially empty, append-only receipt-origin table;
+it neither creates nor relabels any existing receipt. It can retain the explicitly observed
+current event revision, owner/account/portfolio/broker scope and versions, the portfolio data
+revision, a matching primary cash entry and creation audit, the historical FX source, and an
+optional reason for an actual-HKD override. The original entitlement revision remains linked
+through the receipt; the observed current revision may be different. Unknown foreign FX
+remains `null`, while HKD identity is distinct from an external rate.
+
+The insert guards check current relational scope, matching cash and audit shapes, chronology,
+and prevent replacement, updates or deletion. They cannot prove that records were created in
+the same transaction, that the actor was authenticated, that the retained audit fingerprint
+matches its original intent, that the FX calculation is correct, or that a payment or
+historical entitlement is genuine. No
+application writer or reader of this new table is installed yet. Do not insert origins or
+invoke internal writers on deployment data. A future protected receipt writer must bind and
+revalidate the complete intent, session, idempotency, cash, audit and invalidation atomically;
+receipt creation/void, economic authorization and atomic reconciliation remain unfinished.
 
 ## Internal retained-receipt link reader
 
