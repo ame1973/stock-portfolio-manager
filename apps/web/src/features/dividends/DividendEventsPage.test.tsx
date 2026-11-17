@@ -61,6 +61,34 @@ describe("dividend event workspace", () => {
     expect(panel).toHaveTextContent("查閱不會建立持倉、應收、實收或換匯"); expect(post).not.toHaveBeenCalled();
   });
 
+  it("opens an estimate sheet outside the event card with password confirmation", async () => {
+    const account: Schemas["Account"] = { id: "55555555-5555-4555-8555-555555555555", portfolio_id: "66666666-6666-4666-8666-666666666666",
+      broker_id: "77777777-7777-4777-8777-777777777777", name: "Synthetic estimate account", default_currency: "USD", status: "ACTIVE", version: 1,
+      opening_cash: null, opening_cash_date: null, cash_completeness: "UNKNOWN" };
+    const scope = { event_id: event.id, revision_id: event.current_revision_id, revision_no: event.version, account_id: account.id,
+      portfolio_id: account.portfolio_id, broker_id: account.broker_id, account_version: "1", broker_version: "1", effective_on: "2026-11-03",
+      head_no: "0", head_id: null, selected: null, selected_scope: "NO_SELECTED_SETTING", scope: "OWNER_ESTIMATE_ONLY", current_use_scope: "REVALIDATION_REQUIRED" };
+    reads({ "/api/v1/accounts": { items: [account], next_cursor: null },
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": { ...scope, tax_status: "MISSING" },
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings": { ...scope, fee_status: "MISSING", revision_rejection: "NOT_REJECTED" } });
+    const post = vi.spyOn(api, "POST"); const cache = renderPage(); await openEvent();
+    fireEvent.click(screen.getByRole("button", { name: "查看帳戶稅費估算" }));
+    fireEvent.click(await screen.findByRole("button", { name: "選擇估算帳戶 Synthetic estimate account" }));
+    fireEvent.change(screen.getByLabelText("查閱估算生效日"), { target: { value: "2026-11-03" } });
+    fireEvent.click(screen.getByRole("button", { name: "核對拒絕狀態以記錄估算" }));
+    const button = await screen.findByRole("button", { name: "記錄稅率估算" }); await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("dialog", { name: "記錄稅率估算" });
+    expect(within(dialog).getByRole("form", { name: "重新驗證" })).toBeVisible();
+    expect(within(dialog).getByRole("form", { name: "記錄稅率估算" })).toBeVisible();
+    expect(dialog).toHaveTextContent(event.current_revision_id); expect(dialog).toHaveTextContent(account.id); expect(post).not.toHaveBeenCalled();
+    fireEvent.change(within(dialog).getByLabelText("估算依據"), { target: { value: "Synthetic pending estimate reason." } });
+    await act(async () => cache.setQueriesData({ queryKey: ["dividends", "events"] }, { items: [{ ...event, version: 3,
+      current_revision_id: "88888888-8888-4888-8888-888888888888" }], next_cursor: null }));
+    expect(within(dialog).getByLabelText("估算依據")).toHaveValue("Synthetic pending estimate reason.");
+    expect(dialog).toHaveTextContent(event.current_revision_id); expect(post).not.toHaveBeenCalled();
+  });
+
   it("opens a distinct password-confirmed creation sheet without writing on open or cancel", async () => {
     reads(); const post = vi.spyOn(api, "POST");
     renderPage();

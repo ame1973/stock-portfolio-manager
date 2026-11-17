@@ -36,12 +36,15 @@ const fee: Schemas["FeeSettingSelection"] = {
   head_no: "0", head_id: null, fee_status: "MISSING", selected: null, selected_scope: "NO_SELECTED_SETTING", revision_rejection: "NOT_REJECTED",
   scope: "OWNER_ESTIMATE_ONLY", current_use_scope: "REVALIDATION_REQUIRED",
 };
+const clear: Schemas["RejectionState"] = { event_id: event.id, revision_id: event.current_revision_id, revision_no: event.version, state: "NOT_REJECTED", rejection: null,
+  scope: "OWNER_REJECTION_STATE_ONLY", current_use_scope: "REVALIDATION_REQUIRED", document_verification: "NOT_ESTABLISHED", eligibility_scope: "NOT_ESTABLISHED" };
 const taxPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings";
 const feePath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings";
 const reply = <T,>(data: T) => ({ data, response: new Response() });
-function reads(taxValue: unknown = tax, feeValue: unknown = fee) {
+function reads(taxValue: unknown = tax, feeValue: unknown = fee, rejectionValue: unknown = clear) {
   return vi.spyOn(api, "GET").mockImplementation(async path => {
     if (path === "/api/v1/accounts") return reply({ items: [account], next_cursor: null });
+    if (path === "/api/v1/dividends/events/{event_id}/rejection") return reply(rejectionValue);
     if (path === taxPath) return reply(taxValue);
     if (path === feePath) return reply(feeValue);
     if (path === `${taxPath}/history`) return reply({ items: [setting], next_cursor: null });
@@ -49,9 +52,9 @@ function reads(taxValue: unknown = tax, feeValue: unknown = fee) {
     throw new Error(`Unexpected read: ${path}`);
   });
 }
-function renderPanel(record = event) {
+function renderPanel(record = event, onWrite?: (target: unknown) => void, writeDisabled = false) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={cache}><DividendEstimatePanel event={record} /></QueryClientProvider>);
+  render(<QueryClientProvider client={cache}><DividendEstimatePanel event={record} onWrite={onWrite} writeDisabled={writeDisabled} /></QueryClientProvider>);
   return cache;
 }
 async function selectScope() {
@@ -156,6 +159,71 @@ describe("account-scoped retained tax and fee estimates", () => {
     reads(tax, { ...fee, revision_rejection: "REJECTED" }); renderPanel(); await selectScope();
     const panel = await screen.findByRole("region", { name: "費用估算" }); expect(panel).toHaveTextContent("此讀取顯示事件版本已拒絕");
     expect(screen.getByText(/稅率與拒絕狀態不是同一讀取/)).toBeVisible();
+  });
+
+  it("requires a fresh independent rejection read before freezing either estimate target", async () => {
+    const get = reads(); const onWrite = vi.fn(); const cache = renderPanel(event, onWrite); await selectScope();
+    expect(get).not.toHaveBeenCalledWith("/api/v1/dividends/events/{event_id}/rejection", expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "核對拒絕狀態以記錄估算" }));
+    const taxButton = await screen.findByRole("button", { name: "記錄稅率估算" });
+    await waitFor(() => expect(taxButton).toBeEnabled()); fireEvent.click(taxButton);
+    expect(onWrite).toHaveBeenCalledWith({ kind: "tax", event, account, selection: tax, rejection: clear });
+    fireEvent.click(screen.getByRole("button", { name: "記錄費用估算" }));
+    expect(onWrite).toHaveBeenLastCalledWith({ kind: "fee", event, account, selection: fee, rejection: clear });
+    expect(cache.getQueryCache().getAll()).toHaveLength(0);
+  });
+
+  it.each([
+    { ...clear, state: "REJECTED" }, { ...clear, revision_id: account.id }, { ...clear, scope: "GRANTED" },
+  ])("does not open a form from rejected, mismatched or malformed independent state", async broken => {
+    reads(tax, fee, broken); const onWrite = vi.fn(); renderPanel(event, onWrite); await selectScope();
+    fireEvent.click(screen.getByRole("button", { name: "核對拒絕狀態以記錄估算" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/拒絕狀態範圍無法安全核對/);
+    expect(onWrite).not.toHaveBeenCalled();
+  });
+
+  it("shows a valid rejection without allowing a new tax or fee decision", async () => {
+    const rejected: Schemas["RejectionDecision"] = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", event_id: event.id, revision_id: event.current_revision_id,
+      revision_no: event.version, decision: "REJECT_REVISION", reference: { citation: "Synthetic rejection", url: null, url_withheld: false },
+      reason: "Synthetic owner rejection decision.", created_at: "2026-11-04T00:00:00Z", scope: "OWNER_REVISION_REJECTION_ONLY",
+      document_verification: "NOT_ESTABLISHED", eligibility_scope: "NOT_ESTABLISHED" };
+    reads(tax, { ...fee, revision_rejection: "REJECTED" }, { ...clear, state: "REJECTED", rejection: rejected });
+    const onWrite = vi.fn(); renderPanel(event, onWrite); await selectScope();
+    fireEvent.click(screen.getByRole("button", { name: "核對拒絕狀態以記錄估算" }));
+    expect(await screen.findByText(/此事件版本已記錄拒絕，不能新增估算/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "記錄稅率估算" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "記錄費用估算" })).toBeDisabled(); expect(onWrite).not.toHaveBeenCalled();
+  });
+
+  it("disables estimate decisions while a rejection refresh is pending", async () => {
+    const get = reads(); const onWrite = vi.fn(); renderPanel(event, onWrite); await selectScope();
+    fireEvent.click(screen.getByRole("button", { name: "核對拒絕狀態以記錄估算" }));
+    const taxButton = await screen.findByRole("button", { name: "記錄稅率估算" }); await waitFor(() => expect(taxButton).toBeEnabled());
+    let deliver!: () => void;
+    get.mockImplementation(async path => {
+      if (path === "/api/v1/dividends/events/{event_id}/rejection") return new Promise(resolve => { deliver = () => resolve(reply(clear)); });
+      throw new Error("Unexpected read");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新載入估算拒絕狀態" }));
+    expect(taxButton).toBeDisabled(); expect(screen.getByRole("button", { name: "記錄費用估算" })).toBeDisabled();
+    await waitFor(() => expect(deliver).toBeTypeOf("function")); await act(async () => deliver());
+    await waitFor(() => expect(taxButton).toBeEnabled()); expect(onWrite).not.toHaveBeenCalled();
+  });
+
+  it("disables fee editing if its independently read rejection disagrees", async () => {
+    reads(tax, { ...fee, revision_rejection: "REJECTED" }); const onWrite = vi.fn(); renderPanel(event, onWrite); await selectScope();
+    fireEvent.click(screen.getByRole("button", { name: "核對拒絕狀態以記錄估算" }));
+    expect(await screen.findByRole("button", { name: "記錄稅率估算" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "記錄費用估算" })).toBeDisabled(); expect(onWrite).not.toHaveBeenCalled();
+  });
+
+  it("does not start an estimate when the event list is stale or offline", async () => {
+    reads(); const onWrite = vi.fn(); renderPanel(event, onWrite, true); await selectScope();
+    fireEvent.click(screen.getByRole("button", { name: "核對拒絕狀態以記錄估算" }));
+    expect(await screen.findByRole("button", { name: "記錄稅率估算" })).toBeDisabled();
+    try { await act(async () => onlineManager.setOnline(false)); expect(screen.getByRole("button", { name: "記錄費用估算" })).toBeDisabled(); }
+    finally { await act(async () => onlineManager.setOnline(true)); }
+    expect(onWrite).not.toHaveBeenCalled();
   });
 
   it("does not let a previously loaded account be selected while offline", async () => {

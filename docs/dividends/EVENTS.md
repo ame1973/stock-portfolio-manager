@@ -103,15 +103,15 @@ link is an explicit user action.
 `VERIFIED` is displayed as an owner acceptance, not document verification; a missing
 event or an unrejected decision does not establish ownership, eligibility, an accrued
 amount or a receipt. List and history reads do not calculate income, mutate financial
-facts, contact providers, or relax the event-revision fence. Tax/fee estimate writing,
-protected projections and receipt reconciliation remain separate unfinished work.
+facts, contact providers, or relax the event-revision fence. Protected projections and
+receipt reconciliation remain separate unfinished work.
 
 ### Read account tax and fee estimates
 
 Expand an event and choose **View account tax and fee estimates**. The owner
 explicitly selects an account from bounded pages and enters a calendar day; neither
-is inferred from the security, event date or current date. This is a read-only view,
-not evidence that the account holds the security or qualifies for a distribution.
+is inferred from the security, event date or current date. Viewing these estimates is
+read-only and not evidence that the account holds the security or qualifies for a distribution.
 Account selection and estimate/history query scopes stay in mounted component memory,
 not a query cache, browser address bar or browser storage. Failed, offline or stale account reads cannot
 be used for a new selection.
@@ -138,6 +138,39 @@ checks the read-only workspace at 360/768/1440, keyboard, no-store, history, an 
 missing selection with a nonempty head, separate rejection refresh with unchanged
 event ETag, and stale account scope after a real account edit. Financial/FX tables
 remain empty; no provider, worker, deployment data or screenshot is used.
+
+### Record an account estimate in the browser
+
+After selecting the account and lookup day, choose **Check rejection state to record an
+estimate**. The independent fresh rejection read must match the displayed event and
+physical revision and show no recorded rejection; the fee read must also show no
+rejection. Failed, pending, offline, malformed or inconsistent reads cannot open a
+new editor. These reads are separate snapshots, not proof that the event is accepted;
+the server rechecks source, rejection, setting head and account scope atomically.
+
+The password-confirmed tax and fee sheets freeze the displayed event, account,
+portfolio, broker, exact-string account/broker versions and setting-head pins. Enter
+an explicit effective day and reason; the lookup day is not silently reused. Choose
+an explicit estimate or unknown: tax rates are exact decimal fractions from zero to
+one, while an unknown fee can have an explicitly chosen currency or an explicitly
+unknown currency. An estimated fee requires a known currency. No value is rounded or
+inferred as zero, and the acknowledgment states that the decision is not a confirmed
+deduction, ownership, income or receipt.
+
+The form, password and unchanged uncertain retry key stay in component memory only.
+Closing discards that local retry context; inspect history before starting another
+operation. A response may be a historical zero-write replay even after later settings
+or rejection. The sheet validates returned scope, predecessor, exact ordinal, values,
+reason and no-grant labels, and blocks dismissal while a request is pending. A 409 or
+412 retains the inputs for review rather than implying an unobserved operation failed.
+No estimated setting creates a projection, receipt, cash entry or exchange rate.
+
+`npm run test:e2e:estimate-writes` starts a separate synthetic application and real
+browser. It checks password confirmation, 360/768/1440 layouts, no-store reads, a
+held/lost zero-tax response, same-key historical replay after a later unknown tax,
+an unknown fee with known currency, an account-version conflict, and a competing
+rejection that blocks a new fee without writes. Financial/FX tables remain empty; no provider, worker, deployment data
+or screenshot is used.
 
 ### Manual event creation in the browser
 
@@ -953,8 +986,8 @@ intent under the same key conflicts; stale observed versions return 412. Results
 eligibility or income. Tax selection and history reads remain available for a rejected
 revision but do not imply its rejection state or current-use authority. No endpoint
 contacts a provider or modifies prior projections, receipts, cash or locked FX. The
-browser workspace is read-only; setting forms, projection rebuilding and receipt
-workflows remain unfinished.
+browser provides explicit estimate forms; projection rebuilding and receipt workflows
+remain unfinished.
 
 ## Projection tax provenance
 

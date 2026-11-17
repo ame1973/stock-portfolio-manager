@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { components } from "@spm/contracts";
 import { date, money } from "../ledger/inputs";
+import { validRejection } from "./event-validation";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
@@ -8,6 +9,10 @@ type Account = Schemas["Account"];
 type Tax = Schemas["TaxSettingSelection"];
 type Fee = Schemas["FeeSettingSelection"];
 type Setting = Schemas["TaxSettingRecord"] | Schemas["FeeSettingRecord"];
+type RejectionState = Schemas["RejectionState"];
+export type EstimateTarget = { event: Event; account: Account; rejection: RejectionState } & (
+  { kind: "tax"; selection: Tax } | { kind: "fee"; selection: Fee }
+);
 const MAX = 9223372036854775807n;
 export const ordinal = z.string().regex(/^(0|[1-9][0-9]{0,18})$/).refine(value => /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= MAX);
 export const positiveOrdinal = ordinal.refine(value => value !== "0");
@@ -65,6 +70,27 @@ export function checkedTax(value: Tax, event: Event, account: Account, effective
 export function checkedFee(value: Fee, event: Event, account: Account, effective: string): Fee {
   if (!feeSelection.safeParse(value).success || !scopeMatches(value, event, account, effective)) throw new Error("費用估算範圍無法安全核對；請重新載入事件、帳戶及估算。");
   return value;
+}
+
+export function checkedEstimateRejection(value: RejectionState, event: Event): RejectionState {
+  const valid = value && typeof value === "object" && validEstimateEvent(event)
+    && z.uuid().safeParse(value.event_id).success && z.uuid().safeParse(value.revision_id).success
+    && sameId(value.event_id, event.id) && sameId(value.revision_id, event.current_revision_id) && value.revision_no === event.version
+    && value.scope === "OWNER_REJECTION_STATE_ONLY" && value.current_use_scope === "REVALIDATION_REQUIRED"
+    && value.document_verification === "NOT_ESTABLISHED" && value.eligibility_scope === "NOT_ESTABLISHED"
+    && (value.state === "NOT_REJECTED" ? value.rejection === null : value.state === "REJECTED" && value.rejection !== null && validRejection(value.rejection, event));
+  if (!valid) throw new Error("拒絕狀態範圍無法安全核對；請重新載入事件與拒絕狀態。");
+  return value;
+}
+
+export function validEstimateTarget(target: EstimateTarget): boolean {
+  try {
+    if (!target || !validEstimateEvent(target.event) || !z.object({ id, portfolio_id: id, broker_id: id }).safeParse(target.account).success
+      || checkedEstimateRejection(target.rejection, target.event).state !== "NOT_REJECTED") return false;
+    const selection = target.kind === "tax" ? checkedTax(target.selection, target.event, target.account, target.selection.effective_on)
+      : target.kind === "fee" ? checkedFee(target.selection, target.event, target.account, target.selection.effective_on) : null;
+    return selection !== null && BigInt(selection.head_no) < MAX && (target.kind !== "fee" || target.selection.revision_rejection === "NOT_REJECTED");
+  } catch { return false; }
 }
 
 export function checkedHistory<T extends Setting>(value: { items: T[]; next_cursor?: string | null }, event: Event, account: Account, kind: "tax" | "fee"): { items: T[]; next_cursor?: string | null } {

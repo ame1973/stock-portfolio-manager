@@ -17,6 +17,7 @@ import { usePageState } from "../settings/data";
 import { SourceLink, SourceReadState, SourceValues } from "../sources/details";
 import { CandidateEventMatchForm } from "./CandidateEventMatchForm";
 import { DividendEstimatePanel } from "./DividendEstimatePanel";
+import { EstimateWriteForm, type EstimateTarget } from "./EstimateWriteForm";
 import { AcceptEventForm, WithdrawEventForm } from "./CitedEventDecisionForm";
 import { ManualEventCreateForm, ManualEventOverrideForm, ManualEventRevisionForm } from "./ManualEventForm";
 import { RejectEventForm } from "./RejectEventForm";
@@ -28,7 +29,8 @@ type Event = Schemas["DividendEventRecord"];
 type Revision = Schemas["DividendEventRevisionRecord"];
 type Terms = Event | Revision;
 type Rejection = Schemas["RejectionDecision"];
-type Editor = { mode: "create" } | { mode: "revise" | "accept" | "withdraw" | "override" | "match"; target: RevisionTarget } | { mode: "reject"; target: Event };
+type EventEditorTarget = { mode: "create" } | { mode: "revise" | "accept" | "withdraw" | "override" | "match"; target: RevisionTarget } | { mode: "reject"; target: Event };
+type Editor = EventEditorTarget | { mode: "estimate"; target: EstimateTarget };
 
 const decisions: Record<Event["decision_kind"], string> = {
   CANDIDATE: "明確關聯候選資料", MANUAL: "人工條款", VERIFY: "人工接受", WITHDRAW: "人工撤回",
@@ -137,7 +139,7 @@ function RejectionHistory({ record }: { record: Event }) {
     </article>}</RecordList></section>;
 }
 
-function EventCard({ record, disabled, associationDisabled, onOpen }: { record: Event; disabled: boolean; associationDisabled: boolean; onOpen: (editor: Editor) => void }) {
+function EventCard({ record, disabled, associationDisabled, onOpen, estimateRefresh }: { record: Event; disabled: boolean; associationDisabled: boolean; onOpen: (editor: Editor) => void; estimateRefresh: number }) {
   const desktop = useDesktop();
   const [open, setOpen] = useState(false);
   const [revisions, setRevisions] = useState(false);
@@ -155,13 +157,13 @@ function EventCard({ record, disabled, associationDisabled, onOpen }: { record: 
         <Button variant="outline" aria-expanded={rejections} onClick={() => setRejections(value => !value)}>{rejections ? "收合拒絕歷史" : "查看拒絕歷史"}</Button>
         <Button variant="outline" aria-expanded={estimates} onClick={() => setEstimates(value => !value)}>{estimates ? "收合帳戶稅費估算" : "查看帳戶稅費估算"}</Button></div>
       {revisions && <RevisionHistory record={record} />}{rejections && <RejectionHistory record={record} />}
-      {estimates && <DividendEstimatePanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} />}
+      {estimates && <DividendEstimatePanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={estimateRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "estimate", target })} />}
       <Link to={`/settings/securities/${record.security_id}`} className="inline-flex min-h-11 items-center text-sm text-primary underline">核對穩定證券身分</Link>
     </div>}
   </article>;
 }
 
-function EventEditor({ onCancel, onSaved, editor }: { onCancel: () => void; onSaved: (record: Event) => void; editor: Editor }) {
+function EventEditor({ onCancel, onSaved, editor }: { onCancel: () => void; onSaved: (record: Event) => void; editor: EventEditorTarget }) {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [decisionBusy, setDecisionBusy] = useState(false);
   const title = { create: "新增人工股息事件", revise: "修訂人工股息事件", reject: "拒絕股息事件版本", accept: "人工接受股息事件版本", withdraw: "撤回股息事件", override: "人工覆寫股息事件", match: "關聯候選至現有事件" }[editor.mode];
@@ -178,10 +180,19 @@ function EventEditor({ onCancel, onSaved, editor }: { onCancel: () => void; onSa
   </EditorSheet>;
 }
 
+function EstimateEditor({ target, onCancel, onSaved }: { target: EstimateTarget; onCancel: () => void; onSaved: (id: string) => void }) {
+  const [passwordBusy, setPasswordBusy] = useState(false); const [decisionBusy, setDecisionBusy] = useState(false);
+  return <EditorSheet title={target.kind === "tax" ? "記錄稅率估算" : "記錄費用估算"} onClose={onCancel}>
+    <div className="mb-6"><PasswordForm disabled={decisionBusy} onPendingChange={setPasswordBusy} /></div>
+    <EstimateWriteForm target={target} onCancel={onCancel} onSaved={record => onSaved(record.id)} disabled={passwordBusy} onPendingChange={setDecisionBusy} />
+  </EditorSheet>;
+}
+
 const initialFilters = { security_id: "", workflow_status: "" as "" | Event["workflow_status"], from_date: "", to_date: "" };
 export function DividendEventsPage() {
   const cache = useQueryClient();
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [estimateRefresh, setEstimateRefresh] = useState(0);
   const [notice, setNotice] = useState<{ id: string; mode: Editor["mode"] } | null>(null);
   const page = usePageState("dividends:events");
   const [filters, setFilters] = useViewState("filters:dividends:events", initialFilters);
@@ -194,14 +205,15 @@ export function DividendEventsPage() {
   function filter(change: Partial<typeof initialFilters>) { setFilters(previous => ({ ...previous, ...change })); page.search(page.q); }
   const editing = editor !== null;
   const eventsReady = !!result.data && !result.isFetching && !result.isError && !result.isPaused;
-  function closeEditor() { setEditor(null); void cache.invalidateQueries({ queryKey: ["dividends"] }); }
+  function closeEditor() { if (editor?.mode === "estimate") setEstimateRefresh(value => value + 1); setEditor(null); void cache.invalidateQueries({ queryKey: ["dividends"] }); }
   return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 className="text-2xl font-semibold">股息事件</h1>
     <p className="mt-2 text-sm leading-7 text-secondary">查看已記錄的事件決定、來源與歷史；人工接受不是文件驗證或持倉資格，這裡不計算應收或實收。未知不會補零。</p>
     <div className="flex flex-wrap gap-x-5"><Link to="/dividends/candidates" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息候選資料</Link>
       <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div></div>
     <Button data-editor-create disabled={editing} onClick={() => { setNotice(null); setEditor({ mode: "create" }); }}>新增人工股息事件</Button></header>
-    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.mode === "reject" ? "拒絕決定" : notice.mode === "accept" ? "人工接受決定" : notice.mode === "withdraw" ? "撤回決定" : notice.mode === "override" ? "人工覆寫決定" : notice.mode === "match" ? "候選關聯決定" : "事件決定"} {notice.id}；可能是原鍵回覆，請重新載入核對目前版本及拒絕狀態。這不是文件驗證、持倉資格或實收。</p>}
-    {editor && <EventEditor editor={editor} onCancel={closeEditor} onSaved={record => { setNotice({ id: record.id, mode: editor.mode }); closeEditor(); }} />}
+    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.mode === "estimate" ? "帳戶估算" : notice.mode === "reject" ? "拒絕決定" : notice.mode === "accept" ? "人工接受決定" : notice.mode === "withdraw" ? "撤回決定" : notice.mode === "override" ? "人工覆寫決定" : notice.mode === "match" ? "候選關聯決定" : "事件決定"} {notice.id}；可能是原鍵回覆，請重新載入核對{notice.mode === "estimate" ? "估算歷史、事件版本及拒絕狀態；這不是已確認扣稅、扣費、持倉資格或實收。" : "目前版本及拒絕狀態；這不是文件驗證、持倉資格或實收。"}</p>}
+    {editor && (editor.mode === "estimate" ? <EstimateEditor target={editor.target} onCancel={closeEditor} onSaved={id => { setNotice({ id, mode: "estimate" }); closeEditor(); }} />
+      : <EventEditor editor={editor} onCancel={closeEditor} onSaved={record => { setNotice({ id: record.id, mode: editor.mode }); closeEditor(); }} />)}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選股息事件</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><ReferenceSelect kind="securities" activeOnly={false} label="事件證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
         <SelectField label="事件狀態" value={filters.workflow_status} onChange={event => filter({ workflow_status: event.target.value as typeof filters.workflow_status })}><option value="">全部事件狀態</option>{(Object.keys(statuses) as Event["workflow_status"][]).map(status => <option key={status} value={status}>{statuses[status]}</option>)}</SelectField>
@@ -216,6 +228,6 @@ export function DividendEventsPage() {
       { id: "dps", header: "每股事件金額，非收入", cell: ({ row }) => `${row.original.currency} ${row.original.dps}` },
       { id: "status", header: "事件決定，非拒絕狀態", cell: ({ row }) => statuses[row.original.workflow_status] },
       { id: "pay", header: "付款日", cell: ({ row }) => row.original.pay_date ?? "未知" },
-    ]}>{record => <EventCard record={record} disabled={editing} associationDisabled={editing || !eventsReady} onOpen={value => { setNotice(null); setEditor(value); }} />}</RecordList>
+    ]}>{record => <EventCard record={record} disabled={editing} associationDisabled={editing || !eventsReady} estimateRefresh={estimateRefresh} onOpen={value => { setNotice(null); setEditor(value); }} />}</RecordList>
   </div>;
 }

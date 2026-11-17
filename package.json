@@ -32,6 +32,7 @@
     "test:e2e:candidate-source-picker": "node tests/e2e/credentials/check.mjs --candidate-source-picker",
     "test:e2e:candidate-basis-picker": "node tests/e2e/credentials/check.mjs --candidate-basis-picker",
     "test:e2e:dividend-estimates": "node tests/e2e/credentials/check.mjs --dividend-estimates",
+    "test:e2e:estimate-writes": "node tests/e2e/credentials/check.mjs --estimate-writes",
     "generate:contracts": "uv run python scripts/export_openapi.py && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",
     "check:contracts": "uv run python scripts/export_openapi.py --check && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts --check"
   },

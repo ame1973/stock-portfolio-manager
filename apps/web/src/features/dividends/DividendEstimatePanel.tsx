@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/button";
 import { checked, failureMessage } from "../../lib/api";
 import { date } from "../ledger/inputs";
 import { usePageState } from "../settings/data";
-import { checkedFee, checkedHistory, checkedTax, validEstimateEvent } from "./estimate-validation";
+import { checkedEstimateRejection, checkedFee, checkedHistory, checkedTax, validEstimateEvent, validEstimateTarget, type EstimateTarget } from "./estimate-validation";
 import { usePrivatePage } from "./use-private-page";
 
 type Schemas = components["schemas"];
@@ -90,15 +90,41 @@ function History({ kind, event, account }: { kind: "tax" | "fee"; event: Event; 
   </section>;
 }
 
-function SelectionDetails({ event, account, effective }: { event: Event; account: Account; effective: string }) {
-  const [taxHistory, setTaxHistory] = useState(false); const [feeHistory, setFeeHistory] = useState(false);
+function WritePreparation({ event, account, tax, fee, onWrite, disabled, refresh }: {
+  event: Event; account: Account; tax: ReadResult<Tax>; fee: ReadResult<Fee>;
+  onWrite: (target: EstimateTarget) => void; disabled: boolean; refresh: number;
+}) {
+  const load = useCallback(async (_cursor: string | undefined, signal: AbortSignal) => checkedEstimateRejection(checked(await api.GET(
+    "/api/v1/dividends/events/{event_id}/rejection", { params: { path: { event_id: event.id } }, signal }
+  )), event), [event]);
+  const rejection = usePrivatePage(`estimate-rejection:${event.id}:${event.current_revision_id}:${event.version}:${refresh}`, undefined, load);
+  const ready = !!rejection.data && !rejection.isFetching && !rejection.isPaused && !rejection.isError && !disabled;
+  const taxTarget: EstimateTarget | null = rejection.data && tax.data ? { kind: "tax", event, account, selection: tax.data, rejection: rejection.data } : null;
+  const feeTarget: EstimateTarget | null = rejection.data && fee.data ? { kind: "fee", event, account, selection: fee.data, rejection: rejection.data } : null;
+  const taxReady = ready && !tax.isFetching && !tax.isPaused && !tax.isError && !!taxTarget && validEstimateTarget(taxTarget);
+  const feeReady = ready && !fee.isFetching && !fee.isPaused && !fee.isError && !!feeTarget && validEstimateTarget(feeTarget);
+  return <section aria-label="估算寫入前的拒絕狀態" className="grid min-w-0 gap-3 rounded-md border border-border p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-medium">再次核對事件拒絕狀態</h4>
+      <Button type="button" variant="outline" disabled={rejection.isFetching} onClick={() => rejection.refetch()}>重新載入估算拒絕狀態</Button></div>
+    <p className="text-sm leading-7 text-secondary">此讀取與事件及稅費不是同一快照；伺服器在寫入時仍會重查。若讀取失敗、離線或範圍變更，不能開始新設定。</p>
+    <ReadStatus result={rejection} label="估算拒絕狀態" />
+    {rejection.data && <p className="text-sm leading-7">{rejection.data.state === "REJECTED" ? "此事件版本已記錄拒絕，不能新增估算。" : "此讀取未記錄拒絕；不是接受決定或財務資格。"}</p>}
+    <div className="flex flex-wrap gap-3"><Button type="button" variant="outline" disabled={!taxReady} onClick={() => { if (taxTarget && taxReady) onWrite(structuredClone(taxTarget)); }}>記錄稅率估算</Button>
+      <Button type="button" variant="outline" disabled={!feeReady} onClick={() => { if (feeTarget && feeReady) onWrite(structuredClone(feeTarget)); }}>記錄費用估算</Button></div>
+  </section>;
+}
+
+function SelectionDetails({ event, account, effective, onWrite, writeDisabled, refresh }: {
+  event: Event; account: Account; effective: string; onWrite?: (target: EstimateTarget) => void; writeDisabled: boolean; refresh: number;
+}) {
+  const [taxHistory, setTaxHistory] = useState(false); const [feeHistory, setFeeHistory] = useState(false); const [preparing, setPreparing] = useState(false);
   const taxLoad = useCallback(async (_cursor: string | undefined, signal: AbortSignal): Promise<Tax> => checkedTax(checked(await api.GET("/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings", { params: {
     path: { event_id: event.id, account_id: account.id }, query: { effective_on: effective },
   }, signal })), event, account, effective), [event, account, effective]);
   const feeLoad = useCallback(async (_cursor: string | undefined, signal: AbortSignal): Promise<Fee> => checkedFee(checked(await api.GET("/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings", { params: {
     path: { event_id: event.id, account_id: account.id }, query: { effective_on: effective },
   }, signal })), event, account, effective), [event, account, effective]);
-  const scope = `${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${effective}`;
+  const scope = `${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${effective}:${refresh}`;
   const tax = usePrivatePage(`tax:${scope}`, undefined, taxLoad); const fee = usePrivatePage(`fee:${scope}`, undefined, feeLoad);
   return <div className="grid min-w-0 gap-4"><p className="text-sm leading-7 text-secondary">稅率與拒絕狀態不是同一讀取；費用、稅率與事件也不是同一快照。下列是擁有人估算，不確認實際扣款、持倉資格或收入。</p>
     <section aria-label="稅率估算" className="grid min-w-0 gap-3 rounded-md border border-border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-medium">稅率估算</h4><Button type="button" variant="outline" disabled={tax.isFetching} onClick={() => tax.refetch()}>重新載入稅率估算</Button></div>
@@ -108,7 +134,7 @@ function SelectionDetails({ event, account, effective }: { event: Event; account
         <p className="break-all text-sm leading-7">觀察到設定頂端 {tax.data.head_no}；識別碼 {tax.data.head_id ?? "沒有設定"}；帳戶版本 {tax.data.account_version}；券商版本 {tax.data.broker_version}。</p>
         {tax.data.selected && <p className="break-all text-sm leading-7">所選設定 {tax.data.selected.setting_no}；生效日 {tax.data.selected.effective_from}；依據 {tax.data.selected.reason}。</p>}
         <div><Button type="button" variant="outline" aria-expanded={taxHistory} onClick={() => setTaxHistory(value => !value)}>{taxHistory ? "收合稅率估算歷史" : "查看稅率估算歷史"}</Button></div>
-        {taxHistory && <History kind="tax" event={event} account={account} />}</>}</section>
+        {taxHistory && <History key={`tax:${scope}`} kind="tax" event={event} account={account} />}</>}</section>
     <section aria-label="費用估算" className="grid min-w-0 gap-3 rounded-md border border-border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-medium">費用估算</h4><Button type="button" variant="outline" disabled={fee.isFetching} onClick={() => fee.refetch()}>重新載入費用估算</Button></div>
       <ReadStatus result={fee} label="費用估算" />{fee.data && <><p className="text-sm leading-7">{fee.data.fee_status === "MISSING" ? "未設定，不是零。" : fee.data.fee_status === "UNKNOWN" ? `金額未知；幣別 ${fee.data.selected?.fee_currency ?? "未知"}。` : `費用估算 ${fee.data.selected?.fee_currency} ${fee.data.selected?.fee}；不是已確認扣費。`}</p>
         <p className="text-sm leading-7">{fee.data.revision_rejection === "REJECTED" ? "此讀取顯示事件版本已拒絕；不是實收沖銷。" : "此讀取顯示事件版本未記錄拒絕；不是接受決定或財務資格。"}</p>
@@ -116,11 +142,15 @@ function SelectionDetails({ event, account, effective }: { event: Event; account
         <p className="break-all text-sm leading-7">觀察到設定頂端 {fee.data.head_no}；識別碼 {fee.data.head_id ?? "沒有設定"}；帳戶版本 {fee.data.account_version}；券商版本 {fee.data.broker_version}。</p>
         {fee.data.selected && <p className="break-all text-sm leading-7">所選設定 {fee.data.selected.setting_no}；生效日 {fee.data.selected.effective_from}；依據 {fee.data.selected.reason}。</p>}
         <div><Button type="button" variant="outline" aria-expanded={feeHistory} onClick={() => setFeeHistory(value => !value)}>{feeHistory ? "收合費用估算歷史" : "查看費用估算歷史"}</Button></div>
-        {feeHistory && <History kind="fee" event={event} account={account} />}</>}</section>
+        {feeHistory && <History key={`fee:${scope}`} kind="fee" event={event} account={account} />}</>}</section>
+    {onWrite && <div><Button type="button" variant="outline" aria-expanded={preparing} onClick={() => setPreparing(value => !value)}>{preparing ? "收合估算寫入核對" : "核對拒絕狀態以記錄估算"}</Button></div>}
+    {preparing && onWrite && <WritePreparation event={event} account={account} tax={tax} fee={fee} onWrite={onWrite} disabled={writeDisabled} refresh={refresh} />}
   </div>;
 }
 
-export function DividendEstimatePanel({ event: observed }: { event: Event }) {
+export function DividendEstimatePanel({ event: observed, onWrite, writeDisabled = false, refresh = 0 }: {
+  event: Event; onWrite?: (target: EstimateTarget) => void; writeDisabled?: boolean; refresh?: number;
+}) {
   const [event] = useState(() => structuredClone(observed));
   const [account, setAccount] = useState<Account | null>(null); const [effective, setEffective] = useState("");
   if (!validEstimateEvent(event)) return <p role="alert" className="text-sm text-danger">事件版本無法安全核對；請重新載入後再查閱估算。</p>;
@@ -128,6 +158,6 @@ export function DividendEstimatePanel({ event: observed }: { event: Event }) {
     <p className="break-all text-sm leading-7 text-secondary">固定事件 {event.id}；版本 {event.version}；實體修訂 {event.current_revision_id}。查閱不會建立持倉、應收、實收或換匯。</p>
     <AccountPicker selected={account} onSelect={setAccount} />
     {account && <><p className="break-all text-sm">所選帳戶：{account.name}；{account.id}。</p><Field label="查閱估算生效日" type="date" value={effective} onChange={change => setEffective(change.target.value)} help="請明確選擇查閱日期，不由除淨日或今天自動推定。" />
-      {date.safeParse(effective).success && <SelectionDetails key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${effective}`} event={event} account={account} effective={effective} />}</>}
+      {date.safeParse(effective).success && <SelectionDetails key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${effective}`} event={event} account={account} effective={effective} onWrite={onWrite} writeDisabled={writeDisabled} refresh={refresh} />}</>}
   </section>;
 }
