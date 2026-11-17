@@ -103,9 +103,41 @@ link is an explicit user action.
 `VERIFIED` is displayed as an owner acceptance, not document verification; a missing
 event or an unrejected decision does not establish ownership, eligibility, an accrued
 amount or a receipt. List and history reads do not calculate income, mutate financial
-facts, contact providers, or relax the event-revision fence. Other decision forms,
-tax/fee controls, protected projections and receipt reconciliation remain separate
-unfinished work.
+facts, contact providers, or relax the event-revision fence. Tax/fee estimate writing,
+protected projections and receipt reconciliation remain separate unfinished work.
+
+### Read account tax and fee estimates
+
+Expand an event and choose **View account tax and fee estimates**. The owner
+explicitly selects an account from bounded pages and enters a calendar day; neither
+is inferred from the security, event date or current date. This is a read-only view,
+not evidence that the account holds the security or qualifies for a distribution.
+Account selection and estimate/history query scopes stay in mounted component memory,
+not a query cache, browser address bar or browser storage. Failed, offline or stale account reads cannot
+be used for a new selection.
+
+The separate tax and fee reads must each match the frozen stable event, physical
+revision, version, selected account, portfolio, broker and explicit day. Setting
+heads, account and broker versions stay canonical decimal strings and are never
+converted through JavaScript `Number`. Selected records must match their head,
+effective day and account-scope labels. Malformed, foreign, duplicate or out-of-order
+history fails closed. A later account or broker change is shown as a stale setting
+scope, not silently treated as a current estimate. Histories are bounded independent
+reads and may contain later decisions than the displayed selection.
+
+`MISSING` is shown as unconfigured rather than zero; `UNKNOWN` stays unknown, including
+an unknown fee with a separately known currency; an explicitly estimated zero remains
+zero. The fee selection includes its own rejection-state read. The tax selection and
+independently fetched event rejection are separate requests, not an atomic snapshot;
+no clear state is inferred for tax. None of these owner estimates confirms withholding,
+fees, documents, ownership, income, entitlement, a receipt or FX.
+
+`npm run test:e2e:dividend-estimates` uses a new synthetic application and real browser.
+It creates a zero tax estimate and unknown USD fee through the protected APIs, then
+checks the read-only workspace at 360/768/1440, keyboard, no-store, history, an earlier
+missing selection with a nonempty head, separate rejection refresh with unchanged
+event ETag, and stale account scope after a real account edit. Financial/FX tables
+remain empty; no provider, worker, deployment data or screenshot is used.
 
 ### Manual event creation in the browser
 

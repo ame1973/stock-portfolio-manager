@@ -54,6 +54,13 @@ async function openEvent() {
 }
 
 describe("dividend event workspace", () => {
+  it("opens account-scoped estimate reads without posting or assuming eligibility", async () => {
+    reads({ "/api/v1/accounts": empty }); const post = vi.spyOn(api, "POST"); renderPage(); await openEvent();
+    fireEvent.click(screen.getByRole("button", { name: "查看帳戶稅費估算" }));
+    const panel = await screen.findByRole("region", { name: "帳戶稅費估算" });
+    expect(panel).toHaveTextContent("查閱不會建立持倉、應收、實收或換匯"); expect(post).not.toHaveBeenCalled();
+  });
+
   it("opens a distinct password-confirmed creation sheet without writing on open or cancel", async () => {
     reads(); const post = vi.spyOn(api, "POST");
     renderPage();

@@ -66,6 +66,8 @@ const messages: Record<string, string> = {
   INVALID_BASIS_SCOPE: "基準日期或明確行動範圍不符；請保留輸入並逐筆核對。",
   DIVIDEND_EVENT_HISTORY_UNAVAILABLE: "股息事件歷史無法安全核對；請重新載入或檢查伺服器狀態及有效備份。",
   DIVIDEND_REJECTION_HISTORY_UNAVAILABLE: "拒絕歷史無法安全核對；請重新載入或檢查伺服器狀態及有效備份。",
+  DIVIDEND_TAX_HISTORY_UNAVAILABLE: "稅率估算歷史無法安全核對；請重新載入或檢查有效備份。",
+  DIVIDEND_FEE_HISTORY_UNAVAILABLE: "費用估算歷史無法安全核對；請重新載入或檢查有效備份。",
   DIVIDEND_EVENT_PROJECTION_REQUIRED: "此事件已有應收或投影歷史；原子重建與實收對帳尚未完成，不能記錄此決定或建立新修訂，也不會改寫現金或歷史匯率。",
   DIVIDEND_EVENT_WITHDRAWN: "此事件已撤回，不能直接接受；請重新載入並核對歷史。",
   DIVIDEND_EVENT_UNRESOLVED_BASIS: "事件金額口徑尚未明確記錄為宣告條款，不能人工接受；請先核對來源。",
