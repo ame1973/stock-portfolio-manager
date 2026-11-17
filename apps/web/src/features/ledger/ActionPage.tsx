@@ -14,11 +14,12 @@ import { usePageState } from "../settings/data";
 import { ActionForm } from "./ActionForm";
 import { ReasonedAction } from "./ReasonedAction";
 import { SecurityName } from "./ReferenceName";
-import { actionLabels, refreshLedger, useSecurity, type CorporateAction } from "./data";
+import { actionLabels, exactActionVersion, refreshLedger, useSecurity, type CorporateAction } from "./data";
 
 const statusLabels = { CONFIRMED: "已採納條款，不代表完整估值", NEEDS_REVIEW: "待覆核，未完成分配", VOID: "已作廢，原始條款保留" };
 const scopeLabels = { QUANTITY_TERMS: "股數條款，非市值／現金估值", DISPLAY_ONLY: "只改目前顯示代號，保留穩定證券身分", REVIEW_ONLY: "只保留覆核證據，未分配股數／成本／現金", NONE: "條款已停用" };
-const canEdit = (record: CorporateAction) => record.is_current && record.status !== "VOID";
+const canEdit = (record: CorporateAction) => record.is_current === true && record.lifecycle_status === "CURRENT" && record.status !== "VOID" && !!exactActionVersion(record);
+const displayOrdinal = (value: number) => Number.isSafeInteger(value) && value > 0 ? String(value) : "無法以瀏覽器精確表示";
 
 function ActionDetails({ record }: { record: CorporateAction }) {
   const security = useSecurity(record.security_id);
@@ -30,7 +31,7 @@ function ActionDetails({ record }: { record: CorporateAction }) {
     {record.review_required && <p className="mt-2 text-sm leading-7 text-danger">此穩定事件仍有未解決覆核；採納已知條款不代表已取得完整可計算持倉或估值。</p>}
     {record.action_type === "SYMBOL_CHANGE" && <p className="mt-2 text-sm leading-7 text-secondary">原顯示代號：{record.previous_symbol ?? "未採納／舊版未保存，不會猜測"}；新代號：{record.new_symbol ?? "未知"}。識別碼及供應商期間不會自動改寫，仍須核對映射。</p>}
     <details className="mt-3 text-sm"><summary className="min-h-11 cursor-pointer py-3 font-medium">原始條款、證據與版本</summary><dl className="grid gap-4 break-words rounded-md bg-muted p-4 sm:grid-cols-2">
-      {[["紀錄識別碼", record.id], ["穩定事件識別碼", record.root_id], ["前一修訂", record.supersedes_id ?? "首個版本"], ["修訂／控制版本", `${record.revision} / ${record.version}`], ["穩定排序序號", String(record.created_sequence)], ["證券識別碼", record.security_id], ["人工依據", record.reason || "舊版未保存"], ["證據參考網址（未抓取）", record.evidence_url ?? "未提供"], ["備註", record.note || "未提供"], ["建立時間", record.created_at],
+      {[["紀錄識別碼", record.id], ["穩定事件識別碼", record.root_id], ["前一修訂", record.supersedes_id ?? "首個版本"], ["修訂／控制版本", `${displayOrdinal(record.revision)} / ${exactActionVersion(record) ?? "無法安全核對"}`], ["穩定排序序號", displayOrdinal(record.created_sequence)], ["證券識別碼", record.security_id], ["人工依據", record.reason || "舊版未保存"], ["證據參考網址（未抓取）", record.evidence_url ?? "未提供"], ["備註", record.note || "未提供"], ["建立時間", record.created_at],
       ].map(([label, value]) => <div key={label}><dt className="text-secondary">{label}</dt><dd className="mt-1 break-all">{value}</dd></div>)}
     </dl></details>
     <Link to={`/settings/securities/${record.security_id}`} className="mt-2 inline-flex min-h-11 items-center text-sm text-primary underline">核對穩定身分、識別碼及供應商期間</Link>
@@ -62,7 +63,9 @@ export function ActionPage() {
       }} />
     </EditorSheet>}
     {voiding && <ReasonedAction key={voiding.id} title="作廢企業行動" label="確認作廢企業行動" reasonLabel="企業行動作廢依據" description="原始條款與審計不會刪除。依賴此股數來源的後續賣出／轉倉、較後採納的代號變更或已獨立更改的目前代號，都可能拒絕整項操作。" onCancel={() => setVoiding(null)} onConfirm={async (reason, key) => {
-      checked(await api.DELETE("/api/v1/corporate-actions/{id}", { params: { path: { id: voiding.id }, header: { ...await mutationHeaders(key), "If-Match": `"${voiding.version}"` } }, body: { reason } }));
+      const version = exactActionVersion(voiding);
+      if (!version) throw new Error("行動版本無法安全核對；請關閉並重新載入。");
+      checked(await api.DELETE("/api/v1/corporate-actions/{id}", { params: { path: { id: voiding.id }, header: { ...await mutationHeaders(key), "If-Match": `"${version}"` } }, body: { reason } }));
       setVoiding(null); refresh(); setNotice("企業行動已作廢；原始條款、穩定排序及審計仍保留。");
     }} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選企業行動</summary><div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -84,8 +87,10 @@ export function ActionPage() {
       { id: "scope", header: "效用口徑，非估值", cell: ({ row }) => scopeLabels[row.original.effect_scope] },
       { id: "status", header: "紀錄狀態／覆核", cell: ({ row }) => <>{row.original.lifecycle_status === "SUPERSEDED" ? "已被新修訂取代" : statusLabels[row.original.status]}{row.original.review_required && <span className="block text-danger">仍有未解決覆核</span>}</> },
     ]}>{record => <article aria-label={`${record.effective_date} ${record.action_type} ${record.ratio_numerator ?? "未提供"}:${record.ratio_denominator ?? "未提供"}`} className="min-w-0 break-words">
-      <ActionDetails record={record} /><div className="mt-3 flex flex-wrap gap-3">
-        {canEdit(record) && <><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor(record); }}>更正企業行動</Button><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setVoiding(record); }}>作廢企業行動</Button></>}
+      <ActionDetails record={record} />
+      {record.is_current === true && record.status !== "VOID" && !exactActionVersion(record) && <p role="alert" className="mt-3 text-sm text-danger">行動版本無法安全核對；請重新載入，暫不能更正或作廢。</p>}
+      <div className="mt-3 flex flex-wrap gap-3">
+        {canEdit(record) && <><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setEditor(structuredClone(record)); }}>更正企業行動</Button><Button variant="outline" disabled={editor !== null || voiding !== null} onClick={() => { setNotice(null); setVoiding(structuredClone(record)); }}>作廢企業行動</Button></>}
         <Button variant="outline" onClick={() => { filter({ root_id: record.root_id, include_history: true }); page.search(""); }}>查看企業行動修訂鏈</Button>
       </div>
     </article>}</RecordList>

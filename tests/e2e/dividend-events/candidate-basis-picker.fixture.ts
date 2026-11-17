@@ -41,7 +41,8 @@ test("candidate basis selection pins a historical declaration and rechecks later
     reason: "Synthetic split with an exact large rational factor for basis review." };
   const actionResponse = await page.request.post("/api/v1/corporate-actions", { headers: await headers(page), data: actionBody });
   expect(actionResponse.status()).toBe(201);
-  const originalAction = await actionResponse.json() as { id: string; version: number };
+  const originalAction = await actionResponse.json() as { id: string; version: number; version_exact: string };
+  expect(originalAction.version_exact).toBe("1");
   const basisResponse = await page.request.post("/api/v1/dividends/basis-assertions", { headers: await headers(page), data: {
     observation_id: source.id, source_sha256: source.normalized_sha256, share_basis_date: "2026-11-02",
     source_basis: "AFTER_EFFECTIVE_DATE_ACTIONS", target_basis: "PRE_EX_DATE_EVENTS", complete: true, split_only: true,
@@ -103,10 +104,18 @@ test("candidate basis selection pins a historical declaration and rechecks later
     await page.keyboard.press("Escape"); await sheet.getByRole("button", { name: "關閉編輯" }).click(); await expect(sheet).toBeVisible();
   } finally { release(); }
   stage("LOST"); await expect(form.getByRole("alert")).toContainText("網絡連線中斷");
-  const action = await page.request.patch(`/api/v1/corporate-actions/${originalAction.id}`, { headers: await headers(page, originalAction.version), data: {
-    ...actionBody, ratio_numerator: "3", ratio_denominator: "2", reason: "Synthetic later split revision that changes the retained basis scope.",
-  } });
-  expect(action.status()).toBe(200); const beforeReplay = database(); stage("REPLAY");
+  const actionPage = await page.context().newPage();
+  await actionPage.setViewportSize({ width: 360, height: 900 }); await actionPage.goto("/corporate-actions");
+  await actionPage.getByRole("button", { name: "更正企業行動" }).click();
+  const actionForm = actionPage.getByRole("form", { name: "更正企業行動" });
+  await actionForm.getByLabel("比例分子").fill("3"); await actionForm.getByLabel("比例分母").fill("2");
+  await actionForm.getByLabel("企業行動依據").fill("Synthetic later split revision that changes the retained basis scope.");
+  await actionForm.getByLabel("我已核對條款，理解採納不等於完整估值或現金／成本分配").check();
+  const revised = actionPage.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/corporate-actions/${originalAction.id}` && response.request().method() === "PATCH");
+  await actionForm.getByRole("button", { name: "儲存" }).click();
+  const action = await revised; expect(action.status()).toBe(200); expect(action.request().headers()["if-match"]).toBe('"1"');
+  await expect(actionPage.getByRole("dialog", { name: "更正企業行動" })).toHaveCount(0); await actionPage.close();
+  const beforeReplay = database(); stage("REPLAY");
   await form.getByRole("button", { name: "儲存候選資料" }).click(); await expect(sheet).toHaveCount(0); await page.unroute(path);
   expect(attempts).toBe(2); expect(retryKey).toBe(firstKey); expect(retryBody).toBe(firstBody); expect(database()).toEqual(beforeReplay);
   const body = JSON.parse(firstBody) as components["schemas"]["CandidateWrite"];

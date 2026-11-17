@@ -9,7 +9,7 @@ import { ActionPage } from "./ActionPage";
 import type { CorporateAction } from "./data";
 
 const security: components["schemas"]["Security"] = { id: "11111111-1111-4111-8111-111111111111", name: "Synthetic action security", display_ticker: "OLD", exchange_code: "NASDAQ", quote_currency: "USD", security_type: "EQUITY", status: "ACTIVE", isin: null, verified: false, version: 1 };
-const action: CorporateAction = { id: "22222222-2222-4222-8222-222222222222", root_id: "22222222-2222-4222-8222-222222222222", supersedes_id: null, security_id: security.id, action_type: "SPLIT", effective_date: "2026-01-03", ratio_numerator: "3", ratio_denominator: "2", new_symbol: null, previous_symbol: null, evidence_url: null, status: "CONFIRMED", lifecycle_status: "CURRENT", is_current: true, revision: 1, version: 3, created_sequence: 1, effect_scope: "QUANTITY_TERMS", allocation_scope: "TERMS_NOT_A_VALUATION", review_required: false, reason: "Original adopted synthetic terms", note: "", created_at: "2026-01-03T00:00:00Z" };
+const action: CorporateAction = { id: "22222222-2222-4222-8222-222222222222", root_id: "22222222-2222-4222-8222-222222222222", supersedes_id: null, security_id: security.id, action_type: "SPLIT", effective_date: "2026-01-03", ratio_numerator: "3", ratio_denominator: "2", new_symbol: null, previous_symbol: null, evidence_url: null, status: "CONFIRMED", lifecycle_status: "CURRENT", is_current: true, revision: 1, version: 3, version_exact: "3", created_sequence: 1, effect_scope: "QUANTITY_TERMS", allocation_scope: "TERMS_NOT_A_VALUATION", review_required: false, reason: "Original adopted synthetic terms", note: "", created_at: "2026-01-03T00:00:00Z" };
 const reply = <T,>(data: T) => ({ data, response: new Response() });
 const rejected = (code: string, status = 409) => ({ error: { code, message: "Synthetic failure", request_id: "test", details: {} }, response: new Response(null, { status }) });
 function renderUI(ui: ReactElement) {
@@ -137,6 +137,25 @@ describe("corporate-action exact terms and review forms", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("sends the exact action version instead of a rounded JSON number", async () => {
+    reads();
+    const patch = vi.spyOn(api, "PATCH").mockResolvedValue(rejected("PRECONDITION_FAILED", 412));
+    const large = { ...action, version: 9007199254740992, version_exact: "9007199254740993" };
+    renderUI(<ActionForm record={large} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("企業行動依據"), { target: { value: "Synthetic exact version correction" } });
+    fireEvent.click(screen.getByLabelText("我已核對條款，理解採納不等於完整估值或現金／成本分配"));
+    fireEvent.click(screen.getByRole("button", { name: "儲存" }));
+    await screen.findByText(/不會覆蓋新版/);
+    expect(options(patch).params.header["If-Match"]).toBe('"9007199254740993"');
+  });
+
+  it.each([undefined, "", "03", "4", "9223372036854775808", "1e3"])("refuses an absent or inconsistent exact action version %s", async version_exact => {
+    reads(); const patch = vi.spyOn(api, "PATCH");
+    renderUI(<ActionForm record={{ ...action, version_exact }} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("行動版本無法安全核對");
+    expect(patch).not.toHaveBeenCalled();
+  });
+
   it("freezes observed revision version, keeps full reasoned input on 412 and cannot move security", async () => {
     reads();
     const patch = vi.spyOn(api, "PATCH").mockResolvedValue(rejected("PRECONDITION_FAILED", 412));
@@ -175,6 +194,33 @@ describe("action evidence, current selection and dependencies", () => {
     fireEvent.change(screen.getByLabelText("篩選行動類型"), { target: { value: "SPLIT" } });
     fireEvent.change(screen.getByLabelText("行動生效起日"), { target: { value: "2026-01-01" } });
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/corporate-actions", expect.objectContaining({ params: { query: expect.objectContaining({ include_history: true, action_type: "SPLIT", from_date: "2026-01-01", limit: 25 }) } })));
+  });
+
+  it("uses exact displayed version digits for a void rather than rounding", async () => {
+    const large = { ...action, version: 9007199254740992, version_exact: "9007199254740993" };
+    reads([large]); const remove = vi.spyOn(api, "DELETE").mockResolvedValue(rejected("INSUFFICIENT_SHARES"));
+    renderUI(<ActionPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "作廢企業行動" }));
+    fireEvent.change(screen.getByLabelText("企業行動作廢依據"), { target: { value: "Synthetic exact version void decision" } });
+    fireEvent.click(screen.getByRole("button", { name: "確認作廢企業行動" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "確認" }));
+    await waitFor(() => expect(remove).toHaveBeenCalledOnce());
+    expect(options(remove).params.header["If-Match"]).toBe('"9007199254740993"');
+    expect(screen.getByText(/1 \/ 9007199254740993/)).toBeInTheDocument();
+  });
+
+  it("withholds unsafe legacy revision and sequence numbers rather than displaying rounded digits", async () => {
+    reads([{ ...action, revision: 9007199254740992, created_sequence: 9007199254740992 }]);
+    renderUI(<ActionPage />);
+    expect(await screen.findAllByText(/無法以瀏覽器精確表示/)).toHaveLength(2);
+    expect(screen.queryByText(/9007199254740992/)).not.toBeInTheDocument();
+  });
+
+  it("does not offer changes when the exact version is unavailable", async () => {
+    reads([{ ...action, version_exact: undefined }]); renderUI(<ActionPage />);
+    expect(await screen.findByText(/行動版本無法安全核對/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更正企業行動" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "作廢企業行動" })).not.toBeInTheDocument();
   });
 
   it("requires reasoned safe-focus void and retains dependency failures without success", async () => {

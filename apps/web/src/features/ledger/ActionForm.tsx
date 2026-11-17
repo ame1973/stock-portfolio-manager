@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -6,7 +7,7 @@ import { Field, FormFrame, SelectField } from "../../components/forms/fields";
 import { checked, mutationHeaders } from "../../lib/api";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { useFormAction } from "../settings/data";
-import { actionLabels, unallocatedAction, useSecurity, type CorporateAction } from "./data";
+import { actionLabels, exactActionVersion, unallocatedAction, useSecurity, type CorporateAction } from "./data";
 import { date, evidenceUrl, note, optional, ratio, reason } from "./inputs";
 
 const kinds = z.enum(["SPLIT", "REVERSE_SPLIT", "SYMBOL_CHANGE", "CASH_IN_LIEU", "MERGER", "SPIN_OFF"]);
@@ -27,7 +28,8 @@ const schema = z.object({
   if (value.status === "CONFIRMED" && !value.confirmed_terms) context.addIssue({ code: "custom", path: ["confirmed_terms"], message: "請明確確認已核對條款，並理解採納條款不代表完整估值或分配。" });
 });
 
-export function ActionForm({ record, onSaved, onCancel }: { record?: CorporateAction; onSaved: (record: CorporateAction) => void; onCancel: () => void }) {
+export function ActionForm({ record: observed, onSaved, onCancel }: { record?: CorporateAction; onSaved: (record: CorporateAction) => void; onCancel: () => void }) {
+  const [record] = useState(() => observed ? structuredClone(observed) : undefined);
   const action = useFormAction(onSaved);
   const { register, control, setValue, handleSubmit, formState: { errors, isSubmitting } } = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema), defaultValues: {
     security_id: record?.security_id ?? "", action_type: record?.action_type ?? "SPLIT", effective_date: record?.effective_date ?? "",
@@ -36,6 +38,8 @@ export function ActionForm({ record, onSaved, onCancel }: { record?: CorporateAc
   const [securityId, kind, status] = useWatch({ control, name: ["security_id", "action_type", "status"] });
   const security = useSecurity(securityId);
   const unallocated = unallocatedAction(kind);
+  const version = record ? exactActionVersion(record) : null;
+  if (record && !version) return <p role="alert" className="text-sm leading-7 text-danger">行動版本無法安全核對；請關閉並重新載入。</p>;
   return <FormFrame title={record ? "更正企業行動" : "新增企業行動"} error={action.error} pending={isSubmitting} onCancel={onCancel} onChange={action.changed}
     onSubmit={handleSubmit(values => action.run(async key => {
       const header = await mutationHeaders(key);
@@ -46,7 +50,7 @@ export function ActionForm({ record, onSaved, onCancel }: { record?: CorporateAc
         evidence_url: values.evidence_url || null, status: values.status, reason: values.reason, note: values.note,
       } satisfies components["schemas"]["CorporateActionCreate"];
       return record
-        ? checked(await api.PATCH("/api/v1/corporate-actions/{id}", { params: { path: { id: record.id }, header: { ...header, "If-Match": `"${record.version}"` } }, body }))
+        ? checked(await api.PATCH("/api/v1/corporate-actions/{id}", { params: { path: { id: record.id }, header: { ...header, "If-Match": `"${version}"` } }, body }))
         : checked(await api.POST("/api/v1/corporate-actions", { params: { header }, body }));
     }))}>
     {record ? <div className="text-sm leading-7 text-secondary"><input type="hidden" {...register("security_id")} /><p>穩定證券：{security.data ? `${security.data.display_ticker} / ${security.data.exchange_code}` : record.security_id}；更正不能移至另一證券。</p></div>

@@ -293,7 +293,8 @@ worker, deployment data or screenshot.
 and real browser. It checks a manually cited split-adjusted observation, an explicit
 basis declaration with a real synthetic action and exact INT64-limit ratio strings,
 no-store scoped reads, withheld private citation URL, responsive/busy-close behavior
-and unchanged-key zero-write replay after a later action revision. Selecting that
+and unchanged-key zero-write replay after a later action revision made through the
+actual action editor with its exact If-Match pin. Selecting that
 historical declaration for a new candidate after the action changes returns 409
 without writing and preserves the form. Synthetic cash, trade, receipt, projection
 and reference-FX tables start and remain empty. The test uses no network provider,

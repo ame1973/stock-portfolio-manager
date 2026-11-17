@@ -42,6 +42,7 @@ app.mount("/assets", StaticFiles(directory=build / "assets"), name="fixture-buil
 
 @app.get("/", include_in_schema=False)
 @app.get("/transactions", include_in_schema=False)
+@app.get("/corporate-actions", include_in_schema=False)
 @app.get("/dividends", include_in_schema=False)
 @app.get("/dividends/candidates", include_in_schema=False)
 @app.get("/settings/providers", include_in_schema=False)
