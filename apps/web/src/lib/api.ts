@@ -78,6 +78,7 @@ const messages: Record<string, string> = {
   DIVIDEND_TAX_HISTORY_UNAVAILABLE: "稅率估算歷史無法安全核對；請重新載入或檢查有效備份。",
   DIVIDEND_FEE_HISTORY_UNAVAILABLE: "費用估算歷史無法安全核對；請重新載入或檢查有效備份。",
   DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE: "投影歷史無法安全核對；請保留輸入並檢查有效備份，不會假定先前未記錄。",
+  DIVIDEND_RECEIPT_HISTORY_UNAVAILABLE: "收款歷史無法安全核對；請重新載入或檢查有效備份，不會自動修補紀錄。",
   DIVIDEND_PROJECTION_INPUTS_UNAVAILABLE: "投影輸入無法安全核對；請重新載入或檢查有效備份。",
   DIVIDEND_PROJECTION_CONFLICT: "投影與已記錄意圖衝突；請保留輸入並核對投影歷史。",
   DIVIDEND_PROJECTION_SCOPE_CHANGED: "帳戶或券商範圍已變更；請保留輸入並重新核對投影。",

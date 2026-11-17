@@ -28,7 +28,7 @@ function checkedAccounts(page: Page<Account>): Page<Account> {
   return page;
 }
 
-export function DividendAccountPicker({ selected, onSelect, purpose = "估算" }: { selected: Account | null; onSelect: (record: Account) => void; purpose?: "估算" | "投影" }) {
+export function DividendAccountPicker({ selected, onSelect, purpose = "估算" }: { selected: Account | null; onSelect: (record: Account) => void; purpose?: "估算" | "投影" | "收款紀錄" }) {
   const page = usePageState();
   const load = useCallback(async (cursor: string | undefined, signal: AbortSignal) => checkedAccounts(checked(await api.GET("/api/v1/accounts", { params: { query: { cursor, limit: 25 } }, signal }))), []);
   const result = usePrivatePage(`dividend-${purpose}-accounts`, page.cursor, load);

@@ -1674,6 +1674,23 @@ The endpoint does not create, confirm or void receipts, change cash or locked FX
 reconciliation, contact providers or relax the event-revision fence. Those workflows remain
 unfinished.
 
+## Recorded receipt history in the browser
+
+From an event, explicitly open **account receipt records** and select an account to read
+its bounded history. The browser keeps the selected account and pages in component memory;
+it does not cache them in browser storage or a query cache. It displays each original
+receipt, its physical event revision, exact decimal strings, recorded tax/fee fields,
+optional stored FX/HKD values, lifecycle and unverified cash-link state separately. It
+never adds historical versions or different currencies. Legacy zero-valued tax/fee fields
+are recorded values, not proof of an actual charge.
+
+Each page is checked for event/account identity, distinct receipt IDs, revision identity,
+ordering, lifecycle and explicit unverified labels. A changed current revision is marked as
+an independent-read mismatch; failed, paused or older pages are identified as stale and
+cannot be paged until reloaded. Empty pages do not prove zero payments or completeness.
+This view cannot create or void receipts, verify their audits or payments, calculate
+financial reconciliation or relax the event fence.
+
 ## Inert trade-audit origin storage
 
 Migration `0017_trade_audit_origins` adds one initially empty append-only table

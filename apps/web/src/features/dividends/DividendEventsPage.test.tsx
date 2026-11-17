@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { api, type components } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { DividendEventsPage } from "./DividendEventsPage";
+import { account as receiptAccount } from "./projection-test-data";
 
 type Schemas = components["schemas"];
 const event: Schemas["DividendEventRecord"] = {
@@ -54,6 +55,19 @@ async function openEvent() {
 }
 
 describe("dividend event workspace", () => {
+  it("opens receipt history only after an explicit account selection without writing", async () => {
+    const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts";
+    const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null }, [path]: empty });
+    const post = vi.spyOn(api, "POST"); renderPage(); await openEvent();
+    expect(get).not.toHaveBeenCalledWith(path, expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "查看帳戶收款紀錄" }));
+    expect(get).not.toHaveBeenCalledWith(path, expect.anything());
+    const panel = await screen.findByRole("region", { name: "已記錄股息收款" });
+    fireEvent.click(await within(panel).findByRole("button", { name: `選擇收款紀錄帳戶 ${receiptAccount.name}` }));
+    expect(await within(panel).findByText(/此頁沒有已記錄的收款/)).toBeVisible();
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("opens recorded projection history without creating a projection", async () => {
     reads({ "/api/v1/accounts": empty }); const post = vi.spyOn(api, "POST"); renderPage(); await openEvent();
     fireEvent.click(screen.getByRole("button", { name: "查看帳戶投影歷史" }));
