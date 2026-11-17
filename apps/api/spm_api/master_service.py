@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import Connection, RowMapping, text
 
 from spm_api.audit import audit, now, stamp
-from spm_api.decimal_types import from_scaled, to_scaled
+from spm_api.db import savepoint
+from spm_api.decimal_types import INT64_MAX, from_scaled, to_scaled
 from spm_api.errors import ApiError, Model, Success
 from spm_api.finance import lock_money
 from spm_api.master_models import (
@@ -159,39 +160,84 @@ def _update(
 def invalidate_portfolio(
     con: Connection, identifier: str, source: str, reason: str, from_date: str | None = None
 ) -> None:
-    if from_date is None:
-        from_date = (
-            con.execute(
-                text("""
-            SELECT MIN(day) FROM (
-                SELECT trade_date AS day FROM trades WHERE portfolio_id=:id
-                UNION ALL
-                SELECT c.effective_date FROM cash_ledger_entries c
-                JOIN accounts a ON a.id=c.account_id
-                WHERE a.portfolio_id=:id
-            )
-        """),
-                {"id": identifier},
-            ).scalar()
-            or date.today().isoformat()
+    """Advance the exact revision and retain its invalidation marker together."""
+    if not con.in_transaction() or con.get_execution_options().get("writer") is not True:
+        raise ApiError(
+            503, "PORTFOLIO_INVALIDATION_UNAVAILABLE", "Portfolio invalidation unavailable"
         )
-    con.execute(
-        text("UPDATE portfolios SET data_revision=data_revision+1 WHERE id=:id"), {"id": identifier}
-    )
-    con.execute(
-        text("""
-        INSERT INTO projection_invalidations(id,portfolio_id,from_date,reason,source_id,created_at)
-        VALUES (:key,:portfolio,:day,:reason,:source,:now)
-    """),
-        {
+    with savepoint(con):
+        if from_date is None:
+            from_date = (
+                con.execute(
+                    text("""
+                SELECT MIN(day) FROM (
+                    SELECT trade_date AS day FROM trades WHERE portfolio_id=:id
+                    UNION ALL
+                    SELECT c.effective_date FROM cash_ledger_entries c
+                    JOIN accounts a ON a.id=c.account_id
+                    WHERE a.portfolio_id=:id
+                )
+            """),
+                    {"id": identifier},
+                ).scalar()
+                or date.today().isoformat()
+            )
+        revision = con.execute(
+            text("SELECT data_revision FROM portfolios WHERE id=:id"), {"id": identifier}
+        ).scalar_one_or_none()
+        if type(revision) is not int or not 0 <= revision <= INT64_MAX:
+            raise ApiError(
+                503, "PORTFOLIO_INVALIDATION_UNAVAILABLE", "Portfolio invalidation unavailable"
+            )
+        if revision == INT64_MAX:
+            raise ApiError(409, "PORTFOLIO_REVISION_EXHAUSTED", "Portfolio revision is exhausted")
+        updated = con.execute(
+            text(
+                "UPDATE portfolios SET data_revision=data_revision+1 "
+                "WHERE id=:id AND data_revision=:revision"
+            ),
+            {"id": identifier, "revision": revision},
+        )
+        if updated.rowcount != 1:
+            raise ApiError(
+                503, "PORTFOLIO_INVALIDATION_UNAVAILABLE", "Portfolio invalidation unavailable"
+            )
+        values = {
             "key": str(uuid4()),
             "portfolio": identifier,
             "day": from_date,
             "reason": reason,
             "source": source,
             "now": stamp(),
-        },
-    )
+        }
+        inserted = con.execute(
+            text("""
+            INSERT INTO projection_invalidations(
+                id,portfolio_id,from_date,reason,source_id,created_at
+            ) VALUES (:key,:portfolio,:day,:reason,:source,:now)
+        """),
+            values,
+        )
+        marker = con.execute(
+            text("""
+                SELECT portfolio_id,from_date,reason,source_id,created_at,resolved_at
+                FROM projection_invalidations WHERE id=:id
+            """),
+            {"id": values["key"]},
+        ).one_or_none()
+        final_revision = con.execute(
+            text("SELECT data_revision FROM portfolios WHERE id=:id"), {"id": identifier}
+        ).scalar_one_or_none()
+        if (
+            inserted.rowcount != 1
+            or marker is None
+            or tuple(marker) != (identifier, from_date, reason, source, values["now"], None)
+            or type(final_revision) is not int
+            or final_revision != revision + 1
+        ):
+            raise ApiError(
+                503, "PORTFOLIO_INVALIDATION_UNAVAILABLE", "Portfolio invalidation unavailable"
+            )
 
 
 def create_portfolio(
