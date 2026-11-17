@@ -1682,11 +1682,12 @@ relational scope, matching cash and audit shapes, chronology, and prevent replac
 or deletion. SQL alone cannot prove that records were created in the same transaction, that
 the actor was authenticated, that the retained audit fingerprint matches its original intent,
 that the FX calculation is correct, or that a payment or historical entitlement is genuine.
-The separate internal audit reader described below rechecks recorded origins without granting
-current use. No application receipt writer is installed; do not insert origins or invoke
-internal writers on deployment data. A future protected receipt writer must bind and
-revalidate the complete intent, session, idempotency, cash, audit and invalidation atomically;
-receipt creation/void, economic authorization and atomic reconciliation remain unfinished.
+The separate internal audit reader and creation primitive described below recheck or record
+origins without granting economic use. No authenticated receipt endpoint is installed; do
+not insert origins or invoke internal writers on deployment data. A future protected receipt
+writer must bind and revalidate the complete HTTP intent, session, idempotency, cash, audit
+and invalidation atomically; protected receipt creation/void, economic authorization and
+atomic reconciliation remain unfinished.
 
 ## Internal retained-receipt link reader
 
@@ -1733,6 +1734,36 @@ financial grant. This internal reader performs no writes and does not remove any
 fence. The existing HTTP receipt-history API and browser continue to report audit status as
 unverified; they do not consume this reader. Protected receipt creation/void, HTTP-intent
 binding and atomic reconciliation remain unfinished.
+
+## Internal recorded-receipt creation
+
+`dividend_receipt_writer.save` is an internal primitive for recording an explicit cash receipt
+against a selected existing physical entitlement. It requires the observed current event
+revision, account, portfolio and broker identities and versions, portfolio data revision,
+actual dated cash components and a `RECORDED_CASH_ONLY` confirmation. Tax and fees must be
+explicitly unknown or supplied; they are informational and are not subtracted again from the
+net cash amount. USD FX and its source can both be unknown; HKD identity or a reasoned actual
+HKD override remains explicit. It records the selected event scope rather than claiming that
+provider evidence is currently valid or that external payment and ownership have been proved.
+
+A serialized writer transaction and safe savepoint append the receipt, matching primary cash,
+origin, creation and normalized-intent audits, opening-balance rebase when needed, and portfolio
+invalidation together. The full retained history is rechecked before and after posting; stale
+pins and inconsistent records fail closed. A retry of the same receipt ID, request ID and
+normalized intent verifies the retained origin and intent without writing again. The returned
+record reflects its retained current lifecycle, so an unchanged creation replay after a void
+returns a `VOID` record, not a new active receipt. A future HTTP replay must separately
+validate and return its original cached response rather than treating this current lifecycle
+as the original result. New future-dated cash is rejected, while an existing historical
+replay does not become invalid merely because the system clock moved back.
+
+This primitive is **not an authenticated HTTP route** and must not be invoked on deployment
+data directly. It does not implement session, Origin, CSRF, reauthentication or HTTP
+idempotency binding, confirm a payment, authorize eligibility or reconcile income. It does not
+create an entitlement: recorded projections use separate versioned storage, and no application
+entitlement writer is installed, so a new installation cannot yet create this prerequisite.
+Void/reversal creation and event-revision reconciliation remain unfinished; the event fence
+is unchanged.
 
 ## Protected recorded-receipt history read API
 

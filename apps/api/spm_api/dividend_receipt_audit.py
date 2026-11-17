@@ -32,10 +32,12 @@ class ReceiptOrigin:
     broker_version: int
     portfolio_data_revision: int
     cash_entry_id: UUID = field(repr=False)
+    cash_note: str = field(repr=False)
     fx_source: str | None = field(repr=False)
     actual_hkd_reason: str | None = field(repr=False)
     request_id: UUID = field(repr=False)
     audit_id: UUID = field(repr=False)
+    creation_reason: str = field(repr=False)
     created_at: datetime = field(repr=False)
 
 
@@ -389,10 +391,12 @@ def _origin(
         broker_version,
         data_revision,
         cash_id,
+        cash["note"],
         row["fx_source"],
         row["actual_hkd_reason"],
         request_id,
         audit_id,
+        reason,
         created,
     )
 
