@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
 import { z } from "zod";
 import { api, type components } from "@spm/contracts";
 import { Button } from "../../components/ui/button";
@@ -7,6 +7,7 @@ import { date, price } from "../ledger/inputs";
 import { usePageState } from "../settings/data";
 import { basisLabels, eventTypeLabels } from "./event-labels";
 import { eventTypes } from "./event-validation";
+import { usePrivatePage } from "./use-private-page";
 
 type Observation = components["schemas"]["DividendObservationRecord"];
 type SourcePin = { observation_id: string; source_sha256: string };
@@ -33,18 +34,18 @@ export function CandidateSourcePicker({ securityId, selectedIds, full, onSelect 
   securityId: string; selectedIds: string[]; full: boolean; onSelect: (pin: SourcePin) => void;
 }) {
   const page = usePageState();
-  const result = useQuery({ queryKey: ["dividends", "candidate-source-picker", securityId, page.cursor], staleTime: 0,
-    queryFn: async ({ signal }) => sourcePage(checked(await api.GET("/api/v1/dividends/observations", { params: { query: {
-      security_id: securityId, cursor: page.cursor, limit: 25,
-    } }, signal })), securityId),
-  });
+  const load = useCallback(async (cursor: string | undefined, signal: AbortSignal) => sourcePage(checked(await api.GET("/api/v1/dividends/observations", { params: { query: {
+    security_id: securityId, cursor, limit: 25,
+  } }, signal })), securityId), [securityId]);
+  const result = usePrivatePage(securityId, page.cursor, load);
   const ready = !!result.data && !result.isFetching && !result.isPaused && !result.isError;
   return <section aria-label="選擇已記錄來源觀測" className="grid min-w-0 gap-4 rounded-md border border-border p-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-medium">選擇已記錄來源觀測</h4>
       <Button type="button" variant="outline" disabled={result.isFetching} onClick={() => void result.refetch()}>重新載入可選來源</Button></div>
     <p className="text-sm leading-7 text-secondary">請逐筆核對並明確加入；只帶入觀測識別碼及原始雜湊，不填入候選條款、基準或關聯依據。來源不是文件驗證或收入。</p>
     {result.isPaused ? <p role="status" className="text-sm text-secondary">連線已暫停；已載入的來源不能用作新選擇。</p>
-      : result.isPending ? <p role="status" className="text-sm text-secondary">正在載入可選來源…</p> : null}
+      : result.isPending ? <p role="status" className="text-sm text-secondary">正在載入可選來源…</p>
+        : result.isFetching ? <p role="status" className="text-sm text-secondary">正在重新核對來源，完成前不能加入。</p> : null}
     {result.isError && <div role="alert" className="grid gap-3 text-sm text-danger"><p>{failureMessage(result.error)}</p>
       {result.data && <p>以下保留上次載入內容，尚未重新核對。</p>}
       <Button type="button" variant="outline" onClick={() => void result.refetch()}>重試載入可選來源</Button></div>}

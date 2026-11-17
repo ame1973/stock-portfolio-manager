@@ -234,7 +234,23 @@ letter case, cannot be selected twice. A stale, paused, malformed or foreign-sec
 source page cannot be used for a new selection. Old-source omission counts are not
 coverage claims. Alternatively, the user can enter observation UUID and hash
 manually; a link opens the source-observation workspace in another tab for review.
-The optional already retained owned basis declaration UUID is still entered manually.
+For each source, the owner can also browse retained basis declarations scoped to
+the exact security, observation UUID and source hash, and explicitly select one
+physical declaration ID. The picker shows the owner's citation, declared dates and
+exact split-ratio strings, but does not establish that the declaration remains
+current or prove complete market history. It rejects inconsistent scope, action
+identity/date/direction or duplicate declarations; the server rechecks the actual
+source and action chain on a new write. The legacy declaration DTO exposes observed
+action versions as JSON numbers that can exceed JavaScript's safe integer range;
+the picker deliberately neither displays those versions as exact nor sends them
+back. Selecting a declaration never fills the candidate's terms or the association
+reason. IDs may still be entered manually. Both source and basis picker reads keep
+their form-derived scopes and results only in mounted component memory, not query
+caches or browser storage; changing scope aborts the old request, and reconnecting
+requires a fresh successful read before selection. If the user later changes the security,
+observation or hash, previously entered data is retained for review rather than
+silently removed, and the server rejects a stale or mismatched basis.
+
 Old associations are displayed for explicit review and can be edited or removed. A stale or
 mismatched source/basis is rejected by the server; to dismiss after a basis has
 become stale, explicitly remove that reference. An empty match list requires its
@@ -271,6 +287,16 @@ responsive and busy-close behavior, and a held/lost response followed by
 zero-write historical replay. Changing the selected security preserves the entered
 pins; the server rejects the mismatched source without writes. Financial and
 reference-FX tables start and remain empty. The test uses no network provider,
+worker, deployment data or screenshot.
+
+`npm run test:e2e:candidate-basis-picker` uses a new isolated synthetic application
+and real browser. It checks a manually cited split-adjusted observation, an explicit
+basis declaration with a real synthetic action and exact INT64-limit ratio strings,
+no-store scoped reads, withheld private citation URL, responsive/busy-close behavior
+and unchanged-key zero-write replay after a later action revision. Selecting that
+historical declaration for a new candidate after the action changes returns 409
+without writing and preserves the form. Synthetic cash, trade, receipt, projection
+and reference-FX tables start and remain empty. The test uses no network provider,
 worker, deployment data or screenshot.
 
 ## Create a distinct event from a candidate
@@ -373,6 +399,6 @@ let the owner create a distinct event or explicitly associate the current candid
 with one selected existing event. Both candidate identity and physical revision are
 pinned and revalidated; the review response's `NOT_ADOPTED` label is still not a
 linkage query. Adoption records an owner decision, not verified market history,
-eligible shares, confirmed income or a receipt. A guided basis-declaration picker,
-atomic entitlement rebuilding, verification and the actual receipt workflow remain
-unfinished.
+eligible shares, confirmed income or a receipt. A browser workflow for creating new
+basis declarations, atomic entitlement rebuilding, verification and the actual receipt
+workflow remain unfinished.

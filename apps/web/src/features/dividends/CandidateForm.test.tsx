@@ -15,9 +15,15 @@ const observation: Schemas["DividendObservationRecord"] = {
   retrieved_at: "2026-11-01T00:00:00Z", last_seen_at: "2026-11-01T00:00:00Z", sightings_count: 1, provenance_version: 1,
   scope: "SOURCE_ONLY", canonical_adoption: "NOT_ADOPTED", canonical_adoption_scope: "RESPONSE_ONLY_NOT_LINKAGE",
   ex_date: "2026-11-01", announce_date: null, record_date: null, pay_date: null, event_type: "SPECIAL", dps: "0", currency: "USD",
-  adjustment_basis: "AS_DECLARED", source_currency: null, source_period: null, source_frequency: null, incomplete_reasons: [],
+  adjustment_basis: "SPLIT_ADJUSTED", source_currency: null, source_period: null, source_frequency: null, incomplete_reasons: ["UNRESOLVED_ADJUSTMENT"],
 };
 const sourcePage = { items: [observation], next_cursor: null, scope: "IMMUTABLE_SOURCE_V1", legacy_records_omitted: 0 };
+const basis: Schemas["DividendBasisRecord"] = { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", security_id: security.id,
+  observation_id: observation.id, source_sha256: observation.normalized_sha256, ex_date: "2026-11-01", share_basis_date: "2026-11-01",
+  source_basis: "AFTER_EFFECTIVE_DATE_ACTIONS", target_basis: "PRE_EX_DATE_EVENTS", complete: true, split_only: true, actions: [],
+  citation: { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", citation: "Synthetic split-only reference", reason: "Synthetic explicit split-only scope", url: null, url_withheld: false },
+  created_at: "2026-11-05T00:00:00Z", scope: "BASIS_DECLARATION_ONLY", canonical_adoption: "NOT_ADOPTED",
+  canonical_adoption_scope: "RESPONSE_ONLY_NOT_LINKAGE", current_use_scope: "REVALIDATION_REQUIRED_FOR_NEW_ADOPTION", market_history: "OWNER_ASSERTED_NOT_VERIFIED" };
 const created: Candidate = {
   id: "33333333-3333-4333-8333-333333333333", revision_id: "44444444-4444-4444-8444-444444444444", version: 1, state: "OPEN",
   terms: { security_id: security.id, ex_date: null, announce_date: null, record_date: null, pay_date: null, event_type: "UNKNOWN", dps: null, currency: null, adjustment_basis: "UNKNOWN" },
@@ -32,6 +38,7 @@ function reads() {
     if (path === "/api/v1/securities") return reply({ items: [security], next_cursor: null });
     if (path === "/api/v1/securities/{id}") return reply(security);
     if (path === "/api/v1/dividends/observations") return reply(sourcePage);
+    if (path === "/api/v1/dividends/basis-assertions") return reply({ items: [basis], next_cursor: null });
     throw new Error(`Unexpected read: ${path}`);
   });
 }
@@ -99,6 +106,42 @@ describe("explicit candidate forms", () => {
     expect(screen.getByLabelText("來源 1 觀測識別碼")).toHaveValue(observation.id);
     expect(screen.getByLabelText("來源 1 關聯依據")).toHaveValue(match.reason);
     expect(screen.queryByRole("article", { name: `可選來源 ${observation.id}` })).not.toBeInTheDocument();
+  });
+
+  it("adds a separately selected basis pin without changing source, terms or association reason", async () => {
+    const get = reads(); const saved = vi.fn(); const association = { ...match, basis_assertion_id: basis.id };
+    const post = vi.spyOn(api, "POST").mockResolvedValue(reply({ ...created, matches: [association] }));
+    renderForm(<CandidateCreateForm onSaved={saved} onCancel={vi.fn()} />); await chooseSecurity();
+    fireEvent.click(screen.getByRole("button", { name: "新增來源關聯" }));
+    const browse = screen.getByRole("button", { name: "瀏覽來源 1 基準聲明" }); expect(browse).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("來源 1 觀測識別碼"), { target: { value: match.observation_id } });
+    fireEvent.change(screen.getByLabelText("來源 1 原始雜湊"), { target: { value: match.source_sha256 } });
+    expect(browse).toBeEnabled(); fireEvent.click(browse);
+    const card = await screen.findByRole("article", { name: `可選基準 ${basis.id}` });
+    fireEvent.click(within(card).getByRole("button", { name: "使用此基準聲明" }));
+    expect(screen.getByLabelText("來源 1 基準聲明識別碼（選填）")).toHaveValue(basis.id);
+    expect(screen.getByLabelText("來源 1 觀測識別碼")).toHaveValue(match.observation_id);
+    expect(screen.getByLabelText("來源 1 原始雜湊")).toHaveValue(match.source_sha256);
+    expect(screen.getByLabelText("來源 1 關聯依據")).toHaveValue(""); expect(screen.getByLabelText("候選每股金額（選填）")).toHaveValue("");
+    expect(get).toHaveBeenCalledWith("/api/v1/dividends/basis-assertions", expect.objectContaining({ params: { query: expect.objectContaining({
+      observation_id: observation.id, security_id: security.id,
+    }) } }));
+    fireEvent.change(screen.getByLabelText("來源 1 關聯依據"), { target: { value: match.reason } });
+    fireEvent.change(screen.getByLabelText("候選變更依據"), { target: { value: created.change_reason } }); acknowledge(); submit();
+    await waitFor(() => expect(saved).toHaveBeenCalledOnce()); expect(body(post).body.matches).toEqual([association]);
+  });
+
+  it("retains an entered basis ID when source scope changes", async () => {
+    reads(); renderForm(<CandidateCreateForm onSaved={vi.fn()} onCancel={vi.fn()} />); await chooseSecurity();
+    fireEvent.click(screen.getByRole("button", { name: "新增來源關聯" }));
+    fireEvent.change(screen.getByLabelText("來源 1 觀測識別碼"), { target: { value: match.observation_id } });
+    fireEvent.change(screen.getByLabelText("來源 1 原始雜湊"), { target: { value: match.source_sha256 } });
+    fireEvent.click(screen.getByRole("button", { name: "瀏覽來源 1 基準聲明" }));
+    const card = await screen.findByRole("article", { name: `可選基準 ${basis.id}` }); fireEvent.click(within(card).getByRole("button", { name: "使用此基準聲明" }));
+    fireEvent.change(screen.getByLabelText("來源 1 原始雜湊"), { target: { value: "b".repeat(63) } });
+    expect(screen.getByLabelText("來源 1 基準聲明識別碼（選填）")).toHaveValue(basis.id);
+    expect(screen.queryByRole("article", { name: `可選基準 ${basis.id}` })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "瀏覽來源 1 基準聲明" })).toBeDisabled();
   });
 
   it("sends explicit exact source pins and zero without inheriting quote currency", async () => {

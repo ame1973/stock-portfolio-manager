@@ -57,6 +57,7 @@ const messages: Record<string, string> = {
   INVALID_SOURCE_SCHEDULE_SCOPE: "請核對所有證券的交易所市場與所選排程市場；不能用報價幣別推定。",
   SOURCE_SCHEDULE_CHANGE_REJECTED: "未能儲存來源排程；請核對時段、日期與已鎖定的首次回補，重新載入後再檢查。",
   SOURCE_EVIDENCE_UNAVAILABLE: "來源證據未通過完整性檢查；沒有顯示或修補不安全內容，請核對伺服器記錄與有效備份。",
+  BASIS_ASSERTION_UNAVAILABLE: "基準聲明無法安全核對；請重新載入或檢查來源及有效備份。",
   DIVIDEND_EVENT_HISTORY_UNAVAILABLE: "股息事件歷史無法安全核對；請重新載入或檢查伺服器狀態及有效備份。",
   DIVIDEND_REJECTION_HISTORY_UNAVAILABLE: "拒絕歷史無法安全核對；請重新載入或檢查伺服器狀態及有效備份。",
   DIVIDEND_EVENT_PROJECTION_REQUIRED: "此事件已有應收或投影歷史；原子重建與實收對帳尚未完成，不能記錄此決定或建立新修訂，也不會改寫現金或歷史匯率。",

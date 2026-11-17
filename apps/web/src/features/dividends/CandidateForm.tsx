@@ -12,6 +12,7 @@ import { date, optional, price, samePrice } from "../ledger/inputs";
 import { SecurityName } from "../ledger/ReferenceName";
 import { ReferenceSelect } from "../settings/ReferenceSelect";
 import { useFormAction } from "../settings/data";
+import { CandidateBasisPicker } from "./CandidateBasisPicker";
 import { CandidateSourcePicker } from "./CandidateSourcePicker";
 import { candidateReason, validCandidate } from "./candidate-validation";
 import { eventTypeLabels } from "./event-labels";
@@ -78,6 +79,7 @@ function checkedDecision(record: Candidate, body: Input, target?: Candidate): Ca
 function CandidateForm({ onSaved, onCancel, observed }: Props & { observed?: Candidate }) {
   const [target] = useState(() => observed ? structuredClone(observed) : undefined);
   const [showSources, setShowSources] = useState(false);
+  const [basisFor, setBasisFor] = useState<string | null>(null);
   const usable = !target || (validCandidate(target) && target.version < 2_147_483_647);
   const previous = usable ? target : undefined;
   const action = useFormAction(onSaved);
@@ -142,12 +144,26 @@ function CandidateForm({ onSaved, onCancel, observed }: Props & { observed?: Can
         if (getValues("security_id") !== securityId || current.length >= 100 || current.some(item => item.observation_id.trim().toLowerCase() === pin.observation_id.toLowerCase())) return;
         append({ ...pin, basis_assertion_id: "", reason: "" });
       }} />}
-      {fields.map((field, index) => <fieldset key={field.id} className="grid min-w-0 gap-4 rounded-md border border-border p-4 sm:grid-cols-2"><legend className="px-1 text-sm font-medium">來源 {index + 1}</legend>
-        <Field label={`來源 ${index + 1} 觀測識別碼`} maxLength={64} {...register(`matches.${index}.observation_id`)} error={errors.matches?.[index]?.observation_id?.message} />
-        <Field label={`來源 ${index + 1} 原始雜湊`} maxLength={64} {...register(`matches.${index}.source_sha256`)} error={errors.matches?.[index]?.source_sha256?.message} />
-        <Field label={`來源 ${index + 1} 基準聲明識別碼（選填）`} maxLength={64} {...register(`matches.${index}.basis_assertion_id`)} error={errors.matches?.[index]?.basis_assertion_id?.message} />
-        <Field label={`來源 ${index + 1} 關聯依據`} maxLength={2002} {...register(`matches.${index}.reason`)} error={errors.matches?.[index]?.reason?.message} />
-        <div className="sm:col-span-2"><Button type="button" variant="outline" onClick={() => { if (fields.length === 1) setValue("confirm_empty", false); remove(index); }} aria-label={`移除來源 ${index + 1} 關聯`}>移除此來源關聯</Button></div></fieldset>)}
+      {fields.map((field, index) => {
+        const observationId = (matches[index]?.observation_id ?? "").trim().toLowerCase();
+        const sourceSha256 = matches[index]?.source_sha256 ?? "";
+        const validBasisScope = validSecurity && z.uuid().safeParse(observationId).success && /^[a-f0-9]{64}$/.test(sourceSha256);
+        const basisOpen = basisFor === field.id && validBasisScope;
+        return <fieldset key={field.id} className="grid min-w-0 gap-4 rounded-md border border-border p-4 sm:grid-cols-2"><legend className="px-1 text-sm font-medium">來源 {index + 1}</legend>
+          <Field label={`來源 ${index + 1} 觀測識別碼`} maxLength={64} {...register(`matches.${index}.observation_id`)} error={errors.matches?.[index]?.observation_id?.message} />
+          <Field label={`來源 ${index + 1} 原始雜湊`} maxLength={64} {...register(`matches.${index}.source_sha256`)} error={errors.matches?.[index]?.source_sha256?.message} />
+          <Field label={`來源 ${index + 1} 基準聲明識別碼（選填）`} maxLength={64} {...register(`matches.${index}.basis_assertion_id`)} error={errors.matches?.[index]?.basis_assertion_id?.message} />
+          <Field label={`來源 ${index + 1} 關聯依據`} maxLength={2002} {...register(`matches.${index}.reason`)} error={errors.matches?.[index]?.reason?.message} />
+          <div className="sm:col-span-2"><Button type="button" variant="outline" disabled={!validBasisScope} aria-expanded={basisOpen} onClick={() => setBasisFor(basisOpen ? null : field.id)}>{basisOpen ? `收合來源 ${index + 1} 基準聲明` : `瀏覽來源 ${index + 1} 基準聲明`}</Button></div>
+          {basisOpen && <CandidateBasisPicker key={`${securityId}:${observationId}:${sourceSha256}`} securityId={securityId} observationId={observationId} sourceSha256={sourceSha256}
+            selectedId={matches[index]?.basis_assertion_id ?? ""} usedIds={matches.filter((_, other) => other !== index).map(item => item.basis_assertion_id)} onSelect={id => {
+              const current = getValues("matches"); const item = current[index];
+              if (getValues("security_id") !== securityId || !item || item.observation_id.trim().toLowerCase() !== observationId || item.source_sha256 !== sourceSha256
+                || current.some((other, position) => position !== index && other.basis_assertion_id.trim().toLowerCase() === id.toLowerCase())) return;
+              setValue(`matches.${index}.basis_assertion_id`, id.toLowerCase(), { shouldDirty: true, shouldValidate: true });
+            }} />}
+          <div className="sm:col-span-2"><Button type="button" variant="outline" onClick={() => { if (fields.length === 1) setValue("confirm_empty", false); if (basisFor === field.id) setBasisFor(null); remove(index); }} aria-label={`移除來源 ${index + 1} 關聯`}>移除此來源關聯</Button></div></fieldset>;
+      })}
       {errors.matches?.root?.message && <p role="alert" className="text-sm text-danger">{errors.matches.root.message}</p>}
       <div><Button type="button" variant="outline" disabled={fields.length >= 100} onClick={() => append({ observation_id: "", source_sha256: "", basis_assertion_id: "", reason: "" })}>新增來源關聯</Button></div>
       <p className="text-sm text-secondary">目前列出 {fields.length} / 100 個關聯；不會自動加入來源。</p>

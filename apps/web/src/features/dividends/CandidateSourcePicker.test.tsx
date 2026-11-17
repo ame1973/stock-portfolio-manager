@@ -19,13 +19,14 @@ function reads(value: unknown = page) { return vi.spyOn(api, "GET").mockResolved
 function renderPicker(selectedIds: string[] = [], full = false) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } }); const select = vi.fn(); const submit = vi.fn(event => event.preventDefault());
   render(<QueryClientProvider client={cache}><form onSubmit={submit}><CandidateSourcePicker securityId={source.security_id} selectedIds={selectedIds} full={full} onSelect={select} /></form></QueryClientProvider>);
-  return { select, submit };
+  return { select, submit, cache };
 }
 
 describe("explicit candidate source selection", () => {
   it("loads a same-security source page and passes only original identity and hash", async () => {
-    const get = reads(); const { select, submit } = renderPicker();
+    const get = reads(); const { select, submit, cache } = renderPicker();
     const card = await screen.findByRole("article", { name: `可選來源 ${source.id}` });
+    expect(cache.getQueryCache().getAll()).toHaveLength(0);
     expect(card).toHaveTextContent("除淨日 未知"); expect(card).toHaveTextContent("每股 幣別未知 未知");
     expect(card).toHaveTextContent("MISSING_CURRENCY"); expect(card).toHaveTextContent(source.normalized_sha256);
     expect(screen.getByText(/略過 2 筆舊來源/)).toBeVisible(); expect(card).toHaveTextContent("不是事件關聯查詢");
@@ -79,6 +80,38 @@ describe("explicit candidate source selection", () => {
     expect(await screen.findByText(/此頁沒有可選來源/)).toHaveTextContent("不代表沒有股息");
     expect(get).toHaveBeenCalledWith("/api/v1/dividends/observations", expect.objectContaining({ params: { query: expect.objectContaining({ cursor: "next-source" }) } }));
     expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("aborts an old scope and ignores a late response after the security changes", async () => {
+    const other = "77777777-7777-4777-8777-777777777777";
+    const replacement = { ...source, id: "88888888-8888-4888-8888-888888888888", security_id: other };
+    const get = reads(); let first!: () => void; let second!: () => void; let firstSignal!: AbortSignal;
+    get.mockImplementation(async (_path, options) => {
+      const query = options as { signal: AbortSignal; params: { query: { security_id: string } } };
+      return new Promise(resolve => {
+        if (query.params.query.security_id === source.security_id) { firstSignal = query.signal; first = () => resolve(reply(page)); }
+        else second = () => resolve(reply({ ...page, items: [replacement] }));
+      });
+    });
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = (security: string) => <QueryClientProvider client={cache}><CandidateSourcePicker securityId={security} selectedIds={[]} full={false} onSelect={vi.fn()} /></QueryClientProvider>;
+    const { rerender } = render(view(source.security_id)); await waitFor(() => expect(first).toBeTypeOf("function"));
+    rerender(view(other)); await waitFor(() => expect(second).toBeTypeOf("function")); expect(firstSignal.aborted).toBe(true);
+    await act(async () => first()); expect(screen.queryByRole("article", { name: `可選來源 ${source.id}` })).not.toBeInTheDocument();
+    await act(async () => second()); expect(await screen.findByRole("article", { name: `可選來源 ${replacement.id}` })).toBeVisible();
+    expect(cache.getQueryCache().getAll()).toHaveLength(0);
+  });
+
+  it("rechecks a previously read page after reconnecting before enabling selection", async () => {
+    const get = reads(); let calls = 0; let deliver!: () => void;
+    get.mockImplementation(async () => ++calls === 1 ? reply(page) : new Promise(resolve => { deliver = () => resolve(reply(page)); }));
+    renderPicker(); const button = await screen.findByRole("button", { name: "加入此來源" }); expect(button).toBeEnabled();
+    try {
+      await act(async () => onlineManager.setOnline(false)); expect(button).toBeDisabled();
+      await act(async () => onlineManager.setOnline(true)); await waitFor(() => expect(calls).toBe(2));
+      expect(screen.getByText(/正在重新核對來源/)).toBeVisible(); expect(button).toBeDisabled();
+      await act(async () => deliver()); await waitFor(() => expect(button).toBeEnabled());
+    } finally { await act(async () => onlineManager.setOnline(true)); }
   });
 
   it("does not select cached observations while offline", async () => {
