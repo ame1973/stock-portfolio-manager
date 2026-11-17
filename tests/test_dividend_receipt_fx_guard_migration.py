@@ -4,12 +4,12 @@ import sqlite3
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Barrier
+from threading import Barrier, Event
 from typing import Any
 
 import pytest
 from alembic import command
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from spm_api.cli import migrate
@@ -118,6 +118,49 @@ def test_inconsistent_old_origin_refuses_upgrade_without_deleting_or_relabeling_
     assert database_snapshot(engine) == before and schema(engine) == definitions
 
 
+def test_deferred_migration_cannot_promote_a_stale_wal_snapshot(
+    prior: tuple[Engine, tuple[Any, str, dict[str, Any]]],
+) -> None:
+    engine, scenario = prior
+    ready, committed = Event(), Event()
+
+    def pause_before_ddl(
+        connection: Any, cursor: Any, statement: str, parameters: Any, context: Any, many: bool
+    ) -> None:
+        if "CREATE TRIGGER trg_dividend_receipt_origin_fx_guard" in statement:
+            ready.set()
+            assert committed.wait(timeout=15)
+
+    event.listen(engine, "before_cursor_execute", pause_before_ddl)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            migrating = executor.submit(upgrade_to, engine, HEAD)
+            assert ready.wait(timeout=15)
+            try:
+                add_old_origin(engine, scenario, booked=-1, actual_hkd_reason=REASON)
+            finally:
+                committed.set()
+            with pytest.raises(OperationalError) as error:
+                migrating.result(timeout=30)
+        assert getattr(error.value.orig, "sqlite_errorcode", None) == sqlite3.SQLITE_BUSY_SNAPSHOT
+    finally:
+        event.remove(engine, "before_cursor_execute", pause_before_ddl)
+    with engine.connect() as con:
+        assert (
+            con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == PREVIOUS
+        )
+        assert (
+            con.exec_driver_sql("SELECT count(*) FROM dividend_receipt_origins").scalar_one() == 1
+        )
+        assert (
+            con.exec_driver_sql(
+                "SELECT count(*) FROM sqlite_schema WHERE name=?", (TRIGGER,)
+            ).scalar_one()
+            == 0
+        )
+        assert con.exec_driver_sql("PRAGMA integrity_check").scalar_one() == "ok"
+
+
 def test_inconsistent_insert_racing_upgrade_cannot_cross_the_guard(
     prior: tuple[Engine, tuple[Any, str, dict[str, Any]]],
 ) -> None:
@@ -128,7 +171,11 @@ def test_inconsistent_insert_racing_upgrade_cannot_cross_the_guard(
     def migrate_first() -> bool:
         barrier.wait(timeout=15)
         try:
-            upgrade_to(engine, HEAD)
+            # Match the CLI's BEGIN IMMEDIATE before scanning old origins.
+            with engine.connect().execution_options(writer=True) as con:
+                config = migration_config()
+                config.attributes["connection"] = con
+                command.upgrade(config, HEAD)
             return True
         except RuntimeError as error:
             assert "inconsistent HKD value" in str(error)
