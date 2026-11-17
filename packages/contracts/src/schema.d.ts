@@ -1645,7 +1645,7 @@ export interface components {
              */
             action_id: string;
             /** Version */
-            version: number;
+            version: number | string;
         };
         /** BasisActionSnapshot */
         BasisActionSnapshot: {
@@ -1681,6 +1681,8 @@ export interface components {
             observed_status: "CONFIRMED";
             /** Observed Version */
             observed_version: number;
+            /** Observed Version Exact */
+            observed_version_exact?: string;
             /** Ratio Denominator */
             ratio_denominator: string;
             /** Ratio Numerator */
@@ -2448,6 +2450,8 @@ export interface components {
             supersedes_id: string | null;
             /** Version */
             version: number;
+            /** Version Exact */
+            version_exact?: string;
         };
         /** CorporateActionCreate */
         CorporateActionCreate: {

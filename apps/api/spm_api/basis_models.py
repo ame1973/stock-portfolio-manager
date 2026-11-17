@@ -5,9 +5,9 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, ConfigDict, Field, field_validator, model_validator
 
-from spm_api.action_models import JsonRatio
+from spm_api.action_models import ActionVersion, ActionVersionInput, ActionVersionString, JsonRatio
 from spm_api.cited_models import CitationInput
-from spm_api.decimal_types import INT64_MAX, IsoDate
+from spm_api.decimal_types import IsoDate
 from spm_api.errors import Model
 from spm_api.observation_models import PublicCitation
 
@@ -16,7 +16,7 @@ class BasisActionPin(Model):
     model_config = ConfigDict(frozen=True)
 
     action_id: UUID
-    version: Annotated[int, Field(strict=True, ge=1, le=INT64_MAX)]
+    version: ActionVersionInput
 
 
 class DividendBasisCreate(Model):
@@ -50,13 +50,22 @@ class BasisActionSnapshot(Model):
     action_id: UUID
     action_root_id: UUID
     security_id: UUID
-    observed_version: int
+    observed_version: ActionVersion
+    observed_version_exact: ActionVersionString = Field(
+        default_factory=lambda data: str(data["observed_version"]), validate_default=True
+    )
     action_type: Literal["SPLIT", "REVERSE_SPLIT"]
     effective_date: IsoDate
     ratio_numerator: JsonRatio
     ratio_denominator: JsonRatio
     observed_status: Literal["CONFIRMED"]
     observed_lifecycle_status: Literal["CURRENT"]
+
+    @model_validator(mode="after")
+    def consistent_version(self) -> Self:
+        if self.observed_version_exact != str(self.observed_version):
+            raise ValueError("The exact snapshot version must match the retained version")
+        return self
 
 
 class DividendBasisRecord(Model):

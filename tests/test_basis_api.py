@@ -13,7 +13,7 @@ from sqlalchemy import Engine
 import spm_api.basis_routes as routes
 import spm_api.dividend_basis_service as service
 from spm_api.audit import stamp
-from spm_api.basis_models import DividendBasisRecord
+from spm_api.basis_models import BasisActionPin, BasisActionSnapshot, DividendBasisRecord
 from spm_api.db import unit_of_work
 from spm_api.mutations import mutate
 from spm_api.providers.persistence import prepare_fetch
@@ -287,6 +287,63 @@ async def test_unchanged_concurrent_retries_share_one_receipt_and_changed_intent
     assert database_snapshot(engine) == before
 
 
+async def test_exact_action_version_strings_preserve_legacy_intent_and_historical_replay(
+    basis_book: dict[str, Any], client: httpx.AsyncClient, engine: Engine
+) -> None:
+    headers, body = write_headers(client), payload(basis_book)
+    original = await client.post(PATH, json=body, headers=headers)
+    assert original.status_code == 201
+    result = original.json()
+    assert result["actions"][0]["observed_version"] == 1
+    assert result["actions"][0]["observed_version_exact"] == "1"
+    string_body = {**body, "actions": [{**body["actions"][0], "version": "1"}]}
+    before = database_snapshot(engine)
+    replay = await client.post(PATH, json=string_body, headers=headers)
+    assert replay.status_code == 201 and replay.json() == result
+    assert database_snapshot(engine) == before
+
+    legacy = json.loads(json.dumps(result))
+    del legacy["actions"][0]["observed_version_exact"]
+    with unit_of_work(engine, write=True) as con:
+        con.exec_driver_sql(
+            "UPDATE idempotency_keys SET response_json=? WHERE idem_key=?",
+            (json.dumps(legacy), headers["Idempotency-Key"]),
+        )
+    before = database_snapshot(engine)
+    replay = await client.post(PATH, json=string_body, headers=headers)
+    assert replay.status_code == 201 and replay.json() == result
+    assert database_snapshot(engine) == before
+
+    for exact in ("9007199254740993", "9223372036854775807"):
+        pin = BasisActionPin(action_id=basis_book["action"]["id"], version=exact)
+        assert pin.version == int(exact) and pin.model_dump(mode="json")["version"] == int(exact)
+        record = {**legacy["actions"][0], "observed_version": int(exact)}
+        parsed = BasisActionSnapshot.model_validate(record)
+        assert parsed.model_dump(mode="json")["observed_version_exact"] == exact
+        with pytest.raises(ValueError):
+            BasisActionSnapshot.model_validate({**record, "observed_version_exact": "1"})
+        stale = await client.post(
+            PATH,
+            json={**body, "actions": [{**body["actions"][0], "version": exact}]},
+            headers=write_headers(client),
+        )
+        assert stale.status_code == 409 and stale.json()["code"] == "BASIS_ACTIONS_CHANGED"
+        assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize(
+    "version", ["0", "01", "+1", "1.0", "1e0", " 1", "9223372036854775808", "9" * 200, True]
+)
+async def test_invalid_string_action_version_is_a_zero_write_validation_failure(
+    basis_book: dict[str, Any], client: httpx.AsyncClient, engine: Engine, version: Any
+) -> None:
+    body = payload(basis_book)
+    body["actions"][0]["version"] = version
+    before = database_snapshot(engine)
+    response = await client.post(PATH, json=body, headers=write_headers(client))
+    assert response.status_code == 422 and database_snapshot(engine) == before
+
+
 async def test_same_action_set_in_a_different_order_preserves_the_intent(
     basis_book: dict[str, Any], client: httpx.AsyncClient, engine: Engine
 ) -> None:
@@ -346,7 +403,7 @@ async def test_late_failure_and_corrupt_cached_result_never_leave_or_repair_writ
 
 
 @pytest.mark.parametrize(
-    "tamper", ["private-url", "ratio", "missing-history", "different-intent", "scope"]
+    "tamper", ["private-url", "ratio", "missing-history", "different-intent", "scope", "version"]
 )
 async def test_well_formed_cached_receipt_is_fenced_against_audited_history(
     basis_book: dict[str, Any], client: httpx.AsyncClient, engine: Engine, tamper: str
@@ -365,6 +422,8 @@ async def test_well_formed_cached_receipt_is_fenced_against_audited_history(
         altered["citation"]["id"] = altered["id"]
     elif tamper == "scope":
         altered["canonical_adoption_scope"] = "LINKAGE_CHECKED"
+    elif tamper == "version":
+        altered["actions"][0]["observed_version_exact"] = "2"
     else:
         different = await client.post(
             PATH, json={**body, "share_basis_date": "2026-01-11"}, headers=write_headers(client)

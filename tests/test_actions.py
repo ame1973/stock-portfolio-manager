@@ -11,6 +11,7 @@ import httpx
 import pytest
 from sqlalchemy import Engine
 
+import spm_api.action_service as action_service
 from spm_api.action_models import CorporateAction
 from spm_api.db import unit_of_work
 from spm_api.finance import FinanceError, Position
@@ -134,6 +135,57 @@ async def test_confirmed_three_for_two_split_is_exact_no_cash_and_idempotent(
         )
     read = await client.get(f"/api/v1/corporate-actions/{action['id']}")
     assert read.status_code == 200 and read.json() == action and read.headers["ETag"] == '"1"'
+
+
+async def test_action_exact_version_is_available_on_reads_and_legacy_replay(
+    client: httpx.AsyncClient, engine: Engine, book: dict[str, Any]
+) -> None:
+    headers, body = write_headers(client), action_body(book)
+    original = await client.post("/api/v1/corporate-actions", json=body, headers=headers)
+    assert original.status_code == 201
+    action = original.json()
+    assert action["version"] == 1 and action["version_exact"] == "1"
+    read = await client.get(f"/api/v1/corporate-actions/{action['id']}")
+    listed = await client.get("/api/v1/corporate-actions")
+    assert read.headers["etag"] == '"1"' and read.json() == action
+    assert listed.json()["items"][0]["version_exact"] == "1"
+
+    legacy = {key: value for key, value in action.items() if key != "version_exact"}
+    with unit_of_work(engine, write=True) as con:
+        con.exec_driver_sql(
+            "UPDATE idempotency_keys SET response_json=? WHERE idem_key=?",
+            (json.dumps(legacy), headers["Idempotency-Key"]),
+        )
+    before = snapshot(engine)
+    replay = await client.post("/api/v1/corporate-actions", json=body, headers=headers)
+    assert replay.status_code == 201 and replay.json() == action
+    assert snapshot(engine) == before
+
+    for version in (9007199254740993, 9223372036854775807):
+        parsed = CorporateAction.model_validate({**legacy, "version": version})
+        assert parsed.model_dump(mode="json")["version_exact"] == str(version)
+        with pytest.raises(ValueError):
+            CorporateAction.model_validate({**legacy, "version": version, "version_exact": "1"})
+
+
+async def test_large_version_keeps_its_wire_digits_in_action_response_and_etag(
+    client: httpx.AsyncClient,
+    engine: Engine,
+    book: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    action = await create(client, "corporate-actions", action_body(book))
+    real_action_row = action_service.action_row
+
+    def synthetic_large_version(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {**dict(real_action_row(*args, **kwargs)), "version": 9007199254740993}
+
+    monkeypatch.setattr(action_service, "action_row", synthetic_large_version)
+    before = snapshot(engine)
+    response = await client.get(f"/api/v1/corporate-actions/{action['id']}")
+    assert response.status_code == 200 and response.headers["etag"] == '"9007199254740993"'
+    assert response.json()["version_exact"] == "9007199254740993"
+    assert response.headers["cache-control"] == "no-store" and snapshot(engine) == before
 
 
 async def test_ratio_strings_preserve_legacy_integer_fingerprints_and_response_roundtrips(

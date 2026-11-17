@@ -158,8 +158,11 @@ password reauthentication required for sensitive provider credentials. All
 responses are `Cache-Control: no-store`.
 
 Obtain the original observation ID and `normalized_sha256` from the source
-observation API, and the current physical action IDs and integer versions from
-corporate-action reads. The request must explicitly provide all scope fields:
+observation API, and the current physical action IDs and `version_exact` decimal
+strings from corporate-action reads. The legacy `version` JSON number remains for
+backward compatibility, but a browser must not use that number as an exact INT64
+pin. Individual action reads also return the exact version in their quoted ETag.
+The request must explicitly provide all scope fields:
 
 ```json
 {
@@ -170,7 +173,7 @@ corporate-action reads. The request must explicitly provide all scope fields:
   "target_basis": "PRE_EX_DATE_EVENTS",
   "complete": true,
   "split_only": true,
-  "actions": [{"action_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "version": 1}],
+  "actions": [{"action_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "version": "1"}],
   "citation": {
     "citation": "Example document, page 2",
     "reason": "Explicitly state the source share units and complete recorded split scope.",
@@ -179,7 +182,10 @@ corporate-action reads. The request must explicitly provide all scope fields:
 }
 ```
 
-These identifiers and the document are examples only. An empty `actions` array
+These identifiers and the document are examples only. Version strings must be
+canonical positive decimal INT64 values; legacy integer request values remain
+accepted and are normalized to the same intent, so an unchanged retry can use
+either representation without changing its idempotency fingerprint. An empty `actions` array
 must be a deliberate completeness assertion, not a missing-data default. The
 server derives the security and ex-date from the validated original observation,
 reads each real current action's root/date/status and exact ratio, mints the
@@ -190,7 +196,11 @@ upstream request is needed. A changed source/action pin or an omitted current
 quantity action fails rather than creating a partial statement.
 
 A successful response is `201` with a declaration `Location`; the exact action
-ratios are JSON decimal **strings**. `scope=BASIS_DECLARATION_ONLY`,
+ratios and `observed_version_exact` are JSON decimal **strings**. The legacy
+`observed_version` number remains available but must not be interpreted through a
+JavaScript `Number` as an exact INT64. Earlier idempotency responses lacking the
+additive exact field obtain it from their retained integer when replayed; they do
+not rewrite stored responses, decisions or audits. `scope=BASIS_DECLARATION_ONLY`,
 `canonical_adoption=NOT_ADOPTED`, `canonical_adoption_scope=RESPONSE_ONLY_NOT_LINKAGE`,
 `market_history=OWNER_ASSERTED_NOT_VERIFIED` and
 `current_use_scope=REVALIDATION_REQUIRED_FOR_NEW_ADOPTION` are explicit limits.

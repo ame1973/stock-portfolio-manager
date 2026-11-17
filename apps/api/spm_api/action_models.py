@@ -41,6 +41,25 @@ Ratio = Annotated[
 # Input models retain integer fingerprints; only responses need browser-safe JSON strings.
 JsonRatio = Annotated[Ratio, PlainSerializer(str, return_type=str, when_used="json")]
 
+ActionVersion = Annotated[int, Field(strict=True, ge=1, le=INT64_MAX)]
+ActionVersionString = Annotated[
+    str, Field(strict=True, max_length=19, pattern=r"^[1-9][0-9]{0,18}$")
+]
+
+
+def _version_input(value: object) -> object:
+    if isinstance(value, str):
+        if re.fullmatch(r"[1-9][0-9]{0,18}", value) is None:
+            raise ValueError("Use a canonical positive INT64 version string")
+        return int(value)
+    return value
+
+
+ActionVersionInput = Annotated[
+    ActionVersion,
+    BeforeValidator(_version_input, json_schema_input_type=ActionVersion | ActionVersionString),
+]
+
 
 def _evidence(value: str) -> str:
     try:
@@ -122,7 +141,11 @@ class CorporateAction(Model):
     lifecycle_status: Literal["CURRENT", "SUPERSEDED", "VOID"]
     is_current: bool
     revision: int
-    version: int
+    version: ActionVersion
+    # Derive from the validated integer when reading an older idempotency response.
+    version_exact: ActionVersionString = Field(
+        default_factory=lambda data: str(data["version"]), validate_default=True
+    )
     created_sequence: int
     effect_scope: Literal["QUANTITY_TERMS", "DISPLAY_ONLY", "REVIEW_ONLY", "NONE"]
     allocation_scope: Literal["TERMS_NOT_A_VALUATION"] = "TERMS_NOT_A_VALUATION"
@@ -130,3 +153,9 @@ class CorporateAction(Model):
     reason: str
     note: str
     created_at: str
+
+    @model_validator(mode="after")
+    def consistent_version(self) -> "CorporateAction":
+        if self.version_exact != str(self.version):
+            raise ValueError("The exact action version must match the retained version")
+        return self
