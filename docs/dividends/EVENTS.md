@@ -1529,9 +1529,44 @@ component arithmetic and basic FX/provenance consistency before display. Account
 scopes and results remain in mounted component memory rather than persistent browser
 storage or a query cache. Failed or offline reads are labeled stale and disable pagination;
 late responses from a previously selected account are discarded. Reading this view does
-not create a projection, entitlement, receipt, cash entry or current-use grant. Projection
-creation and the revision-fence acknowledgment remain available through the protected API;
-a browser write workflow is not yet provided.
+not create a projection, entitlement, receipt, cash entry or current-use grant. Recording
+a projection is a separate explicit action described below.
+
+## Record a projection in the browser
+
+After explicitly choosing an account in the projection-history workspace, select
+**Prepare to record a projection**. Enter the as-of date, the recorded-history rule, and
+separate tax and fee effective dates; none defaults to today or the ex-date. Choose
+**Check projection inputs** to read one private input snapshot and separate tax/fee
+selection details. These three reads are not one atomic snapshot. The form can open only
+when their physical event, account, version, setting heads, selected IDs and rejection
+states agree, the account scope remains valid, and the reads are neither stale nor paused.
+A future setting head with no selected setting remains missing, not zero. The server
+revalidates all inputs again in its serialized write transaction.
+
+The password-confirmed sheet freezes the observed event, account, dates and exact pins.
+It shows the selected owner estimates and their physical IDs, not confirmed tax or fees.
+For each applicable cross-currency rate, explicitly choose either **unknown** or a
+positive exact decimal and its source. The HKD valuation rate and fee-to-event rate are
+independent; no rate is defaulted or inferred. Same-currency conversion uses the
+mathematical identity rate, and a fee with unknown currency cannot be converted. A
+pre-ex-date snapshot is recorded holdings, not accrued income.
+
+**Important:** recording any projection, including one needing review or with no recorded
+position, currently prevents revision, withdrawal and rejection of that event. Projection
+history cannot be deleted to remove this fence; a supported atomic reconciliation workflow
+does not yet exist. The form requires a separate acknowledgment of this limitation and
+another acknowledgment that the result is not confirmed eligibility, receivable income or
+receipt. Do not record a projection merely to try the feature on an event you may need to
+change.
+
+If the response is lost or cannot be safely verified, keep the sheet open and retry the
+unchanged intent with its original in-memory key. Reauthentication may be required again.
+A successful reply may be a historical replay, not the current projection; close only after
+considering whether to retry and inspect the retained history. Private inputs and keys are
+not saved in browser storage or query/mutation caches. The workflow does not create a
+receipt, cash movement or entitlement, and atomic event revision and receipt reconciliation
+remain unfinished.
 
 ## Protected projection-input snapshot
 

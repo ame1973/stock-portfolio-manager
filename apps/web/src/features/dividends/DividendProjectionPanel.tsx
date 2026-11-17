@@ -4,6 +4,8 @@ import { Button } from "../../components/ui/button";
 import { checked, failureMessage } from "../../lib/api";
 import { usePageState } from "../settings/data";
 import { DividendAccountPicker } from "./DividendEstimatePanel";
+import { DividendProjectionPreparation } from "./DividendProjectionPreparation";
+import type { ProjectionTarget } from "./projection-input-validation";
 import { validEstimateEvent } from "./estimate-validation";
 import { checkedProjectionPage } from "./projection-validation";
 import { usePrivatePage } from "./use-private-page";
@@ -79,15 +81,19 @@ function History({ event, account }: { event: Event; account: Account }) {
   </section>;
 }
 
-export function DividendProjectionPanel({ event: observed }: { event: Event }) {
+export function DividendProjectionPanel({ event: observed, onWrite, writeDisabled = false, refresh = 0 }: {
+  event: Event; onWrite?: (target: ProjectionTarget) => void; writeDisabled?: boolean; refresh?: number;
+}) {
   const [event] = useState(() => structuredClone(observed));
-  const [account, setAccount] = useState<Account | null>(null);
+  const [account, setAccount] = useState<Account | null>(null); const [preparing, setPreparing] = useState(false);
   if (!validEstimateEvent(event)) return <p role="alert" className="text-sm text-danger">事件版本無法安全核對；請重新載入後再查閱投影。</p>;
   return <section aria-label="已記錄股息投影" className="grid min-w-0 gap-4 rounded-md border border-border p-4">
     <h3 className="font-semibold">已記錄股息投影</h3>
     <p className="break-all text-sm leading-7 text-secondary">固定事件 {event.id}；版本 {event.version}；實體修訂 {event.current_revision_id}。查閱不會建立持倉、應收或實收。</p>
     <DividendAccountPicker purpose="投影" selected={account} onSelect={setAccount} />
     {account && <><p className="break-all text-sm">所選帳戶：{account.name}；{account.id}。</p>
-      <History key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}`} event={event} account={account} /></>}
+      <History key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} />
+      {onWrite && <div><Button type="button" variant="outline" aria-expanded={preparing} onClick={() => setPreparing(value => !value)}>{preparing ? "收合投影寫入準備" : "準備記錄投影"}</Button></div>}
+      {preparing && onWrite && <DividendProjectionPreparation key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onWrite={onWrite} disabled={writeDisabled} />}</>}
   </section>;
 }
