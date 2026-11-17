@@ -105,7 +105,7 @@ def rejected(engine: Engine, values: dict[str, Any], *, replace: bool = False) -
 
 def test_new_current_schema_exposes_only_an_empty_candidate_revision_store(engine: Engine) -> None:
     with unit_of_work(engine) as con:
-        assert schema_head() == "0028_receipt_origins"
+        assert schema_head() == "0029_receipt_fx_guard"
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert (
             con.exec_driver_sql(

@@ -1672,8 +1672,12 @@ optional reason for an actual-HKD override. The original entitlement revision re
 through the receipt; the observed current revision may be different. Unknown foreign FX
 remains `null`, while HKD identity is distinct from an external rate.
 
-The insert guards check current relational scope, matching cash and audit shapes, chronology,
-and prevent replacement, updates or deletion. They cannot prove that records were created in
+Migration `0029_receipt_fx_guard` adds an independent insert guard for HKD identity and
+native/HKD sign consistency. It first checks existing origin-linked receipts and refuses the
+upgrade without changing them if any contradict those rules; it never deletes or relabels a
+record. Unknown USD FX and HKD values remain unknown. The combined guards check current
+relational scope, matching cash and audit shapes, chronology, and prevent replacement, updates
+or deletion. They cannot prove that records were created in
 the same transaction, that the actor was authenticated, that the retained audit fingerprint
 matches its original intent, that the FX calculation is correct, or that a payment or
 historical entitlement is genuine. No

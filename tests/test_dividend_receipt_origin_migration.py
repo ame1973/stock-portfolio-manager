@@ -17,6 +17,7 @@ from spm_api.audit import audit, stamp
 from spm_api.cli import migrate
 from spm_api.config import Settings
 from spm_api.db import migration_config, schema_head, unit_of_work
+from spm_api.decimal_types import INT64_MAX
 from spm_api.ledger_service import post_cash
 from tests.conftest import _check_isolated_database
 from tests.helpers import database_snapshot
@@ -65,6 +66,7 @@ def origin_values(
     scenario: tuple[Any, str, dict[str, Any]],
     *,
     currency: str = "USD",
+    amount: int = 6_000_000,
     rate: int | None = 7_800_000_000_000,
     booked: int | None = 46_800_000,
     fx_source: str | None = "Synthetic historical rate",
@@ -85,7 +87,7 @@ def origin_values(
         "entitlement_id": entitlement["id"],
         "account_id": account,
         "received_date": "2026-01-09",
-        "received_micro": 6_000_000,
+        "received_micro": amount,
         "currency": currency,
         "tax_micro": None,
         "fee_micro": 0,
@@ -145,7 +147,7 @@ def origin_values(
 
 
 def test_current_schema_starts_with_no_inferred_receipt_origins(engine: Engine) -> None:
-    assert schema_head() == HEAD
+    assert schema_head() == "0029_receipt_fx_guard"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
@@ -158,7 +160,7 @@ def test_current_schema_starts_with_no_inferred_receipt_origins(engine: Engine) 
         ("USD", 7_800_000_000_000, 46_800_000, "Synthetic rate", None),
         ("USD", 7_800_000_000_000, 46_123_456, "Synthetic rate", REASON),
         ("HKD", 1_000_000_000_000, 6_000_000, "IDENTITY", None),
-        ("HKD", 1_000_000_000_000, 6_100_000, "IDENTITY", REASON),
+        ("HKD", 1_000_000_000_000, 6_000_000, "IDENTITY", REASON),
     ],
 )
 def test_explicit_rate_unknown_identity_and_override_are_retained_without_grant(
@@ -307,6 +309,9 @@ def test_invalid_origin_scope_rolls_back_receipt_cash_and_audit(
         ("HKD", None, None, None, None),
         ("HKD", 1_000_000_000_000, 6_000_000, "Synthetic rate", None),
         ("HKD", 2_000_000_000_000, 6_000_000, "IDENTITY", None),
+        ("HKD", 1_000_000_000_000, 6_100_000, "IDENTITY", REASON),
+        ("USD", 7_800_000_000_000, -1, "Synthetic rate", REASON),
+        ("USD", 7_800_000_000_000, -1, "Synthetic rate", None),
     ],
 )
 def test_inconsistent_rate_source_and_hkd_value_fail_closed(
@@ -329,6 +334,55 @@ def test_inconsistent_rate_source_and_hkd_value_fail_closed(
             fx_source=source_name,
             actual_hkd_reason=override_reason,
         )
+        insert(con, TABLE, origin)
+    assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize(
+    ("amount", "booked"),
+    [
+        (0, 0),
+        (6_000_000, 0),
+        (-6_000_000, 0),
+        (-6_000_000, -46_800_000),
+        (INT64_MAX, INT64_MAX),
+        (-INT64_MAX, -INT64_MAX),
+    ],
+)
+def test_matching_signed_or_zero_cash_can_retain_an_override(
+    engine: Engine, scenario: tuple[Any, str, dict[str, Any]], amount: int, booked: int
+) -> None:
+    with unit_of_work(engine, write=True) as con:
+        _, origin = origin_values(
+            con,
+            scenario,
+            amount=amount,
+            rate=1_000_000_000_000,
+            booked=booked,
+            actual_hkd_reason=REASON,
+        )
+        insert(con, TABLE, origin)
+
+
+def test_negative_native_cash_cannot_have_positive_hkd_origin(
+    engine: Engine, scenario: tuple[Any, str, dict[str, Any]]
+) -> None:
+    before = database_snapshot(engine)
+    with pytest.raises(IntegrityError), unit_of_work(engine, write=True) as con:
+        _, origin = origin_values(
+            con, scenario, amount=-6_000_000, booked=1, actual_hkd_reason=REASON
+        )
+        insert(con, TABLE, origin)
+    assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize("booked", [-1, 1])
+def test_zero_native_cash_cannot_have_nonzero_hkd_origin(
+    engine: Engine, scenario: tuple[Any, str, dict[str, Any]], booked: int
+) -> None:
+    before = database_snapshot(engine)
+    with pytest.raises(IntegrityError), unit_of_work(engine, write=True) as con:
+        _, origin = origin_values(con, scenario, amount=0, booked=booked, actual_hkd_reason=REASON)
         insert(con, TABLE, origin)
     assert database_snapshot(engine) == before
 
