@@ -9,8 +9,8 @@ type Account = Schemas["Account"];
 type Receipt = Schemas["RecordedReceipt"];
 type Page = Schemas["Page_RecordedReceipt_"];
 const id = z.uuid();
-const sameId = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
-const timestamp = z.iso.datetime({ offset: true }).refine(value => /^(?:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d{1,6})?(?:Z|[+-]\d\d:\d\d)$/.test(value) && Number.isFinite(Date.parse(value)));
+export const sameId = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+export const timestamp = z.iso.datetime({ offset: true }).refine(value => /^(?:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d{1,6})?(?:Z|[+-]\d\d:\d\d)$/.test(value) && Number.isFinite(Date.parse(value)));
 const receipt = z.object({
   id, event_id: id, account_id: id, entitlement_id: id, revision_id: id, current_revision_id: id,
   revision_no: z.int().min(1).max(2_147_483_647), received_date: date,

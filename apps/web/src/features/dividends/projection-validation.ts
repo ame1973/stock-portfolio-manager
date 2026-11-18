@@ -15,7 +15,7 @@ const amount = money.max(50);
 const signed = signedMoney.max(50);
 const quantityValue = quantity.max(50);
 const fxValue = fx.max(50);
-const source = z.string().refine(value => Array.from(value).length >= 1 && Array.from(value).length <= 100
+export const source = z.string().refine(value => Array.from(value).length >= 1 && Array.from(value).length <= 100
   && normalizeDecisionText(value) === value && !value.includes("\0"));
 const provenance = z.object({
   effective_on: date, selected_setting_id: id.nullable(), observed_head_no: ordinal, observed_head_id: id.nullable(),

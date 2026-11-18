@@ -41,7 +41,7 @@ describe("recorded dividend receipt history", () => {
     expect(panel).toHaveTextContent("7.800000000000"); expect(panel).toHaveTextContent("9007199254740993");
     expect(panel).toHaveTextContent("已記錄現金關聯，尚未驗證");
     expect(panel).toHaveTextContent("歷史稽核及付款均未驗證");
-    expect(panel).toHaveTextContent("稅費欄位僅為舊紀錄，不代表已確認扣款");
+    expect(panel).toHaveTextContent("稅費欄位僅為已記錄數值，不代表已確認扣款");
     expect(post).not.toHaveBeenCalled(); expect(cache.getQueryCache().getAll()).toHaveLength(0);
     expect(localStorage.length + sessionStorage.length).toBe(0);
   });

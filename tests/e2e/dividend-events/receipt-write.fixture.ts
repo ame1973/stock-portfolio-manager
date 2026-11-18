@@ -7,7 +7,7 @@ import { database, headers, stage, type Event } from "./helpers";
 
 type Schemas = components["schemas"];
 
-test("protected receipt creation records one cash entry and replays the original response", async ({ page }) => {
+test("protected receipt API and form preserve exact scope and uncertain retries", async ({ page }) => {
   stage("SETUP"); const password = `synthetic-receipt-write-${randomUUID()}`;
   await page.goto("/");
   const bootstrap = execFileSync("uv", ["run", "spm-manage", "setup-token"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim().split(": ").at(-1)!;
@@ -109,6 +109,107 @@ test("protected receipt creation records one cash entry and replays the original
   for (const table of Object.keys(beforeLost)) if (!changed.has(table)) expect(afterLost[table]).toEqual(beforeLost[table]);
   const recovered = await page.request.post("/api/v1/dividends/receipts", { headers: lostHeaders, data: lostBody });
   expect(recovered.status()).toBe(201); expect(await recovered.json()).toEqual(lostResult); expect(database()).toEqual(afterLost);
+
+  async function openForm() {
+    await page.setViewportSize({ width: 360, height: 900 }); await page.goto("/dividends");
+    const article = page.getByRole("article", { name: `股息事件 ${event.id}` });
+    await article.getByRole("button", { name: "查看事件與拒絕狀態" }).click();
+    await article.getByRole("button", { name: "查看帳戶收款紀錄" }).click();
+    const panel = article.getByRole("region", { name: "已記錄股息收款" });
+    await panel.getByRole("button", { name: "選擇收款紀錄帳戶 Synthetic receipt read account" }).click();
+    await panel.getByRole("button", { name: "準備記錄收款" }).click();
+    const preparation = panel.getByRole("region", { name: "核對收款依據" });
+    const selected = preparation.getByRole("button", { name: `選擇應收 ${entitlement.id} 並記錄收款` });
+    await expect(selected).toBeEnabled(); await selected.click();
+    const sheet = page.getByRole("dialog", { name: "記錄股息收款" });
+    await expect(sheet.getByRole("button", { name: "關閉編輯" })).toBeFocused();
+    return { sheet, form: sheet.getByRole("form", { name: "記錄股息收款" }) };
+  }
+  async function fillForm(form: ReturnType<typeof page.getByRole>) {
+    await form.getByLabel("實收日期").fill("2026-11-04"); await form.getByLabel("實收幣別").selectOption("USD");
+    await form.getByLabel("實收淨額").fill("6.125"); await form.getByLabel("實際稅額").selectOption("UNKNOWN");
+    await form.getByLabel("實際費用").selectOption("PROVIDED"); await form.getByLabel("已記錄費用").fill("0");
+    await form.getByLabel("港幣歷史匯率").selectOption("PROVIDED"); await form.getByLabel("USD 兌 HKD 匯率").fill("7.8");
+    await form.getByLabel("港幣匯率來源").fill("Synthetic historical FX"); await form.getByLabel("收款依據").fill("Synthetic receipt form evidence.");
+    await form.getByRole("checkbox", { name: /我明白這只是擁有人記錄的現金/ }).check();
+  }
+
+  stage("OPEN"); let { sheet, form } = await openForm();
+  stage("RESIZE");
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 }); const box = (await sheet.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.emulateMedia({ colorScheme: "dark" }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.emulateMedia({ colorScheme: "light" });
+  stage("PASSWORD"); const passwordForm = sheet.getByRole("form", { name: "重新驗證" });
+  await passwordForm.getByLabel("目前密碼").fill(password); await passwordForm.getByRole("button", { name: "確認目前密碼" }).click();
+  await expect(passwordForm.getByRole("status")).toContainText("已重新驗證"); await fillForm(form);
+  let release!: () => void; let committed!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
+  const saved = new Promise<void>(resolve => { committed = resolve; }); let uiAttempts = 0; let uiKey = ""; let retryKey = ""; let uiId = ""; let retryId = "";
+  await page.route(routePath, async route => {
+    if (route.request().method() !== "POST") { await route.continue(); return; }
+    uiAttempts++; const response = await route.fetch(); expect(response.status()).toBe(201);
+    const sent = JSON.parse(route.request().postData()!) as Schemas["ReceiptCreate"];
+    if (uiAttempts === 1) {
+      uiKey = route.request().headers()["idempotency-key"]!; uiId = sent.receipt_id;
+      expect(sent).toMatchObject({ entitlement_id: entitlement.id, tax: null, fee: "0", received_amount: "6.125", confirmation: "RECORDED_CASH_ONLY" });
+      committed(); await held; await route.abort("failed");
+    } else { retryKey = route.request().headers()["idempotency-key"]!; retryId = sent.receipt_id; await route.fulfill({ response }); }
+  });
+  stage("COMMIT_HELD");
+  try {
+    await form.getByRole("button", { name: "記錄收款" }).click(); await saved;
+    await page.keyboard.press("Escape"); await sheet.getByRole("button", { name: "關閉編輯" }).click(); await expect(sheet).toBeVisible();
+  } finally { release(); }
+  stage("LOST"); await expect(form.getByRole("alert")).toContainText("網絡連線中斷"); const beforeUiReplay = database();
+  await form.getByLabel("實收淨額").fill("006.125000"); stage("REPLAY"); await form.getByRole("button", { name: "記錄收款" }).click();
+  await expect(sheet).toHaveCount(0); await page.unroute(routePath); expect(uiAttempts).toBe(2); expect(retryKey).toBe(uiKey); expect(retryId).toBe(uiId);
+  expect(database()).toEqual(beforeUiReplay); await expect(page.getByRole("status").filter({ hasText: "伺服器已回覆收款記錄" })).toBeVisible();
+
+  stage("SECOND"); ({ sheet, form } = await openForm()); await fillForm(form);
+  let changedAttempts = 0; let originalKey = ""; let changedKey = ""; let originalId = ""; let changedId = "";
+  await page.route(routePath, async route => {
+    if (route.request().method() !== "POST") { await route.continue(); return; }
+    changedAttempts++; const response = await route.fetch(); const sent = JSON.parse(route.request().postData()!) as Schemas["ReceiptCreate"];
+    if (changedAttempts === 1) { expect(response.status()).toBe(201); originalKey = route.request().headers()["idempotency-key"]!; originalId = sent.receipt_id; await route.abort("failed"); }
+    else { expect(response.status()).toBe(409); expect((await response.json() as { code: string }).code).toBe("DIVIDEND_RECEIPT_CONFLICT");
+      changedKey = route.request().headers()["idempotency-key"]!; changedId = sent.receipt_id; await route.fulfill({ response }); }
+  });
+  await form.getByRole("button", { name: "記錄收款" }).click(); await expect(form.getByRole("alert")).toContainText("網絡連線中斷");
+  const beforeChanged = database(); await form.getByLabel("實收淨額").fill("6.126"); await form.getByRole("button", { name: "記錄收款" }).click();
+  await expect(form.getByRole("alert")).toContainText("此收款識別碼已使用或與原意圖衝突");
+  await page.unroute(routePath); expect(changedAttempts).toBe(2); expect(changedKey).not.toBe(originalKey); expect(changedId).toBe(originalId);
+  expect(database()).toEqual(beforeChanged); await sheet.getByRole("button", { name: "關閉編輯" }).click();
+
+  stage("NAVIGATE"); ({ sheet, form } = await openForm()); stage("FILL"); await fillForm(form);
+  stage("PASSWORD"); await form.getByLabel("實收幣別").selectOption("HKD");
+  stage("REAUTH"); await form.getByRole("checkbox", { name: /另行指定有依據的實際港幣金額/ }).check();
+  stage("REPLAY"); await form.getByLabel("實際港幣金額", { exact: true }).fill("6.125001");
+  await form.getByLabel("實際港幣金額依據").fill("Synthetic identity override evidence.");
+  stage("COMPARE"); const beforeHkd = database(); await form.getByRole("button", { name: "記錄收款" }).click();
+  await expect(form.getByText("港幣實收與實際港幣金額必須相同。")).toBeVisible(); expect(database()).toEqual(beforeHkd);
+  let hkdAttempts = 0; let hkdId = "";
+  await page.route(routePath, async route => {
+    if (route.request().method() !== "POST") { await route.continue(); return; }
+    hkdAttempts++; const sent = JSON.parse(route.request().postData()!) as Schemas["ReceiptCreate"]; hkdId = sent.receipt_id;
+    expect(sent).toMatchObject({ currency: "HKD", received_amount: "6.125", fx_rate_hkd: null, fx_source: null,
+      actual_hkd: "006.125000", actual_hkd_reason: "Synthetic identity override evidence." });
+    stage("COMMIT"); const response = await route.fetch(); expect(response.status()).toBe(201);
+    expect(await response.json()).toMatchObject({ currency: "HKD", received_hkd: "6.125000", fx_source: "IDENTITY", actual_hkd_override: true });
+    stage("REPLAY"); await route.fulfill({ response });
+  });
+  stage("REAUTH"); await form.getByLabel("實際港幣金額", { exact: true }).fill("006.125000"); await form.getByRole("button", { name: "記錄收款" }).click();
+  await expect(sheet).toHaveCount(0); await page.unroute(routePath); expect(hkdAttempts).toBe(1);
+  stage("FINAL"); const afterHkd = database();
+  for (const table of ["dividend_receipts", "cash_ledger_entries", "dividend_receipt_origins", "projection_invalidations", "idempotency_keys"]) {
+    expect(afterHkd[table]).toHaveLength(beforeHkd[table]!.length + 1);
+  }
+  expect(afterHkd.audit_events).toHaveLength(beforeHkd.audit_events!.length + 3);
+  const origin = afterHkd.dividend_receipt_origins!.map(row => JSON.parse(row) as unknown[]).find(row => row[0] === hkdId);
+  expect(origin?.[13]).toBe("IDENTITY"); expect(origin?.[14]).toBe("Synthetic identity override evidence.");
+  for (const table of Object.keys(beforeHkd)) if (!changed.has(table)) expect(afterHkd[table]).toEqual(beforeHkd[table]);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0); expect(await page.evaluate(() => caches.keys())).toEqual([]);
   stage("FINAL");
 });

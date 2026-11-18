@@ -157,23 +157,30 @@ at three widths under ignored `.local/screenshots/`; it is not a failure artifac
 Never capture filled private forms. This is not a container, NAS, TLS or external
 ownership test.
 
-## Separate protected receipt-create socket fixture
+## Separate protected receipt-create browser fixture
 
 ```sh
 npm run build
 npm run test:e2e:receipt-write
 ```
 
-This fixture starts the real FastAPI/Uvicorn application and uses Chromium's request
-context against a fresh synthetic owner and database. It seeds explicitly labelled legacy
-entitlements and receipt history only in that isolated fixture, then exercises the protected
-receipt-input and create APIs with actual session, CSRF, password reauthentication and
-no-store responses. Concurrent identical requests produce one recorded cash entry; a second
-committed response is deliberately dropped and its original response replays without writes.
-A new receipt with stale scope is rejected. The test compares all synthetic database tables and
-keeps bootstrap values, request data and database contents in process memory under the same
-private reporter and cleanup rules.
+This fixture starts the real FastAPI/Uvicorn application and a built SPA in Chromium against a
+fresh synthetic owner and database. It seeds explicitly labelled legacy entitlements and receipt
+history only in that isolated fixture, then exercises the protected receipt-input and create
+APIs with actual session, CSRF, password reauthentication and no-store responses. Concurrent
+identical requests produce one recorded cash entry; a second committed response is deliberately
+dropped and its original response replays without writes. A new receipt with stale scope is
+rejected.
 
-This is an API socket test, not a receipt-entry browser form, payment verification or a
-container, worker, live-provider, NAS or TLS acceptance claim. The application still cannot
-create the legacy entitlement prerequisite on a fresh installation.
+The form workflow explicitly selects an old basis, checks keyboard focus, pending close guards
+and 360/768/1440 layouts, and reauthenticates through the real sheet. It drops a committed
+response, verifies an equivalent-decimal same-key replay without writes, then verifies that a
+changed uncertain intent keeps the receipt UUID and receives a conflict instead of a second
+posting. It also checks that an HKD override with a different amount is blocked and an exactly
+equal override records the explicit reason. The test compares synthetic database tables and
+checks empty browser storage and Cache Storage. Bootstrap values, request data and database
+contents remain private under the same reporter and cleanup rules; no screenshots are taken.
+
+This is not payment or eligibility verification, nor a container, worker, live-provider, NAS
+or TLS acceptance claim. The application still cannot create the legacy entitlement prerequisite
+on a fresh installation, and it does not expose receipt void over HTTP.

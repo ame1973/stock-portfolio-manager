@@ -1,5 +1,11 @@
 # Dividend event integrity foundation
 
+> **Current receipt capability:** the application has a protected receipt-create API and
+> browser form for an explicitly selected existing legacy entitlement. They record owner-supplied
+> cash without verifying payment or eligibility. New installations cannot yet create that
+> entitlement; protected receipt void and atomic event reconciliation remain unfinished. The
+> migration and internal-component descriptions below do not themselves install those operations.
+
 Migration `0016_dividend_event_controls` added database safeguards for an
 owner-controlled dividend workflow. It added two initially empty provenance tables
 and brought that schema revision to 55 business tables. It neither adopts a source
@@ -1041,10 +1047,10 @@ projection reads do not become current-use approvals. Existing receipts and proj
 remain retained and require explicit later reconciliation, not silent deletion.
 
 The SQL guards do not authenticate a request or verify canonical audit content. The
-protected rejection decision below adds those HTTP checks, but there is still no
-authenticated economic or receipt writer. Do not insert rejection rows or invoke internal writers
-on deployment data: where financial history exists, a resolution remains fenced
-until atomic projection/receipt reconciliation is implemented.
+protected rejection decision below adds those HTTP checks, but it does not grant economic
+use. Protected receipt creation is a separate operation; do not insert rejection rows or
+invoke internal writers on deployment data. Where financial history exists, a resolution
+remains fenced until atomic projection/receipt reconciliation is implemented.
 
 ## Internal rejection-history reader and fence
 
@@ -1291,8 +1297,8 @@ head and caller-observed portfolio/broker identities and versions, including whe
 setting is selected. A selected assertion must still match the current account scope.
 The result remains `UNVERIFIED_FEE_SELECTION_ONLY`; in particular, `MISSING` or
 `UNKNOWN` is not zero. Callers must separately authenticate, establish eligibility and
-verify all other tax, fee-FX, valuation and projection requirements. There is no confirmed
-charge, authenticated economic grant or receipt writer.
+verify all other tax, fee-FX, valuation and projection requirements. This fee controller does
+not confirm a charge, grant economic use or write a receipt.
 
 ## Protected fee-estimate API
 
@@ -1483,9 +1489,8 @@ its stored trade-history labels are also unverified assertions. An inactive owne
 history can remain readable internally but cannot pass the active-owner current-use
 fence. Callers must authenticate separately and recheck the event, ledger, eligibility,
 account configuration and authorization in a writer transaction before economic use.
-There is no authenticated atomic event-revision rebuild or receipt writer; event publication
-remains fenced, and computational `OK` is not confirmed tax. This read performs no writes
-or provider access.
+There is no authenticated atomic event-revision rebuild; event publication remains fenced,
+and computational `OK` is not confirmed tax. This read performs no writes or provider access.
 
 ## Protected projection-history read API
 
@@ -1644,8 +1649,9 @@ remain stable if the current system clock moves backward.
 This isolated calculation neither authenticates a person nor establishes ownership,
 payment or eligibility; it creates no receipt, cash, audit, idempotency entry or grant.
 Migration `0027_receipt_unknowns` permits new receipt rows to retain unknown tax or fee
-as `null`; it does not backfill older zeros or introduce an authenticated writer. A protected
-receipt writer/void and atomic event reconciliation remain unfinished.
+as `null`; it does not backfill older zeros or itself introduce an authenticated writer.
+The separate protected receipt-create API is described below; protected void and atomic
+event reconciliation remain unfinished.
 
 ## Receipt unknowns storage migration
 
@@ -1683,11 +1689,10 @@ or deletion. SQL alone cannot prove that records were created in the same transa
 the actor was authenticated, that the retained audit fingerprint matches its original intent,
 that the FX calculation is correct, or that a payment or historical entitlement is genuine.
 The separate internal audit reader and creation primitive described below recheck or record
-origins without granting economic use. No authenticated receipt endpoint is installed; do
-not insert origins or invoke internal writers on deployment data. A future protected receipt
-writer must bind and revalidate the complete HTTP intent, session, idempotency, cash, audit
-and invalidation atomically; protected receipt creation/void, economic authorization and
-atomic reconciliation remain unfinished.
+origins without granting economic use. The protected receipt-create endpoint binds and
+revalidates HTTP intent, session, idempotency, cash, audit and invalidation atomically; do not
+insert origins or invoke internal writers on deployment data. Protected receipt void, economic
+authorization and atomic reconciliation remain unfinished.
 
 ## Internal retained-receipt link reader
 
@@ -1823,8 +1828,9 @@ rejected; the advisory input snapshot alone is not a write grant.
 
 Tax, fees and FX are explicit values or explicit `null`, not implicit zero. A supplied foreign
 FX rate requires its source; HKD uses identity. An actual HKD override requires its reason and,
-for foreign cash, a historical FX rate. The recorded amount is net cash: informational tax and
-fees are not subtracted again. Receipt, cash, audited origin and intent, opening-cash rebase
+for foreign cash, a historical FX rate; an HKD override must equal the received amount exactly.
+The recorded amount is net cash: informational tax and fees are not subtracted again. Receipt,
+cash, audited origin and intent, opening-cash rebase
 when required, portfolio invalidation and the idempotency response commit together or roll back.
 
 An unchanged retry with the original key and body revalidates the stored receipt and HTTP
@@ -1834,8 +1840,8 @@ entry has expired or disappeared, reusing the receipt UUID conflicts rather than
 second cash entry; check the receipt history before deciding what to do. The response labels
 payment and eligibility as unverified. This operation does not verify actual bank payment,
 establish ownership or income, create an entitlement, provide a receipt-void endpoint or
-reconcile event revisions; the existing event fence remains in force. The browser receipt view
-is still read-only.
+reconcile event revisions; the existing event fence remains in force. The browser form below
+can submit an explicitly selected existing entitlement.
 
 ## Protected recorded-receipt history read API
 
@@ -1876,8 +1882,33 @@ Each page is checked for event/account identity, distinct receipt IDs, revision 
 ordering, lifecycle and explicit unverified labels. A changed current revision is marked as
 an independent-read mismatch; failed, paused or older pages are identified as stale and
 cannot be paged until reloaded. Empty pages do not prove zero payments or completeness.
-This view cannot create or void receipts, verify their audits or payments, calculate
-financial reconciliation or relax the event fence.
+This history view cannot void receipts, verify their audits or payments, calculate financial
+reconciliation or relax the event fence. The separate form below can record a new cash assertion.
+
+## Record a receipt in the browser
+
+From the event's account receipt records, explicitly select an account, open receipt preparation
+and select one existing legacy entitlement. Each page and its event, account, portfolio, broker
+and data-version pins are independently checked; stale, paused, failed or archived scopes cannot
+start a write. The entitlement and its recorded quality are unverified, and an empty page does
+not establish zero. A fresh installation currently has no supported way to create the required
+legacy entitlement.
+
+The reauthenticated sheet freezes the selected physical IDs and versions. Enter the actual date,
+net cash amount and currency; explicitly choose unknown or a value for tax and fees, and for
+foreign HKD FX choose unknown or provide a historical rate and source. No value is inferred from
+the entitlement or pay date. An optional actual-HKD override requires its own reason and, for
+HKD cash, must equal the received amount exactly. The form requires acknowledgment that the
+record is not payment, ownership or income verification. Saving **adds a cash posting**; tax and
+fees are informational and are not subtracted again.
+
+If a response is lost, leave the sheet open and retry the same intent. Equivalent decimal spelling
+retains the same in-memory idempotency key. If an uncertain intent is changed, a new key is used
+but the sheet keeps the same receipt UUID, so a previously committed receipt conflicts rather
+than being posted twice. Closing the sheet discards that in-memory identity: check receipt and cash
+history before starting another entry. A returned creation response may be a historical replay,
+not current lifecycle status. The form does not void receipts, verify payment or eligibility, or
+reconcile event revisions; the existing financial-history fence remains in place.
 
 ## Inert trade-audit origin storage
 
@@ -2418,12 +2449,11 @@ rate. For example, an expected 10 USD with 6 USD received, later accepted as 11
 USD, leaves 6 received and 5 outstanding; the old and new expectations must not be
 added together.
 
-Receipt creation still requires a protected writer to insert the actual receipt,
-its cash posting, audit, idempotency record and invalidation together. Likewise,
-a void writer must insert the exact reversal and matching audit before changing
-the receipt state, all within one transaction. The SQL transition guard cannot
-prevent a direct writer from committing an isolated receipt or reversal without
-using that workflow. No receipt posting or void HTTP endpoint is installed yet.
+Protected receipt creation now inserts an actual receipt, its cash posting, audit,
+idempotency record and invalidation together against an existing entitlement. The internal
+void primitive inserts an exact reversal and matching audit before changing receipt state,
+but no protected void HTTP endpoint is installed. The SQL transition guard cannot prevent a
+direct writer from committing an isolated receipt or reversal without using that workflow.
 
 ## Verification
 
