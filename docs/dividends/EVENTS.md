@@ -1732,8 +1732,8 @@ audit fails the entire owned read instead of being omitted. A matching fingerpri
 historical ownership, receipt completeness, current source validity, entitlement, or a
 financial grant. This internal reader performs no writes and does not remove any event
 fence. The existing HTTP receipt-history API and browser continue to report audit status as
-unverified; they do not consume this reader. Protected receipt creation/void, HTTP-intent
-binding and atomic reconciliation remain unfinished.
+unverified; they do not consume this reader. Protected receipt creation uses this audited
+history, but receipt void over HTTP and atomic reconciliation remain unfinished.
 
 ## Internal recorded-receipt creation
 
@@ -1752,8 +1752,8 @@ invalidation together. The full retained history is rechecked before and after p
 pins and inconsistent records fail closed. A retry of the same receipt ID, request ID and
 normalized intent verifies the retained origin and intent without writing again. The returned
 record reflects its retained current lifecycle, so an unchanged creation replay after a void
-returns a `VOID` record, not a new active receipt. A future HTTP replay must separately
-validate and return its original cached response rather than treating this current lifecycle
+returns a `VOID` record, not a new active receipt. The protected HTTP operation separately
+validates and returns its original cached response rather than treating this current lifecycle
 as the original result. New future-dated cash is rejected, while an existing historical
 replay does not become invalid merely because the system clock moved back.
 
@@ -1762,8 +1762,8 @@ data directly. It does not implement session, Origin, CSRF, reauthentication or 
 idempotency binding, confirm a payment, authorize eligibility or reconcile income. It does not
 create an entitlement: recorded projections use separate versioned storage, and no application
 entitlement writer is installed, so a new installation cannot yet create this prerequisite.
-Authenticated receipt creation/void and event-revision reconciliation remain unfinished; the
-event fence is unchanged.
+Authenticated receipt void and event-revision reconciliation remain unfinished; the event
+fence is unchanged.
 
 ## Internal audited-origin receipt void
 
@@ -1805,9 +1805,37 @@ read within one database snapshot; different pages are separate reads and can ch
 The stored entitlement values and quality are **unverified historical records**, not proof of
 ownership, income, payment or an authorization to post. An empty page does not establish
 zero or complete history. This endpoint does not create an entitlement or change any cash,
-receipt, FX, audit, projection or provider data. A new installation cannot yet create these
-legacy entitlements, and no protected receipt writer is installed. Foreign or missing scopes
-return 404; inconsistent retained inputs return a fixed private 503 instead of a partial page.
+receipt, FX, audit, projection or provider data. A new installation cannot yet create the
+legacy entitlement required by the protected receipt writer. Foreign or missing scopes return
+404; inconsistent retained inputs return a fixed private 503 instead of a partial page.
+
+## Protected recorded-receipt creation
+
+`POST /api/v1/dividends/receipts` records an owner-supplied cash assertion against one explicitly
+selected existing entitlement. It requires an active owner session, matching Origin and CSRF,
+recent password reauthentication, an idempotency key and the observed event version in a
+quoted `If-Match` header. The request supplies a stable client-generated receipt UUID; the
+current event/physical revision, entitlement, account, portfolio and broker identifiers and
+version pins; the portfolio data revision; the received date and amount/currency; and a reason,
+note and `RECORDED_CASH_ONLY` confirmation. The server checks these pins again inside the
+serialized transaction, including immediately before commit. A new future-dated cash entry is
+rejected; the advisory input snapshot alone is not a write grant.
+
+Tax, fees and FX are explicit values or explicit `null`, not implicit zero. A supplied foreign
+FX rate requires its source; HKD uses identity. An actual HKD override requires its reason and,
+for foreign cash, a historical FX rate. The recorded amount is net cash: informational tax and
+fees are not subtracted again. Receipt, cash, audited origin and intent, opening-cash rebase
+when required, portfolio invalidation and the idempotency response commit together or roll back.
+
+An unchanged retry with the original key and body revalidates the stored receipt and HTTP
+intent and returns the original `HISTORICAL_RECEIPT_CREATION_RESPONSE_ONLY`, even if that
+receipt was later voided. The response is not a current lifecycle read. If the idempotency
+entry has expired or disappeared, reusing the receipt UUID conflicts rather than posting a
+second cash entry; check the receipt history before deciding what to do. The response labels
+payment and eligibility as unverified. This operation does not verify actual bank payment,
+establish ownership or income, create an entitlement, provide a receipt-void endpoint or
+reconcile event revisions; the existing event fence remains in force. The browser receipt view
+is still read-only.
 
 ## Protected recorded-receipt history read API
 

@@ -156,3 +156,24 @@ Optional `SPM_E2E_SAFE_SCREENSHOT=1` captures only the empty synthetic review sh
 at three widths under ignored `.local/screenshots/`; it is not a failure artifact.
 Never capture filled private forms. This is not a container, NAS, TLS or external
 ownership test.
+
+## Separate protected receipt-create socket fixture
+
+```sh
+npm run build
+npm run test:e2e:receipt-write
+```
+
+This fixture starts the real FastAPI/Uvicorn application and uses Chromium's request
+context against a fresh synthetic owner and database. It seeds explicitly labelled legacy
+entitlements and receipt history only in that isolated fixture, then exercises the protected
+receipt-input and create APIs with actual session, CSRF, password reauthentication and
+no-store responses. Concurrent identical requests produce one recorded cash entry; a second
+committed response is deliberately dropped and its original response replays without writes.
+A new receipt with stale scope is rejected. The test compares all synthetic database tables and
+keeps bootstrap values, request data and database contents in process memory under the same
+private reporter and cleanup rules.
+
+This is an API socket test, not a receipt-entry browser form, payment verification or a
+container, worker, live-provider, NAS or TLS acceptance claim. The application still cannot
+create the legacy entitlement prerequisite on a fresh installation.

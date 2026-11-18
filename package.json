@@ -35,6 +35,7 @@
     "test:e2e:estimate-writes": "node tests/e2e/credentials/check.mjs --estimate-writes",
     "test:e2e:projection-history": "node tests/e2e/credentials/check.mjs --projection-history",
     "test:e2e:receipt-history": "node tests/e2e/credentials/check.mjs --receipt-history",
+    "test:e2e:receipt-write": "node tests/e2e/credentials/check.mjs --receipt-write",
     "test:e2e:projection-write": "node tests/e2e/credentials/check.mjs --projection-write",
     "generate:contracts": "uv run python scripts/export_openapi.py && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",
     "check:contracts": "uv run python scripts/export_openapi.py --check && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts --check"

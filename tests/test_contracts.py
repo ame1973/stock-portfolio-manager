@@ -205,6 +205,42 @@ def test_authentication_and_write_security_are_declared_in_the_contract() -> Non
                 assert headers[name]["required"] is True
 
 
+def test_recorded_receipt_creation_contract_requires_explicit_scope_and_cash() -> None:
+    spec = create_app().openapi()
+    operation = spec["paths"]["/api/v1/dividends/receipts"]["post"]
+    assert operation["operationId"] == "create_dividend_receipt"
+    assert operation["security"] == [{"cookieAuth": []}]
+    headers = {item["name"]: item for item in operation["parameters"] if item["in"] == "header"}
+    for name in ("If-Match", "X-CSRF-Token", "Idempotency-Key"):
+        assert headers[name]["required"] is True
+    assert headers["If-Match"]["schema"]["pattern"] == r'^"[1-9][0-9]{0,9}"$'
+    schemas = spec["components"]["schemas"]
+    request = schemas["ReceiptCreate"]
+    assert request["additionalProperties"] is False
+    assert set(request["required"]) == set(request["properties"])
+    assert request["properties"]["confirmation"]["const"] == "RECORDED_CASH_ONLY"
+    for name in (
+        "account_version",
+        "portfolio_version",
+        "broker_version",
+        "expected_data_revision",
+    ):
+        assert request["properties"][name]["type"] == "string"
+    for name in ("tax", "fee", "fx_rate_hkd", "fx_source", "actual_hkd", "actual_hkd_reason"):
+        assert {option["type"] for option in request["properties"][name]["anyOf"]} == {
+            "string",
+            "null",
+        }
+    response = schemas["ReceiptCreated"]
+    assert response["additionalProperties"] is False
+    for name, value in (
+        ("scope", "HISTORICAL_RECEIPT_CREATION_RESPONSE_ONLY"),
+        ("eligibility_scope", "NOT_ESTABLISHED"),
+        ("payment_scope", "OWNER_RECORDED_NOT_VERIFIED"),
+    ):
+        assert response["properties"][name]["const"] == value
+
+
 def test_unverified_trade_correction_contract_requires_scope_and_labels() -> None:
     spec = create_app().openapi()
     for action in ("revise", "void"):
