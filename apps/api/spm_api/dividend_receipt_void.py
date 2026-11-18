@@ -330,4 +330,6 @@ def _void(
         if len(results) != 1:
             raise ReceiptVoidError("DIVIDEND_RECEIPT_VOID_UNAVAILABLE")
         _verify_void(con, owner, intent, request_id, results[0])
+        if _scope(con, owner, intent, origin, invalidated=True) != expected_revisions:
+            raise ReceiptVoidError("DIVIDEND_RECEIPT_VOID_SCOPE_CHANGED")
         return results[0]
