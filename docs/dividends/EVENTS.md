@@ -1762,8 +1762,35 @@ data directly. It does not implement session, Origin, CSRF, reauthentication or 
 idempotency binding, confirm a payment, authorize eligibility or reconcile income. It does not
 create an entitlement: recorded projections use separate versioned storage, and no application
 entitlement writer is installed, so a new installation cannot yet create this prerequisite.
-Void/reversal creation and event-revision reconciliation remain unfinished; the event fence
-is unchanged.
+Authenticated receipt creation/void and event-revision reconciliation remain unfinished; the
+event fence is unchanged.
+
+## Internal audited-origin receipt void
+
+`dividend_receipt_void.void` is an internal correction primitive for a receipt with a matched
+recorded origin. It requires the observed current event revision and account/portfolio/broker
+scope and versions, the portfolio data revision, original entitlement and revision, primary
+cash identity, receipt version, a reason and a `VOID_RECORDED_CASH` confirmation. An archived
+account may have an erroneous historical receipt reversed; the original record, amount,
+currency, tax, fees and locked FX are never rewritten. A legacy receipt without a matched
+origin cannot use this operation and needs a separate reviewed recovery path.
+
+Inside one serialized writer and safe savepoint, the operation appends an exact reversing
+cash entry and void/intent audits, changes only the receipt lifecycle to `VOID`, rebases a
+pre-opening cash assertion when necessary and invalidates affected portfolios. If an account
+has moved within the same owner, both the current and originally recorded portfolios are
+invalidated without changing the retained historical scope. Portfolio versions and data
+revisions are checked before and after rebase; each data revision must advance exactly once
+on invalidation while its portfolio version stays fixed.
+An unchanged receipt/request/intent retry verifies the retained void and returns it without
+another reversal or invalidation. A different request, stale scope, unsupported legacy origin
+or inconsistent audit fails without partial financial changes.
+
+This is **not an authenticated HTTP route**; do not invoke it directly on deployment data.
+The matched history is not proof of the original actor, payment, historical ownership or
+eligibility, and the correction does not grant current economic use. Session, Origin, CSRF,
+reauthentication, HTTP idempotency and atomic event-revision reconciliation remain unfinished;
+the historical entitlement/projection event fence is not relaxed.
 
 ## Protected recorded-receipt history read API
 
