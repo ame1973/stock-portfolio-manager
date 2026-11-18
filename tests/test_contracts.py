@@ -117,6 +117,10 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts",
             "get",
         ): "list_recorded_dividend_receipts",
+        (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/inputs",
+            "get",
+        ): "get_recorded_dividend_receipt_inputs",
         ("/api/v1/dividends/candidates", "get"): "list_dividend_candidates",
         ("/api/v1/dividends/candidates", "post"): "create_dividend_candidate",
         ("/api/v1/dividends/candidates/{id}", "get"): "get_dividend_candidate",

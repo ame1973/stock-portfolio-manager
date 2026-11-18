@@ -1792,6 +1792,23 @@ eligibility, and the correction does not grant current economic use. Session, Or
 reauthentication, HTTP idempotency and atomic event-revision reconciliation remain unfinished;
 the historical entitlement/projection event fence is not relaxed.
 
+## Protected recorded-receipt input snapshot
+
+`GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/inputs` requires an
+active owner session and returns a private `Cache-Control: no-store` snapshot of the current
+event, account, portfolio, broker, their version pins and portfolio data revision. It also
+returns a bounded, searchable keyset page of this event/account's existing physical
+entitlements, including each original event revision, recorded shares, expected amount,
+currency and stored quality. Account archive status is explicit. The scope and page are
+read within one database snapshot; different pages are separate reads and can change.
+
+The stored entitlement values and quality are **unverified historical records**, not proof of
+ownership, income, payment or an authorization to post. An empty page does not establish
+zero or complete history. This endpoint does not create an entitlement or change any cash,
+receipt, FX, audit, projection or provider data. A new installation cannot yet create these
+legacy entitlements, and no protected receipt writer is installed. Foreign or missing scopes
+return 404; inconsistent retained inputs return a fixed private 503 instead of a partial page.
+
 ## Protected recorded-receipt history read API
 
 `GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts` requires an

@@ -5,14 +5,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, Request
 from pydantic_core import PydanticSerializationError
-from sqlalchemy import text
+from sqlalchemy import RowMapping, text
 from sqlalchemy.exc import SQLAlchemyError
 
+import spm_api.dividend_event_service as events
 import spm_api.dividend_receipt_history as history
 import spm_api.dividend_receipt_models as models
 from spm_api.db import unit_of_work
+from spm_api.decimal_types import INT64_MAX
+from spm_api.dividend_account_scope import account, positive_version
 from spm_api.errors import ApiError, Error
-from spm_api.pagination import Page, PageDep, paginate, validate_date_page
+from spm_api.pagination import Page, PageDep, paginate, validate_date_page, validate_version_page
 from spm_api.security import AuthDep
 
 router = APIRouter(
@@ -60,6 +63,130 @@ def _public(
             "eligibility_scope": retained.eligibility_scope,
         }
     )
+
+
+@router.get("/inputs", operation_id="get_recorded_dividend_receipt_inputs")
+def receipt_inputs(
+    event_id: UUID, account_id: UUID, request: Request, auth: AuthDep, page: PageDep
+) -> models.ReceiptInputs:
+    validate_version_page(page)
+    try:
+        with unit_of_work(request.app.state.engine) as con:
+            owner = auth.owner.id
+            event = events.get(con, owner, event_id)
+            current = account(con, owner, account_id)
+            if event is None or current is None:
+                raise ApiError(404, "NOT_FOUND", "Dividend receipt scope not found")
+            retained = history.history(con, owner, event_id, account_id)
+            if retained is None or (
+                retained.event_id,
+                retained.account_id,
+                retained.current_revision_id,
+            ) != (event_id, account_id, event.record.revision_id):
+                raise ValueError("Inconsistent retained receipt scope")
+            scope = (
+                con.execute(
+                    text("""
+                        SELECT a.status,p.version,p.data_revision FROM accounts a
+                        JOIN portfolios p ON p.id=a.portfolio_id
+                        WHERE a.id=:account AND p.id=:portfolio AND p.owner_id=:owner
+                    """),
+                    {
+                        "account": str(account_id),
+                        "portfolio": current["portfolio_id"],
+                        "owner": str(owner),
+                    },
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if scope is None:
+                raise ValueError("Inconsistent current receipt scope")
+            portfolio_version = positive_version(scope["version"])
+            revision = scope["data_revision"]
+            if type(revision) is not int or not 0 <= revision <= INT64_MAX:
+                raise ValueError("Invalid portfolio revision")
+            records = {str(item.id): item for item in retained.entitlements}
+            if len(records) != len(retained.entitlements):
+                raise ValueError("Duplicate retained entitlement")
+            rows = (
+                con.execute(
+                    text(r"""
+                        SELECT ent.id,rev.id AS revision_id,rev.revision_no
+                        FROM dividend_entitlements ent
+                        JOIN dividend_event_revisions rev ON rev.id=ent.revision_id
+                        WHERE rev.event_id=:event AND ent.account_id=:account
+                          AND ent.id LIKE :search ESCAPE '\'
+                          AND (:cursor_value IS NULL OR
+                               (rev.revision_no,ent.id)<(:cursor_value,:cursor_id))
+                        ORDER BY rev.revision_no DESC,ent.id DESC LIMIT :limit
+                    """),
+                    {
+                        **page.params(),
+                        "event": str(event_id),
+                        "account": str(account_id),
+                        "cursor_value": (
+                            int(page.cursor_value) if page.cursor_value is not None else None
+                        ),
+                    },
+                )
+                .mappings()
+                .all()
+            )
+
+            def basis(row: RowMapping) -> models.ExistingReceiptBasis:
+                item = records[row["id"]]
+                if (
+                    row["revision_id"] != str(item.revision_id)
+                    or type(row["revision_no"]) is not int
+                    or row["revision_no"] != item.revision_no
+                ):
+                    raise ValueError("Inconsistent retained entitlement revision")
+                return models.ExistingReceiptBasis.model_validate(
+                    {
+                        "id": item.id,
+                        "revision_id": item.revision_id,
+                        "revision_no": item.revision_no,
+                        "currency": item.currency,
+                        "recorded_shares": _decimal(item.eligible_shares),
+                        "recorded_expected_net": _decimal(item.expected_net),
+                        "recorded_quality": item.recorded_quality,
+                        "created_at": item.created_at,
+                        "scope": item.scope,
+                    }
+                )
+
+            return models.ReceiptInputs(
+                event_id=event_id,
+                revision_id=event.record.revision_id,
+                revision_no=event.record.revision_no,
+                account_id=account_id,
+                portfolio_id=current["portfolio_id"],
+                broker_id=current["broker_id"],
+                account_status=scope["status"],
+                account_version=str(current["account_version"]),
+                portfolio_version=str(portfolio_version),
+                broker_version=str(current["broker_version"]),
+                portfolio_data_revision=str(revision),
+                entitlements=paginate(rows, page, "revision_no", basis),
+                scope="RECORDED_RECEIPT_INPUTS_ONLY",
+                history_completeness=retained.history_completeness,
+                current_use_scope=retained.current_use_scope,
+                eligibility_scope=retained.eligibility_scope,
+            )
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        OverflowError,
+        SQLAlchemyError,
+        PydanticSerializationError,
+    ):
+        raise ApiError(
+            503,
+            "DIVIDEND_RECEIPT_INPUTS_UNAVAILABLE",
+            "The receipt inputs cannot be read safely",
+        ) from None
 
 
 @router.get("", operation_id="list_recorded_dividend_receipts")

@@ -5,12 +5,44 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from spm_api.decimal_types import FxRate, IsoDate, Money, NonNegativeMoney
+from spm_api.decimal_types import FxRate, IsoDate, Money, NonNegativeMoney, PositiveQuantity
 from spm_api.dividend_event_service import Version
 from spm_api.dividend_receipt_history import CashScope
-from spm_api.dividend_tax_models import PositiveOrdinal
+from spm_api.dividend_tax_models import Ordinal, PositiveOrdinal
 from spm_api.errors import Model
-from spm_api.master_models import Currency
+from spm_api.master_models import ArchiveStatus, Currency
+from spm_api.pagination import Page
+
+
+class ExistingReceiptBasis(Model):
+    id: UUID = Field(repr=False)
+    revision_id: UUID = Field(repr=False)
+    revision_no: Version
+    currency: Currency
+    recorded_shares: PositiveQuantity = Field(repr=False)
+    recorded_expected_net: Money = Field(repr=False)
+    recorded_quality: Literal["ESTIMATED", "ACCRUED", "NEEDS_REVIEW", "CONFIRMED", "MISSING_FX"]
+    created_at: AwareDatetime = Field(repr=False)
+    scope: Literal["LEGACY_ENTITLEMENT_NOT_VERIFIED"]
+
+
+class ReceiptInputs(Model):
+    event_id: UUID = Field(repr=False)
+    revision_id: UUID = Field(repr=False)
+    revision_no: Version
+    account_id: UUID = Field(repr=False)
+    portfolio_id: UUID = Field(repr=False)
+    broker_id: UUID = Field(repr=False)
+    account_status: ArchiveStatus
+    account_version: PositiveOrdinal
+    portfolio_version: PositiveOrdinal
+    broker_version: PositiveOrdinal
+    portfolio_data_revision: Ordinal
+    entitlements: Page[ExistingReceiptBasis]
+    scope: Literal["RECORDED_RECEIPT_INPUTS_ONLY"]
+    history_completeness: Literal["UNVERIFIED"]
+    current_use_scope: Literal["REVALIDATION_REQUIRED"]
+    eligibility_scope: Literal["NOT_ESTABLISHED"]
 
 
 class RecordedReceipt(Model):
