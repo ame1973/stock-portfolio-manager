@@ -121,6 +121,11 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/inputs",
             "get",
         ): "get_recorded_dividend_receipt_inputs",
+        (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/"
+            "{receipt_id}/void-inputs",
+            "get",
+        ): "get_recorded_dividend_receipt_void_inputs",
         ("/api/v1/dividends/candidates", "get"): "list_dividend_candidates",
         ("/api/v1/dividends/candidates", "post"): "create_dividend_candidate",
         ("/api/v1/dividends/candidates/{id}", "get"): "get_dividend_candidate",
@@ -203,6 +208,54 @@ def test_authentication_and_write_security_are_declared_in_the_contract() -> Non
             }
             for name in ("X-CSRF-Token", "Idempotency-Key"):
                 assert headers[name]["required"] is True
+
+
+def test_recorded_receipt_void_inputs_contract_retains_unverified_scope() -> None:
+    spec = create_app().openapi()
+    path = (
+        "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/"
+        "{receipt_id}/void-inputs"
+    )
+    operation = spec["paths"][path]["get"]
+    assert operation["operationId"] == "get_recorded_dividend_receipt_void_inputs"
+    assert operation["security"] == [{"cookieAuth": []}]
+    assert {item["name"] for item in operation["parameters"] if item["in"] == "path"} == {
+        "event_id",
+        "account_id",
+        "receipt_id",
+    }
+    schema = spec["components"]["schemas"]["ReceiptVoidInputs"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+    for name in (
+        "account_version",
+        "portfolio_version",
+        "broker_version",
+        "portfolio_data_revision",
+        "receipt_version",
+    ):
+        assert schema["properties"][name]["type"] == "string"
+    for name in (
+        "cash_entry_id",
+        "origin_portfolio_id",
+        "tax",
+        "fee",
+        "fx_rate_hkd",
+        "received_hkd",
+        "voided_at",
+    ):
+        assert {value["type"] for value in schema["properties"][name]["anyOf"]} == {
+            "string",
+            "null",
+        }
+    for name, value in (
+        ("scope", "RECORDED_RECEIPT_VOID_INPUTS_ONLY"),
+        ("history_completeness", "UNVERIFIED"),
+        ("current_use_scope", "REVALIDATION_REQUIRED"),
+        ("eligibility_scope", "NOT_ESTABLISHED"),
+        ("payment_scope", "OWNER_RECORDED_NOT_VERIFIED"),
+    ):
+        assert schema["properties"][name]["const"] == value
 
 
 def test_recorded_receipt_creation_contract_requires_explicit_scope_and_cash() -> None:

@@ -607,6 +607,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Receipt Void Inputs */
+        get: operations["get_recorded_dividend_receipt_void_inputs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
         parameters: {
             query?: never;
@@ -5123,6 +5140,135 @@ export interface components {
              * @constant
              */
             scope: "RECORDED_RECEIPT_INPUTS_ONLY";
+        };
+        /**
+         * ReceiptVoidInputs
+         * @description A private recorded scope for review, not authority to reverse cash.
+         */
+        ReceiptVoidInputs: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Account Status
+             * @enum {string}
+             */
+            account_status: "ACTIVE" | "ARCHIVED";
+            /** Account Version */
+            account_version: string;
+            /**
+             * Audit Scope
+             * @enum {string}
+             */
+            audit_scope: "RECEIPT_AUDIT_NOT_VERIFIED" | "RECORDED_AUDIT_MATCHED_ONLY";
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /** Cash Entry Id */
+            cash_entry_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Entitlement Id
+             * Format: uuid
+             */
+            entitlement_id: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Fee */
+            fee: string | null;
+            /** Fx Rate Hkd */
+            fx_rate_hkd: string | null;
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Observed Revision Id
+             * Format: uuid
+             */
+            observed_revision_id: string;
+            /** Observed Revision No */
+            observed_revision_no: number;
+            /** Origin Portfolio Id */
+            origin_portfolio_id: string | null;
+            /**
+             * Original Revision Id
+             * Format: uuid
+             */
+            original_revision_id: string;
+            /**
+             * Payment Scope
+             * @constant
+             */
+            payment_scope: "OWNER_RECORDED_NOT_VERIFIED";
+            /** Portfolio Data Revision */
+            portfolio_data_revision: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Portfolio Version */
+            portfolio_version: string;
+            /**
+             * Receipt Id
+             * Format: uuid
+             */
+            receipt_id: string;
+            /** Receipt Version */
+            receipt_version: string;
+            /** Received Amount */
+            received_amount: string;
+            /**
+             * Received Date
+             * Format: date
+             */
+            received_date: string;
+            /** Received Hkd */
+            received_hkd: string | null;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "RECORDED_RECEIPT_VOID_INPUTS_ONLY";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ACTIVE" | "VOID";
+            /** Tax */
+            tax: string | null;
+            /** Voided At */
+            voided_at: string | null;
         };
         /** RecordedReceipt */
         RecordedReceipt: {
@@ -11775,6 +11921,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceiptInputs"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_recorded_dividend_receipt_void_inputs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+                account_id: string;
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptVoidInputs"];
                 };
             };
             /** @description Unauthorized */

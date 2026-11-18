@@ -45,6 +45,58 @@ class ReceiptInputs(Model):
     eligibility_scope: Literal["NOT_ESTABLISHED"]
 
 
+class ReceiptVoidInputs(Model):
+    """A private recorded scope for review, not authority to reverse cash."""
+
+    receipt_id: UUID = Field(repr=False)
+    event_id: UUID = Field(repr=False)
+    observed_revision_id: UUID = Field(repr=False)
+    observed_revision_no: Version
+    account_id: UUID = Field(repr=False)
+    portfolio_id: UUID = Field(repr=False)
+    broker_id: UUID = Field(repr=False)
+    account_status: ArchiveStatus
+    account_version: PositiveOrdinal
+    portfolio_version: PositiveOrdinal
+    broker_version: PositiveOrdinal
+    portfolio_data_revision: Ordinal
+    entitlement_id: UUID = Field(repr=False)
+    original_revision_id: UUID = Field(repr=False)
+    cash_entry_id: UUID | None = Field(repr=False)
+    origin_portfolio_id: UUID | None = Field(repr=False)
+    received_date: IsoDate = Field(repr=False)
+    received_amount: Money = Field(repr=False)
+    currency: Currency
+    tax: NonNegativeMoney | None = Field(repr=False)
+    fee: NonNegativeMoney | None = Field(repr=False)
+    fx_rate_hkd: FxRate | None = Field(repr=False)
+    received_hkd: Money | None = Field(repr=False)
+    status: Literal["ACTIVE", "VOID"]
+    receipt_version: PositiveOrdinal
+    created_at: AwareDatetime = Field(repr=False)
+    voided_at: AwareDatetime | None = Field(repr=False)
+    audit_scope: Literal["RECEIPT_AUDIT_NOT_VERIFIED", "RECORDED_AUDIT_MATCHED_ONLY"]
+    scope: Literal["RECORDED_RECEIPT_VOID_INPUTS_ONLY"]
+    history_completeness: Literal["UNVERIFIED"]
+    current_use_scope: Literal["REVALIDATION_REQUIRED"]
+    eligibility_scope: Literal["NOT_ESTABLISHED"]
+    payment_scope: Literal["OWNER_RECORDED_NOT_VERIFIED"]
+
+    @model_validator(mode="after")
+    def consistent_origin_and_lifecycle(self) -> Self:
+        matched = self.audit_scope == "RECORDED_AUDIT_MATCHED_ONLY"
+        if (
+            (self.cash_entry_id is None) != (self.origin_portfolio_id is None)
+            or matched != (self.cash_entry_id is not None)
+            or (self.status == "ACTIVE") != (self.voided_at is None)
+            or (self.voided_at is not None and self.voided_at < self.created_at)
+            or (self.status == "VOID" and self.receipt_version == "1")
+            or (matched and self.receipt_version != ("1" if self.status == "ACTIVE" else "2"))
+        ):
+            raise ValueError("The recorded receipt void inputs are inconsistent")
+        return self
+
+
 class RecordedReceipt(Model):
     id: UUID = Field(repr=False)
     event_id: UUID = Field(repr=False)

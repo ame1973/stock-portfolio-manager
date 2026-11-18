@@ -1814,6 +1814,28 @@ receipt, FX, audit, projection or provider data. A new installation cannot yet c
 legacy entitlement required by the protected receipt writer. Foreign or missing scopes return
 404; inconsistent retained inputs return a fixed private 503 instead of a partial page.
 
+## Protected recorded-receipt void-input snapshot
+
+`GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs`
+requires an active owner session and returns private `Cache-Control: no-store` inputs for one
+explicit receipt. In one WAL snapshot it checks the owned current event, account, portfolio and
+broker, the complete retained receipt history and any recorded origin audit. It returns exact
+string-valued current versions and portfolio data revision, the original entitlement and physical
+revision, recorded cash and locked FX, lifecycle, and archived account status.
+
+When an origin matches the retained audit, the response includes its primary cash-entry ID and
+original portfolio ID. If the account has moved within the same owner, the original portfolio can
+differ from the current one; the internal void primitive invalidates both. An origin-less legacy
+receipt remains `RECEIPT_AUDIT_NOT_VERIFIED` with both origin identifiers `null`; the endpoint does
+not create or infer them. Voided and archived histories remain readable. An exhausted portfolio
+data revision is returned exactly, not treated as permission to advance it.
+
+The response is `RECORDED_RECEIPT_VOID_INPUTS_ONLY` and `REVALIDATION_REQUIRED`: it does not
+verify payment, historical ownership or eligibility, and a matching audit is not proof of the
+original actor. It never changes the receipt, cash, FX, audit or invalidations. Missing or foreign
+scope returns 404; inconsistent history returns a fixed private 503. Protected HTTP void and its
+reauthenticated browser workflow are not yet installed.
+
 ## Protected recorded-receipt creation
 
 `POST /api/v1/dividends/receipts` records an owner-supplied cash assertion against one explicitly
