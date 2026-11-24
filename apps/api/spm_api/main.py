@@ -26,6 +26,9 @@ from spm_api.dividend_combined_receipt_routes import router as dividend_combined
 from spm_api.dividend_direct_receipt_input_routes import (
     router as dividend_direct_receipt_input_router,
 )
+from spm_api.dividend_direct_receipt_void_write_routes import (
+    router as dividend_direct_receipt_void_write_router,
+)
 from spm_api.dividend_direct_receipt_write_routes import (
     router as dividend_direct_receipt_write_router,
 )
@@ -262,6 +265,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(dividend_combined_receipt_router)
     app.include_router(dividend_direct_receipt_input_router)
     app.include_router(dividend_direct_receipt_write_router)
+    app.include_router(dividend_direct_receipt_void_write_router)
     app.include_router(dividend_receipt_void_input_router)
     app.include_router(dividend_receipt_void_write_router)
     app.include_router(dividend_receipt_write_router)

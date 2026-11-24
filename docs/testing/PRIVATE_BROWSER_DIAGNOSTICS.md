@@ -220,9 +220,13 @@ checks keyboard account selection, no-store and unverified labels, and offers no
 action for direct records. Authenticated socket reads of both direct void-input snapshots check
 matching current/original pins, exact cash/FX, null versus zero, original cash IDs and no-grant
 labels without changing any tables. Missing IDs return 404; legacy-only void inputs remain
-fenced rather than adopting direct receipts. Browser storage stays empty. This exercises direct
-creation over the real socket, its history UI and read-only void inputs, not a direct entry or
-direct-void form, external payment,
+fenced rather than adopting direct receipts. The same real-socket fixture then concurrently
+voids the first direct receipt once, rejects a stale second correction, deliberately drops the
+second committed void response and recovers it with an unchanged body/version/key. It checks
+exact original/reversal integers in a guarded read-only synthetic SQLite connection, expected
+atomic table changes and zero-write replay. Browser storage stays empty. This exercises direct
+creation/void over the real socket, history UI and read-only void inputs, not a direct entry or
+void form, external payment,
 eligibility, deployment, NAS or TLS. The pinned private reporter, exclusive temporary root,
 no-debug/no-recording rules and fixed safe output remain mandatory. CI defines this fixture;
 that definition is not evidence of a hosted CI run.

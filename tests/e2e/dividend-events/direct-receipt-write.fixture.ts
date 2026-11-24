@@ -140,6 +140,71 @@ test("direct receipt API records explicit cash without a legacy entitlement", as
   const absent = await page.request.get(`${base}/${randomUUID()}/void-inputs`);
   expect(absent.status()).toBe(404); expect(absent.headers()["cache-control"]).toBe("no-store");
   expect(database()).toEqual(afterLost);
+  const voidPath = (id: string) => `${path}/${id}/void`;
+  const voidBody = async (id: string): Promise<Schemas["DirectReceiptVoidWrite"]> => {
+    const response = await page.request.get(`${base}/${id}/void-inputs`);
+    expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
+    const { current, receipt, cash_entry_id } = await response.json() as Schemas["DirectReceiptVoidInputs"];
+    return { event_id: current.event_id, account_id: current.account_id,
+      observed_revision_id: current.revision_id, observed_revision_no: current.revision_no,
+      original_revision_id: receipt.revision_id, original_revision_no: receipt.revision_no,
+      portfolio_id: current.portfolio_id, broker_id: current.broker_id, account_version: current.account_version,
+      portfolio_version: current.portfolio_version, broker_version: current.broker_version,
+      expected_data_revision: current.portfolio_data_revision, cash_entry_id,
+      reason: "Synthetic direct receipt cash correction.", confirmation: "VOID_RECORDED_CASH" };
+  };
+  stage("COMMIT"); const firstVoid = await voidBody(result.id); const staleVoid = await voidBody(lostBody.receipt_id);
+  const voidHeaders = await headers(page, 1);
+  const [voidLeft, voidRight] = await Promise.all([
+    page.request.post(voidPath(result.id), { headers: voidHeaders, data: firstVoid }),
+    page.request.post(voidPath(result.id), { headers: voidHeaders, data: firstVoid }),
+  ]);
+  expect(voidLeft.status()).toBe(200); expect(voidRight.status()).toBe(200);
+  expect(voidLeft.headers()["cache-control"]).toBe("no-store");
+  const voided = await voidLeft.json() as Schemas["DirectReceiptVoided"];
+  expect(await voidRight.json()).toEqual(voided);
+  expect(voided).toMatchObject({ id: result.id, cash_entry_id: result.cash_entry_id, status: "VOID", version: "2",
+    original_revision_id: event.current_revision_id, receipt_basis: "DIRECT_EVENT_ACCOUNT",
+    scope: "HISTORICAL_DIRECT_RECEIPT_VOID_RESPONSE_ONLY", eligibility_scope: "NOT_ESTABLISHED" });
+  const afterVoid = database(); const voidChanged = new Set(["dividend_direct_receipts", "cash_ledger_entries", "audit_events", "portfolios", "projection_invalidations", "idempotency_keys"]);
+  expect(afterVoid.cash_ledger_entries).toHaveLength(afterLost.cash_ledger_entries!.length + 1);
+  expect(afterVoid.audit_events).toHaveLength(afterLost.audit_events!.length + 3);
+  for (const table of Object.keys(afterLost)) if (!voidChanged.has(table)) expect(afterVoid[table]).toEqual(afterLost[table]);
+  const staleCorrection = await page.request.post(voidPath(lostBody.receipt_id), { headers: await headers(page, 1), data: staleVoid });
+  expect(staleCorrection.status()).toBe(409); expect(staleCorrection.headers()["cache-control"]).toBe("no-store"); expect(database()).toEqual(afterVoid);
+  stage("LOST"); const lostVoidBody = await voidBody(lostBody.receipt_id); const lostVoidHeaders = await headers(page, 1);
+  const lostVoidPath = voidPath(lostBody.receipt_id); let lostVoidResult: Schemas["DirectReceiptVoided"] | null = null;
+  await page.route(`**${lostVoidPath}`, async route => {
+    const response = await route.fetch(); expect(response.status()).toBe(200);
+    lostVoidResult = await response.json() as Schemas["DirectReceiptVoided"]; await route.abort("failed");
+  });
+  try {
+    expect(await page.evaluate(async ({ url, intent, csrf, key }) => {
+      try {
+        await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf,
+          "Idempotency-Key": key, "If-Match": '"1"' }, body: JSON.stringify(intent) }); return false;
+      } catch { return true; }
+    }, { url: lostVoidPath, intent: lostVoidBody, csrf: lostVoidHeaders["X-CSRF-Token"], key: lostVoidHeaders["Idempotency-Key"] })).toBe(true);
+  } finally { await page.unroute(`**${lostVoidPath}`); }
+  expect(lostVoidResult).not.toBeNull(); const afterLostVoid = database();
+  expect(afterLostVoid.cash_ledger_entries).toHaveLength(afterVoid.cash_ledger_entries!.length + 1);
+  expect(afterLostVoid.audit_events).toHaveLength(afterVoid.audit_events!.length + 3);
+  for (const table of Object.keys(afterVoid)) if (!voidChanged.has(table)) expect(afterLostVoid[table]).toEqual(afterVoid[table]);
+  stage("REPLAY"); const replayedVoid = await page.request.post(lostVoidPath, { headers: lostVoidHeaders, data: lostVoidBody });
+  expect(replayedVoid.status()).toBe(200); expect(await replayedVoid.json()).toEqual(lostVoidResult); expect(database()).toEqual(afterLostVoid);
+  expect(execFileSync("uv", ["run", "python", "-I", "-c", `
+import os, sqlite3, sys
+from pathlib import Path
+root = Path(os.environ['SPM_E2E_CREDENTIAL_ROOT']).resolve(strict=True)
+assert Path(os.environ['DATA_DIR']) == root / 'data'
+with sqlite3.connect(f"file:{root / 'data' / 'portfolio.sqlite3'}?mode=ro", uri=True) as db:
+    db.execute('PRAGMA query_only=ON')
+    for identifier in sys.argv[1:]:
+        rows = db.execute("SELECT amount_micro,booked_hkd_micro,fx_rate_hkd_e12,entry_role FROM cash_ledger_entries WHERE source_type='DIVIDEND_DIRECT_RECEIPT' AND source_id=? ORDER BY entry_role", (identifier,)).fetchall()
+        assert rows == [(6125000,47775000,7800000000000,'PRIMARY'),(-6125000,-47775000,7800000000000,'REVERSAL')]
+print('EXACT_DIRECT_REVERSALS_PASS')
+`, result.id, lostBody.receipt_id], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim()).toBe("EXACT_DIRECT_REVERSALS_PASS");
+  expect(database()).toEqual(afterLostVoid);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0); expect(await page.evaluate(() => caches.keys())).toEqual([]);
   stage("FINAL");
 });
