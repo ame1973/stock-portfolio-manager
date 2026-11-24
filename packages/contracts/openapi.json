@@ -9454,6 +9454,284 @@
         "title": "ReceiptVoidInputs",
         "type": "object"
       },
+      "ReceiptVoidWrite": {
+        "additionalProperties": false,
+        "description": "Explicit current scope and original cash pins for a recorded reversal.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "account_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Account Version",
+            "type": "string"
+          },
+          "broker_id": {
+            "format": "uuid",
+            "title": "Broker Id",
+            "type": "string"
+          },
+          "broker_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Broker Version",
+            "type": "string"
+          },
+          "cash_entry_id": {
+            "format": "uuid",
+            "title": "Cash Entry Id",
+            "type": "string"
+          },
+          "confirmation": {
+            "const": "VOID_RECORDED_CASH",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "entitlement_id": {
+            "format": "uuid",
+            "title": "Entitlement Id",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "expected_data_revision": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Expected Data Revision",
+            "type": "string"
+          },
+          "observed_revision_id": {
+            "format": "uuid",
+            "title": "Observed Revision Id",
+            "type": "string"
+          },
+          "observed_revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Observed Revision No",
+            "type": "integer"
+          },
+          "original_revision_id": {
+            "format": "uuid",
+            "title": "Original Revision Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "portfolio_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Portfolio Version",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "pattern": "^[^\\x00]+$",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "observed_revision_id",
+          "observed_revision_no",
+          "entitlement_id",
+          "original_revision_id",
+          "account_id",
+          "portfolio_id",
+          "broker_id",
+          "account_version",
+          "portfolio_version",
+          "broker_version",
+          "expected_data_revision",
+          "cash_entry_id",
+          "reason",
+          "confirmation"
+        ],
+        "title": "ReceiptVoidWrite",
+        "type": "object"
+      },
+      "ReceiptVoided": {
+        "additionalProperties": false,
+        "description": "Original void response, not proof of payment or a current-use grant.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "account_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Account Version",
+            "type": "string"
+          },
+          "audit_scope": {
+            "const": "RECORDED_AUDIT_MATCHED_ONLY",
+            "title": "Audit Scope",
+            "type": "string"
+          },
+          "broker_id": {
+            "format": "uuid",
+            "title": "Broker Id",
+            "type": "string"
+          },
+          "broker_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Broker Version",
+            "type": "string"
+          },
+          "cash_entry_id": {
+            "format": "uuid",
+            "title": "Cash Entry Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "entitlement_id": {
+            "format": "uuid",
+            "title": "Entitlement Id",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "observed_revision_id": {
+            "format": "uuid",
+            "title": "Observed Revision Id",
+            "type": "string"
+          },
+          "observed_revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Observed Revision No",
+            "type": "integer"
+          },
+          "origin_portfolio_id": {
+            "format": "uuid",
+            "title": "Origin Portfolio Id",
+            "type": "string"
+          },
+          "original_revision_id": {
+            "format": "uuid",
+            "title": "Original Revision Id",
+            "type": "string"
+          },
+          "payment_scope": {
+            "const": "OWNER_RECORDED_NOT_VERIFIED",
+            "title": "Payment Scope",
+            "type": "string"
+          },
+          "portfolio_data_revision": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Portfolio Data Revision",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "portfolio_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Portfolio Version",
+            "type": "string"
+          },
+          "reversal_entry_id": {
+            "format": "uuid",
+            "title": "Reversal Entry Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "HISTORICAL_RECEIPT_VOID_RESPONSE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "status": {
+            "const": "VOID",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "const": "2",
+            "title": "Version",
+            "type": "string"
+          },
+          "voided_at": {
+            "format": "date-time",
+            "title": "Voided At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "observed_revision_id",
+          "observed_revision_no",
+          "entitlement_id",
+          "original_revision_id",
+          "account_id",
+          "portfolio_id",
+          "origin_portfolio_id",
+          "broker_id",
+          "account_version",
+          "portfolio_version",
+          "broker_version",
+          "portfolio_data_revision",
+          "cash_entry_id",
+          "reversal_entry_id",
+          "status",
+          "version",
+          "created_at",
+          "voided_at",
+          "audit_scope",
+          "scope",
+          "history_completeness",
+          "current_use_scope",
+          "eligibility_scope",
+          "payment_scope"
+        ],
+        "title": "ReceiptVoided",
+        "type": "object"
+      },
       "RecordedReceipt": {
         "additionalProperties": false,
         "properties": {
@@ -22899,6 +23177,157 @@
           }
         ],
         "summary": "Create Receipt",
+        "tags": [
+          "Recorded dividend receipt writes"
+        ]
+      }
+    },
+    "/api/v1/dividends/receipts/{id}/void": {
+      "post": {
+        "operationId": "void_dividend_receipt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
+              "title": "If-Match",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptVoidWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptVoided"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Void Receipt",
         "tags": [
           "Recorded dividend receipt writes"
         ]

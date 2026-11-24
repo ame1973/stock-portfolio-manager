@@ -68,7 +68,7 @@ try {
                           : estimateWrites ? "PASS isolated estimate-write browser fixture: protected settings, historical replay and rejection race"
                             : projectionHistory ? "PASS isolated projection-history browser fixture: exact recorded values, missing inputs and no writes"
                               : receiptHistory ? "PASS isolated receipt-history browser fixture: original revisions, unverified cash links and no writes"
-                                : receiptWrite ? "PASS isolated receipt-write browser fixture: protected API and form, exact HKD identity, lost-response replay and scope fences"
+                                : receiptWrite ? "PASS isolated receipt-write browser fixture: protected creation/void APIs, form, HKD identity and lost-response replay"
                                 : projectionWrite ? "PASS isolated projection-write browser fixture: explicit pins, fence, historical replay and input races"
                               : "PASS isolated credential browser fixture: actual onboarding, reauthentication, import, rotation, clear, replay, exact private files and zero provider work");
 } catch {

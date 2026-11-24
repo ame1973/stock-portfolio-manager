@@ -778,6 +778,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/receipts/{id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Receipt */
+        post: operations["void_dividend_receipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/sync": {
         parameters: {
             query?: never;
@@ -5269,6 +5286,190 @@ export interface components {
             tax: string | null;
             /** Voided At */
             voided_at: string | null;
+        };
+        /**
+         * ReceiptVoidWrite
+         * @description Explicit current scope and original cash pins for a recorded reversal.
+         */
+        ReceiptVoidWrite: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Account Version */
+            account_version: string;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Cash Entry Id
+             * Format: uuid
+             */
+            cash_entry_id: string;
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "VOID_RECORDED_CASH";
+            /**
+             * Entitlement Id
+             * Format: uuid
+             */
+            entitlement_id: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Expected Data Revision */
+            expected_data_revision: string;
+            /**
+             * Observed Revision Id
+             * Format: uuid
+             */
+            observed_revision_id: string;
+            /** Observed Revision No */
+            observed_revision_no: number;
+            /**
+             * Original Revision Id
+             * Format: uuid
+             */
+            original_revision_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Portfolio Version */
+            portfolio_version: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * ReceiptVoided
+         * @description Original void response, not proof of payment or a current-use grant.
+         */
+        ReceiptVoided: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Account Version */
+            account_version: string;
+            /**
+             * Audit Scope
+             * @constant
+             */
+            audit_scope: "RECORDED_AUDIT_MATCHED_ONLY";
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Cash Entry Id
+             * Format: uuid
+             */
+            cash_entry_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Entitlement Id
+             * Format: uuid
+             */
+            entitlement_id: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Observed Revision Id
+             * Format: uuid
+             */
+            observed_revision_id: string;
+            /** Observed Revision No */
+            observed_revision_no: number;
+            /**
+             * Origin Portfolio Id
+             * Format: uuid
+             */
+            origin_portfolio_id: string;
+            /**
+             * Original Revision Id
+             * Format: uuid
+             */
+            original_revision_id: string;
+            /**
+             * Payment Scope
+             * @constant
+             */
+            payment_scope: "OWNER_RECORDED_NOT_VERIFIED";
+            /** Portfolio Data Revision */
+            portfolio_data_revision: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Portfolio Version */
+            portfolio_version: string;
+            /**
+             * Reversal Entry Id
+             * Format: uuid
+             */
+            reversal_entry_id: string;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "HISTORICAL_RECEIPT_VOID_RESPONSE_ONLY";
+            /**
+             * Status
+             * @constant
+             */
+            status: "VOID";
+            /**
+             * Version
+             * @constant
+             */
+            version: "2";
+            /**
+             * Voided At
+             * Format: date-time
+             */
+            voided_at: string;
         };
         /** RecordedReceipt */
         RecordedReceipt: {
@@ -12805,6 +13006,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceiptCreated"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    void_dividend_receipt: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiptVoidWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptVoided"];
                 };
             };
             /** @description Unauthorized */

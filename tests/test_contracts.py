@@ -258,6 +258,40 @@ def test_recorded_receipt_void_inputs_contract_retains_unverified_scope() -> Non
         assert schema["properties"][name]["const"] == value
 
 
+def test_recorded_receipt_void_contract_requires_explicit_scope_and_headers() -> None:
+    spec = create_app().openapi()
+    operation = spec["paths"]["/api/v1/dividends/receipts/{id}/void"]["post"]
+    assert operation["operationId"] == "void_dividend_receipt"
+    assert operation["security"] == [{"cookieAuth": []}]
+    headers = {item["name"]: item for item in operation["parameters"] if item["in"] == "header"}
+    for name in ("If-Match", "X-CSRF-Token", "Idempotency-Key"):
+        assert headers[name]["required"] is True
+    assert headers["If-Match"]["schema"]["pattern"] == r'^"[1-9][0-9]{0,18}"$'
+    schemas = spec["components"]["schemas"]
+    request = schemas["ReceiptVoidWrite"]
+    assert request["additionalProperties"] is False
+    assert set(request["required"]) == set(request["properties"])
+    assert request["properties"]["confirmation"]["const"] == "VOID_RECORDED_CASH"
+    for name in (
+        "account_version",
+        "portfolio_version",
+        "broker_version",
+        "expected_data_revision",
+    ):
+        assert request["properties"][name]["type"] == "string"
+    response = schemas["ReceiptVoided"]
+    assert response["additionalProperties"] is False
+    for name, value in (
+        ("status", "VOID"),
+        ("version", "2"),
+        ("audit_scope", "RECORDED_AUDIT_MATCHED_ONLY"),
+        ("scope", "HISTORICAL_RECEIPT_VOID_RESPONSE_ONLY"),
+        ("eligibility_scope", "NOT_ESTABLISHED"),
+        ("payment_scope", "OWNER_RECORDED_NOT_VERIFIED"),
+    ):
+        assert response["properties"][name]["const"] == value
+
+
 def test_recorded_receipt_creation_contract_requires_explicit_scope_and_cash() -> None:
     spec = create_app().openapi()
     operation = spec["paths"]["/api/v1/dividends/receipts"]["post"]

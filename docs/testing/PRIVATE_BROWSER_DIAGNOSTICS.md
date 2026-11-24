@@ -157,7 +157,7 @@ at three widths under ignored `.local/screenshots/`; it is not a failure artifac
 Never capture filled private forms. This is not a container, NAS, TLS or external
 ownership test.
 
-## Separate protected receipt-create browser fixture
+## Separate protected receipt create-and-void browser fixture
 
 ```sh
 npm run build
@@ -181,6 +181,13 @@ equal override records the explicit reason. The test compares synthetic database
 checks empty browser storage and Cache Storage. Bootstrap values, request data and database
 contents remain private under the same reporter and cleanup rules; no screenshots are taken.
 
+The fixture also obtains current void inputs and calls the protected void API over the real
+socket. Concurrent identical requests create one reversal with unchanged original amount and
+locked FX; another committed void response is deliberately dropped and replayed without further
+writes. Synthetic database-table comparisons verify the expected audit, idempotency and
+invalidation changes while preserving unrelated data. This is an API/socket test for void, not
+a receipt-void browser form.
+
 This is not payment or eligibility verification, nor a container, worker, live-provider, NAS
 or TLS acceptance claim. The application still cannot create the legacy entitlement prerequisite
-on a fresh installation, and it does not expose receipt void over HTTP.
+on a fresh installation, and the receipt-void browser workflow is not yet available.

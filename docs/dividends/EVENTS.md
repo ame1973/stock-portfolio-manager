@@ -1,10 +1,11 @@
 # Dividend event integrity foundation
 
-> **Current receipt capability:** the application has a protected receipt-create API and
-> browser form for an explicitly selected existing legacy entitlement. They record owner-supplied
-> cash without verifying payment or eligibility. New installations cannot yet create that
-> entitlement; protected receipt void and atomic event reconciliation remain unfinished. The
-> migration and internal-component descriptions below do not themselves install those operations.
+> **Current receipt capability:** the application has protected receipt-create and receipt-void
+> APIs, plus a browser creation form for an explicitly selected existing legacy entitlement.
+> They record or reverse owner-supplied cash without verifying payment or eligibility. New
+> installations cannot yet create that entitlement; the receipt-void browser workflow and atomic
+> event reconciliation remain unfinished. The migration and internal-component descriptions
+> below do not themselves install those operations.
 
 Migration `0016_dividend_event_controls` added database safeguards for an
 owner-controlled dividend workflow. It added two initially empty provenance tables
@@ -1650,8 +1651,8 @@ This isolated calculation neither authenticates a person nor establishes ownersh
 payment or eligibility; it creates no receipt, cash, audit, idempotency entry or grant.
 Migration `0027_receipt_unknowns` permits new receipt rows to retain unknown tax or fee
 as `null`; it does not backfill older zeros or itself introduce an authenticated writer.
-The separate protected receipt-create API is described below; protected void and atomic
-event reconciliation remain unfinished.
+The separate protected receipt-create and receipt-void APIs are described below; atomic event
+reconciliation remains unfinished.
 
 ## Receipt unknowns storage migration
 
@@ -1691,8 +1692,9 @@ that the FX calculation is correct, or that a payment or historical entitlement 
 The separate internal audit reader and creation primitive described below recheck or record
 origins without granting economic use. The protected receipt-create endpoint binds and
 revalidates HTTP intent, session, idempotency, cash, audit and invalidation atomically; do not
-insert origins or invoke internal writers on deployment data. Protected receipt void, economic
-authorization and atomic reconciliation remain unfinished.
+insert origins or invoke internal writers on deployment data. The separate protected void API
+also preserves the retained origin; economic authorization and atomic reconciliation remain
+unfinished.
 
 ## Internal retained-receipt link reader
 
@@ -1737,8 +1739,8 @@ audit fails the entire owned read instead of being omitted. A matching fingerpri
 historical ownership, receipt completeness, current source validity, entitlement, or a
 financial grant. This internal reader performs no writes and does not remove any event
 fence. The existing HTTP receipt-history API and browser continue to report audit status as
-unverified; they do not consume this reader. Protected receipt creation uses this audited
-history, but receipt void over HTTP and atomic reconciliation remain unfinished.
+unverified; they do not consume this reader. Protected receipt creation and void use this audited
+history, but atomic reconciliation remains unfinished.
 
 ## Internal recorded-receipt creation
 
@@ -1767,8 +1769,8 @@ data directly. It does not implement session, Origin, CSRF, reauthentication or 
 idempotency binding, confirm a payment, authorize eligibility or reconcile income. It does not
 create an entitlement: recorded projections use separate versioned storage, and no application
 entitlement writer is installed, so a new installation cannot yet create this prerequisite.
-Authenticated receipt void and event-revision reconciliation remain unfinished; the event
-fence is unchanged.
+The separate protected receipt-void API is described below; event-revision reconciliation
+remains unfinished and the event fence is unchanged.
 
 ## Internal audited-origin receipt void
 
@@ -1791,11 +1793,11 @@ An unchanged receipt/request/intent retry verifies the retained void and returns
 another reversal or invalidation. A different request, stale scope, unsupported legacy origin
 or inconsistent audit fails without partial financial changes.
 
-This is **not an authenticated HTTP route**; do not invoke it directly on deployment data.
-The matched history is not proof of the original actor, payment, historical ownership or
-eligibility, and the correction does not grant current economic use. Session, Origin, CSRF,
-reauthentication, HTTP idempotency and atomic event-revision reconciliation remain unfinished;
-the historical entitlement/projection event fence is not relaxed.
+This primitive is **not an authenticated HTTP route**; do not invoke it directly on deployment
+data. The separate protected route below adds session, Origin, CSRF, reauthentication and HTTP
+idempotency binding. The matched history is not proof of the original actor, payment, historical
+ownership or eligibility, and the correction does not grant current economic use. Atomic
+event-revision reconciliation remains unfinished; the historical event fence is not relaxed.
 
 ## Protected recorded-receipt input snapshot
 
@@ -1833,8 +1835,34 @@ data revision is returned exactly, not treated as permission to advance it.
 The response is `RECORDED_RECEIPT_VOID_INPUTS_ONLY` and `REVALIDATION_REQUIRED`: it does not
 verify payment, historical ownership or eligibility, and a matching audit is not proof of the
 original actor. It never changes the receipt, cash, FX, audit or invalidations. Missing or foreign
-scope returns 404; inconsistent history returns a fixed private 503. Protected HTTP void and its
-reauthenticated browser workflow are not yet installed.
+scope returns 404; inconsistent history returns a fixed private 503. The separate protected HTTP
+void below revalidates these pins; the reauthenticated browser void workflow is not yet installed.
+
+## Protected recorded-receipt void
+
+`POST /api/v1/dividends/receipts/{id}/void` reverses one matched, owner-recorded receipt. It
+requires an active owner session, matching Origin and CSRF, recent password reauthentication,
+an idempotency key and the observed **receipt version** in a quoted `If-Match` header. The body
+must explicitly provide the current event/physical revision, entitlement and original revision,
+account, portfolio, broker, their exact string versions and data revision, the original primary
+cash ID, a reason and `VOID_RECORDED_CASH`. The input snapshot is advisory; the server rechecks
+the actual scope and authenticated session in the serialized write transaction.
+
+A successful void preserves the original receipt amounts, tax, fee and locked FX and appends
+one exactly reversing cash entry. Receipt lifecycle, void and HTTP-intent audits, opening-cash
+rebase when needed, affected-portfolio invalidations and idempotency response commit together
+or roll back. If an account moved within the same owner, both its current and original portfolios
+are invalidated. Archived accounts remain eligible for correcting a matched receipt; a legacy
+receipt without a matched origin remains fenced rather than being adopted or guessed.
+
+An unchanged retry with the same key verifies the retained origin, exact reversal and original
+HTTP binding, then returns `HISTORICAL_RECEIPT_VOID_RESPONSE_ONLY` without writing again, even
+if the account was subsequently archived. A different intent with the same key conflicts. If a
+cached response has expired or is missing, an already-voided receipt conflicts rather than
+receiving another reversal or a new HTTP-intent claim. Read receipt and cash history before
+starting a separate operation. Neither the response nor matching audit verifies payment,
+historical ownership, original actor or eligible income. This endpoint does not reconcile
+revisions or relax the existing event fence; the browser void workflow remains unfinished.
 
 ## Protected recorded-receipt creation
 
@@ -1861,9 +1889,9 @@ receipt was later voided. The response is not a current lifecycle read. If the i
 entry has expired or disappeared, reusing the receipt UUID conflicts rather than posting a
 second cash entry; check the receipt history before deciding what to do. The response labels
 payment and eligibility as unverified. This operation does not verify actual bank payment,
-establish ownership or income, create an entitlement, provide a receipt-void endpoint or
-reconcile event revisions; the existing event fence remains in force. The browser form below
-can submit an explicitly selected existing entitlement.
+establish ownership or income, create an entitlement, void a receipt or reconcile event revisions;
+the existing event fence remains in force. The browser form below can submit an explicitly
+selected existing entitlement.
 
 ## Protected recorded-receipt history read API
 
@@ -2471,11 +2499,11 @@ rate. For example, an expected 10 USD with 6 USD received, later accepted as 11
 USD, leaves 6 received and 5 outstanding; the old and new expectations must not be
 added together.
 
-Protected receipt creation now inserts an actual receipt, its cash posting, audit,
-idempotency record and invalidation together against an existing entitlement. The internal
-void primitive inserts an exact reversal and matching audit before changing receipt state,
-but no protected void HTTP endpoint is installed. The SQL transition guard cannot prevent a
-direct writer from committing an isolated receipt or reversal without using that workflow.
+Protected receipt creation inserts an actual receipt, its cash posting, audit, idempotency record
+and invalidation together against an existing entitlement. Protected void invokes the internal
+primitive to append an exact reversal and matching audit before changing receipt state, with
+separate HTTP intent and idempotency binding. The SQL transition guard cannot prevent a direct
+writer from committing an isolated receipt or reversal without using that workflow.
 
 ## Verification
 

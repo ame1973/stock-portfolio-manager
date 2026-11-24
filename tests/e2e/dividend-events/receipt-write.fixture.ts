@@ -7,7 +7,7 @@ import { database, headers, stage, type Event } from "./helpers";
 
 type Schemas = components["schemas"];
 
-test("protected receipt API and form preserve exact scope and uncertain retries", async ({ page }) => {
+test("protected receipt APIs and form preserve exact scope and uncertain retries", async ({ page }) => {
   stage("SETUP"); const password = `synthetic-receipt-write-${randomUUID()}`;
   await page.goto("/");
   const bootstrap = execFileSync("uv", ["run", "spm-manage", "setup-token"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim().split(": ").at(-1)!;
@@ -210,6 +210,68 @@ test("protected receipt API and form preserve exact scope and uncertain retries"
   const origin = afterHkd.dividend_receipt_origins!.map(row => JSON.parse(row) as unknown[]).find(row => row[0] === hkdId);
   expect(origin?.[13]).toBe("IDENTITY"); expect(origin?.[14]).toBe("Synthetic identity override evidence.");
   for (const table of Object.keys(beforeHkd)) if (!changed.has(table)) expect(afterHkd[table]).toEqual(beforeHkd[table]);
+
+  function voidIntent(value: Schemas["ReceiptVoidInputs"]): Schemas["ReceiptVoidWrite"] {
+    expect(value.audit_scope).toBe("RECORDED_AUDIT_MATCHED_ONLY");
+    if (!value.cash_entry_id) throw new Error("SYNTHETIC_VOID_INPUT_MISSING");
+    return { event_id: value.event_id, observed_revision_id: value.observed_revision_id, observed_revision_no: value.observed_revision_no,
+      entitlement_id: value.entitlement_id, original_revision_id: value.original_revision_id, account_id: value.account_id,
+      portfolio_id: value.portfolio_id, broker_id: value.broker_id, account_version: value.account_version, portfolio_version: value.portfolio_version,
+      broker_version: value.broker_version, expected_data_revision: value.portfolio_data_revision, cash_entry_id: value.cash_entry_id,
+      reason: "Synthetic receipt reversal evidence.", confirmation: "VOID_RECORDED_CASH" };
+  }
+  async function voidInputs(id: string) {
+    const response = await page.request.get(`${base}/${id}/void-inputs`);
+    expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
+    return await response.json() as Schemas["ReceiptVoidInputs"];
+  }
+  const voidPath = (id: string) => `/api/v1/dividends/receipts/${id}/void`;
+  stage("COMMIT"); const voidScope = await voidInputs(result.id); const voidBody = voidIntent(voidScope);
+  const voidHeaders = await headers(page, 1); const beforeVoid = database();
+  const [voidLeft, voidRight] = await Promise.all([
+    page.request.post(voidPath(result.id), { headers: voidHeaders, data: voidBody }),
+    page.request.post(voidPath(result.id), { headers: voidHeaders, data: voidBody }),
+  ]);
+  expect(voidLeft.status()).toBe(200); expect(voidRight.status()).toBe(200); expect(voidLeft.headers()["cache-control"]).toBe("no-store");
+  const voided = await voidLeft.json() as Schemas["ReceiptVoided"];
+  expect(await voidRight.json()).toEqual(voided);
+  expect(voided).toMatchObject({ id: result.id, cash_entry_id: result.cash_entry_id, status: "VOID", version: "2",
+    scope: "HISTORICAL_RECEIPT_VOID_RESPONSE_ONLY", payment_scope: "OWNER_RECORDED_NOT_VERIFIED", eligibility_scope: "NOT_ESTABLISHED" });
+  const afterVoid = database(); const voidChanged = new Set(["audit_events", "cash_ledger_entries", "dividend_receipts", "idempotency_keys", "portfolios", "projection_invalidations"]);
+  expect(afterVoid.cash_ledger_entries).toHaveLength(beforeVoid.cash_ledger_entries!.length + 1);
+  expect(afterVoid.audit_events).toHaveLength(beforeVoid.audit_events!.length + 3);
+  expect(afterVoid.idempotency_keys).toHaveLength(beforeVoid.idempotency_keys!.length + 1);
+  expect(afterVoid.projection_invalidations).toHaveLength(beforeVoid.projection_invalidations!.length + 1);
+  for (const table of Object.keys(beforeVoid)) if (!voidChanged.has(table)) expect(afterVoid[table]).toEqual(beforeVoid[table]);
+  const journal = afterVoid.cash_ledger_entries!.map(row => JSON.parse(row) as unknown[]);
+  const primary = journal.find(row => row[0] === result.cash_entry_id)!; const reversal = journal.find(row => row[0] === voided.reversal_entry_id)!;
+  expect([primary[4], primary[5], primary[9], primary[14], primary[15]]).toEqual([6125000, 7800000000000, "PRIMARY", 47775000, null]);
+  expect([reversal[4], reversal[5], reversal[9], reversal[14], reversal[15]]).toEqual([-6125000, 7800000000000, "REVERSAL", -47775000, result.cash_entry_id]);
+
+  stage("LOST"); const lostVoidScope = await voidInputs(lostBody.receipt_id); const lostVoidBody = voidIntent(lostVoidScope);
+  const lostVoidHeaders = await headers(page, 1); const lostVoidPath = voidPath(lostBody.receipt_id); let lostVoidResult: Schemas["ReceiptVoided"] | null = null;
+  await page.route(`**${lostVoidPath}`, async route => {
+    const response = await route.fetch(); expect(response.status()).toBe(200);
+    lostVoidResult = await response.json() as Schemas["ReceiptVoided"]; await route.abort("failed");
+  });
+  const beforeLostVoid = database();
+  try {
+    const lost = await page.evaluate(async ({ url, intent, csrf, key }) => {
+      try {
+        await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf,
+          "Idempotency-Key": key, "If-Match": '"1"' }, body: JSON.stringify(intent) });
+        return false;
+      } catch { return true; }
+    }, { url: lostVoidPath, intent: lostVoidBody, csrf: lostVoidHeaders["X-CSRF-Token"], key: lostVoidHeaders["Idempotency-Key"] });
+    expect(lost).toBe(true);
+  } finally { await page.unroute(`**${lostVoidPath}`); }
+  expect(lostVoidResult).not.toBeNull(); const afterLostVoid = database();
+  expect(afterLostVoid.cash_ledger_entries).toHaveLength(beforeLostVoid.cash_ledger_entries!.length + 1);
+  expect(afterLostVoid.audit_events).toHaveLength(beforeLostVoid.audit_events!.length + 3);
+  for (const table of Object.keys(beforeLostVoid)) if (!voidChanged.has(table)) expect(afterLostVoid[table]).toEqual(beforeLostVoid[table]);
+  stage("REPLAY"); const recoveredVoid = await page.request.post(lostVoidPath, { headers: lostVoidHeaders, data: lostVoidBody });
+  expect(recoveredVoid.status()).toBe(200); expect(recoveredVoid.headers()["cache-control"]).toBe("no-store");
+  expect(await recoveredVoid.json()).toEqual(lostVoidResult); expect(database()).toEqual(afterLostVoid);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0); expect(await page.evaluate(() => caches.keys())).toEqual([]);
   stage("FINAL");
 });
