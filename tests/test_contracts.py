@@ -114,6 +114,10 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "post",
         ): "create_recorded_dividend_projection",
         (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/reconciliation",
+            "get",
+        ): "get_recorded_dividend_reconciliation",
+        (
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts",
             "get",
         ): "list_recorded_dividend_receipts",
@@ -208,6 +212,41 @@ def test_authentication_and_write_security_are_declared_in_the_contract() -> Non
             }
             for name in ("X-CSRF-Token", "Idempotency-Key"):
                 assert headers[name]["required"] is True
+
+
+def test_recorded_reconciliation_contract_preserves_exact_unverified_values() -> None:
+    spec = create_app().openapi()
+    path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/reconciliation"
+    operation = spec["paths"][path]["get"]
+    assert operation["operationId"] == "get_recorded_dividend_reconciliation"
+    assert operation["security"] == [{"cookieAuth": []}]
+    assert {item["name"] for item in operation["parameters"] if item["in"] == "path"} == {
+        "event_id",
+        "account_id",
+    }
+    schema = spec["components"]["schemas"]["RecordedReconciliation"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+    for name in (
+        "active_receipts",
+        "void_receipts",
+        "unverified_origins",
+        "unavailable_cash_links",
+    ):
+        assert schema["properties"][name]["type"] == "string"
+    for name in ("projection_no", "recorded_expected", "recorded_received", "recorded_outstanding"):
+        assert {value["type"] for value in schema["properties"][name]["anyOf"]} == {
+            "string",
+            "null",
+        }
+    for name, value in (
+        ("scope", "UNVERIFIED_RECORDED_RECONCILIATION_ONLY"),
+        ("history_completeness", "UNVERIFIED"),
+        ("current_use_scope", "REVALIDATION_REQUIRED"),
+        ("eligibility_scope", "NOT_ESTABLISHED"),
+        ("payment_scope", "OWNER_RECORDED_NOT_VERIFIED"),
+    ):
+        assert schema["properties"][name]["const"] == value
 
 
 def test_recorded_receipt_void_inputs_contract_retains_unverified_scope() -> None:

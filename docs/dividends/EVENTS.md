@@ -1937,9 +1937,33 @@ A sum or difference outside scaled INT64 fails the read rather than rounding or 
 The result is `UNVERIFIED_RECORDED_RECONCILIATION_ONLY`, with history completeness unverified,
 current use requiring revalidation, eligibility not established and payment owner-recorded but
 not verified. A matching event revision does not prove that a projection remains current after
-later account, ledger or setting changes. This internal reader is not an HTTP endpoint and does
-not authenticate callers, create an entitlement, establish income or provide atomic event
-reconciliation. The event-revision and missing-origin void fences remain unchanged.
+later account, ledger or setting changes. The internal reader does not authenticate callers,
+create an entitlement, establish income or provide atomic event reconciliation. The
+event-revision and missing-origin void fences remain unchanged.
+
+## Protected recorded-reconciliation read API
+
+`GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/reconciliation` requires an
+active owner session and returns a private `Cache-Control: no-store` comparison for that
+explicit event and account. It reads projection and receipt histories in one WAL snapshot;
+missing or foreign scopes return 404 and inconsistent or overflowing histories return a fixed
+private 503. No provider is contacted and no financial, audit, FX or invalidation data is written.
+
+The response includes the observed event revision, selected projection ID, exact string version
+and projection as-of date; recorded receipt counts are exact decimal strings. Expected, received
+and outstanding amounts are decimal strings or `null`, never binary floats. A missing or stale
+projection, missing cash link, empty receipt history and mixed currencies have distinct states.
+A recorded zero receipt is not the same as no receipt; reaching the pay date never creates one.
+Projection quality and comparison quality remain separate, including missing FX and review flags.
+The projection as-of date does not filter the receipt side, which includes all retained active
+receipts; neither a structural cash match nor a matched origin proves payment.
+
+This endpoint exposes `UNVERIFIED_RECORDED_RECONCILIATION_ONLY`, with history completeness
+`UNVERIFIED`, current use `REVALIDATION_REQUIRED`, eligibility `NOT_ESTABLISHED` and payment
+`OWNER_RECORDED_NOT_VERIFIED`. A matching event head does not prove the projection is current
+against later ledger, account or settings changes. The endpoint does not create an entitlement,
+authorize income or atomically reconcile event revisions; the existing event and missing-origin
+void fences remain in force.
 
 ## Protected recorded-receipt history read API
 

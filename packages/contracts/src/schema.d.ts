@@ -624,6 +624,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reconciliation */
+        get: operations["get_recorded_dividend_reconciliation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
         parameters: {
             query?: never;
@@ -5574,6 +5591,84 @@ export interface components {
             version: string;
             /** Voided At */
             voided_at: string | null;
+        };
+        /** RecordedReconciliation */
+        RecordedReconciliation: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Active Receipts */
+            active_receipts: string;
+            /** Comparison Quality */
+            comparison_quality: ("OK" | "MISSING_QUOTE" | "MISSING_FX" | "NOT_COMPUTABLE" | "NEEDS_REVIEW") | null;
+            /** Currency */
+            currency: ("HKD" | "USD") | null;
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Payment Scope
+             * @constant
+             */
+            payment_scope: "OWNER_RECORDED_NOT_VERIFIED";
+            /** Projection As Of */
+            projection_as_of: string | null;
+            /** Projection Id */
+            projection_id: string | null;
+            /** Projection No */
+            projection_no: string | null;
+            /** Projection Quality */
+            projection_quality: ("OK" | "MISSING_QUOTE" | "MISSING_FX" | "NOT_COMPUTABLE" | "NEEDS_REVIEW") | null;
+            /** Projection State */
+            projection_state: ("EXPECTED" | "NO_POSITION" | "NEEDS_REVIEW" | "CANCELLED") | null;
+            /** Recorded Expected */
+            recorded_expected: string | null;
+            /** Recorded Outstanding */
+            recorded_outstanding: string | null;
+            /** Recorded Received */
+            recorded_received: string | null;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "UNVERIFIED_RECORDED_RECONCILIATION_ONLY";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "NO_RECORDED_PROJECTION" | "STALE_RECORDED_PROJECTION" | "PROJECTION_NOT_COMPARABLE" | "CASH_LINK_UNAVAILABLE" | "NO_RECORDED_ACTIVE_RECEIPTS" | "CURRENCY_REVIEW" | "RECORDED_PARTIAL" | "RECORDED_RECEIVED" | "RECORDED_OVER_RECEIVED" | "RECORDED_NEEDS_REVIEW";
+            /** Unavailable Cash Links */
+            unavailable_cash_links: string;
+            /** Unverified Origins */
+            unverified_origins: string;
+            /** Void Receipts */
+            void_receipts: string;
         };
         /**
          * RecordedSourcePage
@@ -12191,6 +12286,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceiptVoidInputs"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_recorded_dividend_reconciliation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordedReconciliation"];
                 };
             };
             /** @description Unauthorized */

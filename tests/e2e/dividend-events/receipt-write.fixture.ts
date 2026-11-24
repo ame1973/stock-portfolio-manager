@@ -72,6 +72,15 @@ test("protected receipt APIs and form preserve exact scope and uncertain retries
   expect(after.audit_events).toHaveLength(before.audit_events!.length + 3);
   const changed = new Set(["dividend_receipts", "cash_ledger_entries", "dividend_receipt_origins", "projection_invalidations", "idempotency_keys", "audit_events", "portfolios"]);
   for (const table of Object.keys(before)) if (!changed.has(table)) expect(after[table]).toEqual(before[table]);
+  stage("COMPARE");
+  const comparison = await page.request.get(`/api/v1/dividends/events/${event.id}/accounts/${account.id}/reconciliation`);
+  expect(comparison.status()).toBe(200); expect(comparison.headers()["cache-control"]).toBe("no-store");
+  const comparisonResult = await comparison.json() as Schemas["RecordedReconciliation"];
+  expect(comparisonResult).toMatchObject({ event_id: event.id, revision_id: event.current_revision_id, account_id: account.id,
+    state: "NO_RECORDED_PROJECTION", active_receipts: "3", void_receipts: "1", unverified_origins: "3", unavailable_cash_links: "1",
+    recorded_expected: null, recorded_received: null, recorded_outstanding: null, history_completeness: "UNVERIFIED",
+    current_use_scope: "REVALIDATION_REQUIRED", eligibility_scope: "NOT_ESTABLISHED", payment_scope: "OWNER_RECORDED_NOT_VERIFIED" });
+  expect(database()).toEqual(after);
   stage("REAUTH");
   expect((await page.request.post("/api/v1/auth/reauth", { headers: await headers(page), data: { password } })).status()).toBe(200);
   const beforeReplay = database();

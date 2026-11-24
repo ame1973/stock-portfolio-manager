@@ -170,7 +170,10 @@ history only in that isolated fixture, then exercises the protected receipt-inpu
 APIs with actual session, CSRF, password reauthentication and no-store responses. Concurrent
 identical requests produce one recorded cash entry; a second committed response is deliberately
 dropped and its original response replays without writes. A new receipt with stale scope is
-rejected.
+rejected. A real-socket reconciliation read also checks the explicit no-projection state,
+active/void and unverified-origin counts, a missing cash link, `no-store` and unchanged synthetic
+database tables. This is an API request from Chromium's request context, not a reconciliation
+browser UI or proof of payment.
 
 The form workflow explicitly selects an old basis, checks keyboard focus, pending close guards
 and 360/768/1440 layouts, and reauthenticates through the real sheet. It drops a committed

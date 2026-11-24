@@ -9948,6 +9948,270 @@
         "title": "RecordedReceipt",
         "type": "object"
       },
+      "RecordedReconciliation": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "active_receipts": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Active Receipts",
+            "type": "string"
+          },
+          "comparison_quality": {
+            "anyOf": [
+              {
+                "enum": [
+                  "OK",
+                  "MISSING_QUOTE",
+                  "MISSING_FX",
+                  "NOT_COMPUTABLE",
+                  "NEEDS_REVIEW"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison Quality"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "enum": [
+                  "HKD",
+                  "USD"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "payment_scope": {
+            "const": "OWNER_RECORDED_NOT_VERIFIED",
+            "title": "Payment Scope",
+            "type": "string"
+          },
+          "projection_as_of": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projection As Of"
+          },
+          "projection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projection Id"
+          },
+          "projection_no": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "pattern": "^(0|[1-9][0-9]{0,18})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projection No"
+          },
+          "projection_quality": {
+            "anyOf": [
+              {
+                "enum": [
+                  "OK",
+                  "MISSING_QUOTE",
+                  "MISSING_FX",
+                  "NOT_COMPUTABLE",
+                  "NEEDS_REVIEW"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projection Quality"
+          },
+          "projection_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "EXPECTED",
+                  "NO_POSITION",
+                  "NEEDS_REVIEW",
+                  "CANCELLED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projection State"
+          },
+          "recorded_expected": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Expected"
+          },
+          "recorded_outstanding": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Outstanding"
+          },
+          "recorded_received": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Received"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "UNVERIFIED_RECORDED_RECONCILIATION_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "NO_RECORDED_PROJECTION",
+              "STALE_RECORDED_PROJECTION",
+              "PROJECTION_NOT_COMPARABLE",
+              "CASH_LINK_UNAVAILABLE",
+              "NO_RECORDED_ACTIVE_RECEIPTS",
+              "CURRENCY_REVIEW",
+              "RECORDED_PARTIAL",
+              "RECORDED_RECEIVED",
+              "RECORDED_OVER_RECEIVED",
+              "RECORDED_NEEDS_REVIEW"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "unavailable_cash_links": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Unavailable Cash Links",
+            "type": "string"
+          },
+          "unverified_origins": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Unverified Origins",
+            "type": "string"
+          },
+          "void_receipts": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Void Receipts",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "revision_id",
+          "revision_no",
+          "account_id",
+          "projection_id",
+          "projection_no",
+          "projection_as_of",
+          "projection_state",
+          "projection_quality",
+          "comparison_quality",
+          "currency",
+          "recorded_expected",
+          "recorded_received",
+          "recorded_outstanding",
+          "active_receipts",
+          "void_receipts",
+          "unverified_origins",
+          "unavailable_cash_links",
+          "state",
+          "scope",
+          "history_completeness",
+          "current_use_scope",
+          "eligibility_scope",
+          "payment_scope"
+        ],
+        "title": "RecordedReconciliation",
+        "type": "object"
+      },
       "RecordedSourcePage": {
         "additionalProperties": false,
         "description": "One completed immutable page, not an active probe or a complete-history assertion.",
@@ -21728,6 +21992,104 @@
         "summary": "Receipt Void Inputs",
         "tags": [
           "Recorded dividend receipt history"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/reconciliation": {
+      "get": {
+        "operationId": "get_recorded_dividend_reconciliation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordedReconciliation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Reconciliation",
+        "tags": [
+          "Recorded dividend reconciliation"
         ]
       }
     },
