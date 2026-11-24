@@ -1719,9 +1719,10 @@ The migration adds storage only; separate combined-history and protected direct-
 are described below. SQL does not prove authentication, payment, complete
 history, exact FX arithmetic or an atomic receipt/cash/audit transaction; a receipt row can
 exist without its origin if inserted outside a correctly implemented writer. Do not insert
-these rows or invoke internal financial operations on deployment data. The existing browser
-entry still requires a legacy entitlement; direct browser entry and void forms remain
-unavailable. Separate protected direct-create and direct-void APIs are described below.
+these rows or invoke internal financial operations on deployment data. The separate direct
+browser entry needs no legacy entitlement; the legacy entry retains its existing prerequisite.
+Protected direct-create and direct-void APIs are described below; a direct-void browser form
+remains unavailable.
 
 ## Internal direct-recorded-receipt history reader
 
@@ -1742,8 +1743,8 @@ Results are internal-only and explicitly `RECORDED_AUDIT_MATCHED_ONLY`,
 prove payment, historical ownership or completeness, or grant eligibility or current use.
 This reader does not combine the legacy and direct histories, expose HTTP, post or reverse
 cash, or remove event fences. The existing legacy receipt reader still fails closed when a
-scope contains direct records; protected creation, void and browser integration remain
-unfinished.
+scope contains direct records; separate protected create/void APIs and direct browser entry
+are described below. Direct-void browser integration remains unfinished.
 
 ## Internal combined receipt history
 
@@ -1803,8 +1804,8 @@ cash amount, currency, tax, fee, date or FX rate. The scope is
 `OWNER_RECORDED_NOT_VERIFIED`. Missing/foreign scopes return 404; an inconsistent or unsealed
 history returns a fixed private 503 instead of partial input pins. No facts, audits or caches
 are written and no provider is contacted. This endpoint does not write cash; the separate
-protected direct-create and direct-void operations below handle writes. Direct browser
-entry and void forms remain unavailable.
+protected direct-create and direct-void operations below handle writes. The direct browser
+entry explicitly reads this snapshot; a direct-void browser form remains unavailable.
 
 ## Internal direct recorded-cash creation
 
@@ -1832,8 +1833,9 @@ stale scope, malformed retained evidence and derived monetary overflow fail clos
 
 The protected direct-create API below adds session/Origin/CSRF, reauthentication and
 HTTP-intent/idempotency checks. Existing legacy-only receipt readers and writers remain fenced
-when direct records would be omitted. Direct-entry and void browser integration remain
-unfinished; neither this primitive nor an audit digest proves payment or eligibility.
+when direct records would be omitted. A separate direct-entry browser form uses that protected
+API; direct-void browser integration remains unfinished. Neither this primitive nor an audit
+digest proves payment or eligibility.
 
 ## Protected direct recorded-cash creation
 
@@ -1876,10 +1878,10 @@ response still says `ACTIVE`/`1` and is not the current lifecycle. Changed inten
 A new key or missing idempotency entry cannot adopt an existing internal or HTTP receipt,
 even with a reused request UUID; it cannot repost the stable receipt ID.
 
-New installations can use this API without legacy entitlement. The existing browser can read
-these records, but direct entry and direct-void forms are not yet available. Protected direct
-void is described below. Existing legacy routes and missing-origin/event fences are unchanged.
-This is recorded cash, not bank confirmation, income recognition or atomic reconciliation.
+New installations can use this API and the direct-entry browser form without legacy
+entitlement. A direct-void form is not yet available; protected direct void is described below.
+Existing legacy routes and missing-origin/event fences are unchanged. This is recorded cash,
+not bank confirmation, income recognition or atomic reconciliation.
 
 ## Protected direct recorded-receipt void input snapshot
 
@@ -1901,8 +1903,8 @@ itself is intact. Concurrent cash voids or account changes do not mix versions w
 The scope is `DIRECT_RECORDED_RECEIPT_VOID_INPUTS_ONLY`; nested history/current-use/eligibility/
 payment labels remain unverified and do not grant a correction. This read writes no reversal,
 audit, invalidation or idempotency record, contacts no provider and does not reprice original
-cash. The separate protected direct-void mutation below rechecks its own authority; direct
-entry/void forms remain unfinished. The existing
+cash. The separate protected direct-void mutation below rechecks its own authority; its
+browser form remains unfinished. The existing
 legacy-only and event financial-history fences are unchanged, including after a recorded void.
 
 ## Internal direct recorded-cash void
@@ -1924,8 +1926,8 @@ Same-request unchanged-intent replay is zero-write; conflicting reuse, changed s
 inconsistent audits, exhausted data revisions and partial writes fail closed. The event
 revision/rejection fence remains even after void. This is not payment verification, receipt
 history authentication, eligibility or atomic event reconciliation. The protected direct-void
-API below adds session/Origin/CSRF/reauthentication and idempotency binding. Direct browser
-entry/void forms remain unfinished; do not invoke internal financial writers on deployment data.
+API below adds session/Origin/CSRF/reauthentication and idempotency binding. The direct-void
+browser form remains unfinished; do not invoke internal financial writers on deployment data.
 
 ## Protected direct recorded-cash void
 
@@ -1962,7 +1964,7 @@ scope returns 409. Inconsistent retained history returns a fixed private 503.
 
 This does not remove the event revision/withdrawal/rejection fence, authorize a legacy
 missing-origin correction, establish payment/ownership/eligibility, or implement atomic event
-reconciliation. Direct entry/void browser forms remain unfinished; existing legacy workflows
+reconciliation. A direct-void browser form remains unfinished; existing legacy workflows
 and their mixed-store fences are unchanged.
 
 ## Internal retained-receipt link reader
@@ -2306,9 +2308,46 @@ The history read alone cannot verify payment or original authorization, calculat
 reconciliation or relax the event fence. A failed combined read never falls back to a partial
 legacy page. Direct receipts have no legacy void action. A page containing direct records
 also disables legacy void selection; the server still checks the entire scope even when a
-particular page has no direct records. Separate protected forms remain limited to legacy
-receipt creation or matched-origin legacy void after an explicit review of fresh inputs.
-No direct receipt creation or void form is available yet.
+particular page has no direct records. Separate direct and legacy receipt-creation forms and
+matched-origin legacy void require explicit review of fresh inputs. A direct-void browser
+form is not yet available.
+
+## Record a direct receipt in the browser
+
+From the event's account receipt records, explicitly select an account, expand **prepare direct
+receipt entry**, and review the private current-input snapshot. This is separate from legacy
+entitlement selection: no entitlement or projection is required or created, and no cash, currency
+or FX default is supplied. Changing the account, collapsing preparation or opening legacy
+preparation aborts the read. Failed, paused, mismatched, archived, withdrawn, rejected or exhausted
+scopes cannot start an entry; the server independently rechecks all pins before committing.
+
+Continue to the page-level **record direct dividend receipt** sheet and confirm the password.
+The sheet freezes exact event/account/portfolio/broker/data pins and survives event-card refresh.
+Enter the actual date, net amount and currency, explicitly choose known or unknown tax/fee/foreign
+FX, and provide a source for a supplied historical foreign rate. HKD uses identity. An optional
+actual-HKD amount requires its original reason and must exactly equal net HKD cash for an HKD
+receipt. Tax and fees are informational, not deducted twice. Amounts and returned calculations
+are checked with exact integer arithmetic; unknown FX never becomes zero.
+
+Two independent confirmations are required: the record does not prove payment, ownership,
+eligibility or income, and **any retained direct receipt, including after void, blocks event
+revision, withdrawal and rejection**. There is currently no supported fence-removal workflow.
+Saving adds real recorded cash; opening or refreshing preparation writes nothing.
+
+The unchanged uncertain intent retains one receipt UUID and idempotency key while the sheet
+stays open, including across reauthentication and equivalent decimal spelling. A changed intent
+rotates the key but retains the receipt UUID, preventing a previously committed receipt from being
+posted again under the same ID. Closing loses this memory-only retry identity: inspect receipt
+and cash history before opening another entry. A successful response may replay the historical
+creation, not the current lifecycle. The form validates the returned original pins, exact cash,
+FX/override reason and no-grant labels before reporting success; an inconsistent response remains
+uncertain rather than being treated as an uncommitted operation.
+
+Private inputs, preparation snapshots and retry identities remain in component memory, not
+browser storage or query/mutation caches. Busy sheets cannot close; field confirmations are
+keyboard-accessible. A new installation can use this direct path without legacy entitlement.
+It does not verify external payment or implement atomic event reconciliation; direct-void browser
+entry remains unavailable, and legacy forms and their mixed-store fences stay unchanged.
 
 ## Record a receipt in the browser
 

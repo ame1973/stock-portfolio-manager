@@ -198,7 +198,7 @@ This is not payment or eligibility verification, nor a container, worker, live-p
 or TLS acceptance claim. The application still cannot create the legacy entitlement prerequisite
 on a fresh installation.
 
-## Separate direct recorded-cash API fixture
+## Separate direct recorded-cash browser fixture
 
 ```sh
 npm run build
@@ -224,10 +224,21 @@ fenced rather than adopting direct receipts. The same real-socket fixture then c
 voids the first direct receipt once, rejects a stale second correction, deliberately drops the
 second committed void response and recovers it with an unchanged body/version/key. It checks
 exact original/reversal integers in a guarded read-only synthetic SQLite connection, expected
-atomic table changes and zero-write replay. Browser storage stays empty. This exercises direct
-creation/void over the real socket, history UI and read-only void inputs, not a direct entry or
-void form, external payment,
-eligibility, deployment, NAS or TLS. The pinned private reporter, exclusive temporary root,
+atomic table changes and zero-write replay.
+
+The same built SPA then opens the actual direct-entry form after explicit account selection and
+a fresh no-store input read. It checks initially blank currency/amount, no fabricated entitlement,
+keyboard selection, close-button focus and 360/768/1440 layouts, then uses the real password
+form. It records HKD identity cash with an explicit actual-HKD value/reason, unknown tax, zero
+fee and separate no-grant/event-fence confirmations. A committed response is held while close
+and Escape are blocked, then dropped. Equivalent-decimal retry keeps the receipt UUID and key,
+returns the original response and leaves every table unchanged. A second form freezes fresh
+inputs before a protected account edit; its stale submission is rejected with retained input
+and no additional writes. Browser storage stays empty.
+
+This exercises direct creation through a real form, direct create/void over the real socket,
+history UI and read-only void inputs, not a direct-void form, external payment, eligibility,
+deployment, NAS or TLS. The pinned private reporter, exclusive temporary root,
 no-debug/no-recording rules and fixed safe output remain mandatory. CI defines this fixture;
 that definition is not evidence of a hosted CI run.
 

@@ -4,6 +4,8 @@ import { Button } from "../../components/ui/button";
 import { checked, failureMessage } from "../../lib/api";
 import { usePageState } from "../settings/data";
 import { DividendAccountPicker } from "./DividendEstimatePanel";
+import { DividendDirectReceiptPreparation } from "./DividendDirectReceiptPreparation";
+import type { DirectReceiptTarget } from "./direct-receipt-input-validation";
 import { DividendReceiptPreparation } from "./DividendReceiptPreparation";
 import { DividendReceiptVoidPreparation } from "./DividendReceiptVoidPreparation";
 import { DividendReconciliationPanel } from "./DividendReconciliationPanel";
@@ -34,7 +36,7 @@ function Record({ value, onSelect, disabled, selected }: { value: Receipt; onSel
     <p>{cashLabels[value.cash_scope]}</p>
     <p className="break-all">原事件修訂 {value.revision_no}／{value.revision_id}；{value.entitlement_id !== null && <>原應收識別碼 {value.entitlement_id}；</>}收款識別碼 {value.id}；版本 {value.version}。</p>
     <p>來源：{value.source === "MANUAL" ? "人工記錄" : "匯入紀錄"}；記錄時間 {value.created_at}；作廢時間 {value.voided_at ?? "未記錄"}。</p>
-    {value.receipt_basis === "DIRECT_EVENT_ACCOUNT" && <p className="text-secondary">直接收款尚未開放作廢操作；不能使用舊式收款流程。</p>}
+    {value.receipt_basis === "DIRECT_EVENT_ACCOUNT" && <p className="text-secondary">直接收款尚未開放瀏覽器作廢操作；不能使用舊式收款流程。</p>}
     {onSelect && value.receipt_basis === "LEGACY_ENTITLEMENT" && <div><Button type="button" variant="outline" aria-pressed={selected} disabled={disabled || value.status !== "ACTIVE"}
       onClick={() => onSelect(structuredClone(value))}>核對作廢收款 {value.id}</Button></div>}
   </li>;
@@ -86,21 +88,24 @@ function History({ event, account, onVoid, disabled }: { event: Event; account: 
 }
 
 export function DividendReceiptPanel({ event: observed, onWrite, onVoid, writeDisabled = false, refresh = 0, comparisonRefresh = 0 }: {
-  event: Event; onWrite?: (target: ReceiptTarget) => void; onVoid?: (target: ReceiptVoidTarget) => void; writeDisabled?: boolean; refresh?: number; comparisonRefresh?: number;
+  event: Event; onWrite?: (target: ReceiptTarget | DirectReceiptTarget) => void; onVoid?: (target: ReceiptVoidTarget) => void; writeDisabled?: boolean; refresh?: number; comparisonRefresh?: number;
 }) {
   const [event] = useState(() => structuredClone(observed));
-  const [account, setAccount] = useState<Account | null>(null); const [preparing, setPreparing] = useState(false);
+  const [account, setAccount] = useState<Account | null>(null); const [preparing, setPreparing] = useState<"legacy" | "direct" | null>(null);
   const [comparing, setComparing] = useState(false);
   if (!validEstimateEvent(event)) return <p role="alert" className="text-sm text-danger">事件版本無法安全核對；請重新載入後再查閱收款紀錄。</p>;
   return <section aria-label="已記錄股息收款" className="grid min-w-0 gap-4 rounded-md border border-border p-4">
     <h3 className="font-semibold">已記錄股息收款</h3>
     <p className="break-all text-sm leading-7 text-secondary">固定事件 {event.id}；版本 {event.version}；實體修訂 {event.current_revision_id}。查閱不會建立或作廢任何紀錄。</p>
-    <DividendAccountPicker purpose="收款紀錄" selected={account} onSelect={value => { setAccount(value); setComparing(false); }} />
+    <DividendAccountPicker purpose="收款紀錄" selected={account} onSelect={value => { setAccount(value); setComparing(false); setPreparing(null); }} />
     {account && <><p className="break-all text-sm">所選帳戶：{account.name}；{account.id}。</p>
       <History key={`receipt-history:${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onVoid={onVoid} disabled={writeDisabled} />
       <div><Button type="button" variant="outline" aria-expanded={comparing} onClick={() => setComparing(value => !value)}>{comparing ? "收合金額比較" : "比較已記錄金額"}</Button></div>
       {comparing && <DividendReconciliationPanel key={`reconciliation:${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}:${comparisonRefresh}`} event={event} account={account} />}
-      {onWrite && <div><Button type="button" variant="outline" aria-expanded={preparing} onClick={() => setPreparing(value => !value)}>{preparing ? "收合收款寫入準備" : "準備記錄收款"}</Button></div>}
-      {preparing && onWrite && <DividendReceiptPreparation key={`receipt-preparation:${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onWrite={onWrite} disabled={writeDisabled} />}</>}
+      {onWrite && <><p className="text-sm leading-7 text-secondary">直接記錄不需要舊式應收；如需沿用現有舊式應收關聯，請另外展開舊式收款準備。兩者都不是付款或資格證明。</p>
+        <div className="flex flex-wrap gap-3"><Button type="button" variant="outline" aria-expanded={preparing === "direct"} disabled={writeDisabled} onClick={() => setPreparing(value => value === "direct" ? null : "direct")}>{preparing === "direct" ? "收合直接收款準備" : "準備直接記錄收款"}</Button>
+          <Button type="button" variant="outline" aria-expanded={preparing === "legacy"} disabled={writeDisabled} onClick={() => setPreparing(value => value === "legacy" ? null : "legacy")}>{preparing === "legacy" ? "收合收款寫入準備" : "準備記錄收款"}</Button></div></>}
+      {preparing === "direct" && onWrite && <DividendDirectReceiptPreparation key={`direct-receipt-preparation:${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onWrite={onWrite} disabled={writeDisabled} />}
+      {preparing === "legacy" && onWrite && <DividendReceiptPreparation key={`receipt-preparation:${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onWrite={onWrite} disabled={writeDisabled} />}</>}
   </section>;
 }

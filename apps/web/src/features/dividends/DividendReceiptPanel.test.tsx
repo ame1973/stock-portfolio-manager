@@ -176,6 +176,30 @@ describe("recorded dividend receipt history", () => {
     expect(screen.queryByText(/原事件修訂 2/)).not.toBeInTheDocument();
   });
 
+  it.each(["account", "legacy", "collapse"] as const)("aborts direct preparation on %s selection without implicitly reading another scope", async change => {
+    const other = { ...account, id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", name: "Synthetic other account" };
+    const inputPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/inputs";
+    let signal!: AbortSignal; let deliver!: () => void;
+    const get = vi.spyOn(api, "GET").mockImplementation(async (request, options) => {
+      if (request === "/api/v1/accounts") return reply({ items: [account, other], next_cursor: null });
+      if (request === path) return reply({ items: [], next_cursor: null });
+      if (request === inputPath) return new Promise(resolve => {
+        signal = (options as { signal: AbortSignal }).signal; deliver = () => resolve(reply({}));
+      });
+      return reply({ items: [], next_cursor: null });
+    });
+    const onWrite = vi.fn(); render(<DividendReceiptPanel event={event} onWrite={onWrite} />);
+    await selectAccount(); fireEvent.click(screen.getByRole("button", { name: "準備直接記錄收款" }));
+    await waitFor(() => expect(deliver).toBeTypeOf("function"));
+    const name = change === "account" ? `選擇收款紀錄帳戶 ${other.name}` : change === "legacy" ? "準備記錄收款" : "收合直接收款準備";
+    fireEvent.click(screen.getByRole("button", { name }));
+    await waitFor(() => expect(signal.aborted).toBe(true)); await act(async () => deliver());
+    expect(screen.queryByRole("region", { name: "核對直接收款輸入" })).not.toBeInTheDocument();
+    expect((get.mock.calls as [string, unknown][]).filter(([request]) => request === inputPath)).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "核對後記錄直接收款" })).not.toBeInTheDocument();
+    expect(onWrite).not.toHaveBeenCalled();
+  });
+
   it("keeps an earlier page visibly stale when refresh fails", async () => {
     const get = reads({ items: [receipt], next_cursor: "next" }); renderPanel(); await selectAccount();
     expect(await screen.findByText(/原事件修訂 2/)).toBeVisible();

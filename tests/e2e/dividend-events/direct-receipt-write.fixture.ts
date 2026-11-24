@@ -205,6 +205,90 @@ with sqlite3.connect(f"file:{root / 'data' / 'portfolio.sqlite3'}?mode=ro", uri=
 print('EXACT_DIRECT_REVERSALS_PASS')
 `, result.id, lostBody.receipt_id], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim()).toBe("EXACT_DIRECT_REVERSALS_PASS");
   expect(database()).toEqual(afterLostVoid);
+  let formInputs: Schemas["DirectReceiptInputs"] | null = null;
+  async function openDirectForm() {
+    await page.goto("/dividends");
+    const article = page.getByRole("article", { name: `股息事件 ${event.id}` });
+    if (page.viewportSize()!.width >= 1024) await page.locator(`tr[data-record-id="${event.id}"]`).getByRole("button", { name: "查看原值與操作" }).click();
+    else await article.getByRole("button", { name: "查看事件與拒絕狀態" }).click();
+    await article.getByRole("button", { name: "查看帳戶收款紀錄" }).click();
+    const panel = article.getByRole("region", { name: "已記錄股息收款" });
+    const choose = panel.getByRole("button", { name: "選擇收款紀錄帳戶 Synthetic direct receipt account" });
+    await choose.focus(); await page.keyboard.press("Enter");
+    const read = page.waitForResponse(response => new URL(response.url()).pathname === `${base}/inputs` && response.request().method() === "GET");
+    await panel.getByRole("button", { name: "準備直接記錄收款", exact: true }).click();
+    const response = await read; expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
+    formInputs = await response.json() as Schemas["DirectReceiptInputs"];
+    await panel.getByRole("button", { name: "核對後記錄直接收款" }).click();
+    return page.getByRole("dialog", { name: "記錄直接股息收款" });
+  }
+  async function fillDirectForm() {
+    const form = page.getByRole("form", { name: "記錄直接股息收款" });
+    await form.getByLabel("實收日期").fill("2026-11-04"); await form.getByLabel("實收幣別").selectOption("HKD");
+    await form.getByLabel("實收淨額").fill("6.125"); await form.getByLabel("實際稅額").selectOption("UNKNOWN");
+    await form.getByLabel("實際費用").selectOption("PROVIDED"); await form.getByLabel("已記錄費用").fill("0");
+    await form.getByRole("checkbox", { name: /另行指定有依據的實際港幣金額/ }).check();
+    await form.getByLabel("實際港幣金額", { exact: true }).fill("6.125");
+    await form.getByLabel("實際港幣金額依據").fill("Synthetic direct form identity evidence.");
+    await form.getByLabel("收款依據").fill("Synthetic direct form recorded cash without entitlement.");
+    await form.getByRole("checkbox", { name: /我明白這只是擁有人記錄的現金/ }).check();
+    await form.getByRole("checkbox", { name: /我明白直接收款會持續阻擋/ }).check();
+    return form;
+  }
+  stage("OPEN"); let sheet = await openDirectForm();
+  await expect(sheet.getByRole("button", { name: "關閉編輯" })).toBeFocused();
+  await expect(sheet.getByLabel("實收幣別")).toHaveValue(""); await expect(sheet.getByLabel("實收淨額")).toHaveValue("");
+  await expect(sheet).toContainText("不需要或建立舊應收"); await expect(sheet).toContainText("目前尚無支援的解除流程");
+  stage("RESIZE");
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 }); const box = (await sheet.boundingBox())!;
+    expect(box.width).toBeLessThanOrEqual(width); expect(box.height).toBeLessThanOrEqual(900);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  stage("PASSWORD"); const passwordForm = sheet.getByRole("form", { name: "重新驗證" });
+  await passwordForm.getByLabel("目前密碼").fill(password); await passwordForm.getByRole("button", { name: "確認目前密碼" }).click();
+  await expect(passwordForm.getByRole("status")).toContainText("已重新驗證");
+  let form = await fillDirectForm(); const beforeForm = database();
+  let releaseForm!: () => void; let committedForm!: () => void;
+  const heldForm = new Promise<void>(resolve => { releaseForm = resolve; }); const savedForm = new Promise<void>(resolve => { committedForm = resolve; });
+  let attempts = 0; let originalKey = ""; let replayKey = ""; let originalId = ""; let uiResult: Schemas["DirectReceiptCreated"] | null = null;
+  await page.route(routePath, async route => {
+    attempts++; const sent = JSON.parse(route.request().postData()!) as Schemas["DirectReceiptCreate"];
+    expect(sent).not.toHaveProperty("entitlement_id"); expect(sent.confirm_revision_fence).toBe(true);
+    expect(sent).toMatchObject({ event_id: event.id, revision_id: event.current_revision_id, account_id: account.id, currency: "HKD",
+      tax: null, fee: "0", fx_rate_hkd: null, fx_source: null, actual_hkd: "6.125", actual_hkd_reason: "Synthetic direct form identity evidence.",
+      expected_data_revision: formInputs!.portfolio_data_revision });
+    const response = await route.fetch(); expect(response.status()).toBe(201); expect(response.headers()["cache-control"]).toBe("no-store");
+    if (attempts === 1) {
+      originalKey = route.request().headers()["idempotency-key"]!; originalId = sent.receipt_id;
+      uiResult = await response.json() as Schemas["DirectReceiptCreated"]; committedForm(); await heldForm; await route.abort("failed");
+    } else {
+      replayKey = route.request().headers()["idempotency-key"]!; expect(sent.receipt_id).toBe(originalId);
+      expect(await response.json()).toEqual(uiResult); await route.fulfill({ response });
+    }
+  });
+  stage("COMMIT_HELD");
+  try {
+    await form.getByRole("button", { name: "記錄收款", exact: true }).click(); await savedForm;
+    await page.keyboard.press("Escape"); await sheet.getByRole("button", { name: "關閉編輯" }).click(); await expect(sheet).toBeVisible();
+  } finally { releaseForm(); }
+  stage("LOST"); await expect(form.getByRole("alert")).toContainText("網絡連線中斷"); const afterForm = database();
+  expect(afterForm.dividend_direct_receipts).toHaveLength(beforeForm.dividend_direct_receipts!.length + 1);
+  expect(afterForm.cash_ledger_entries).toHaveLength(beforeForm.cash_ledger_entries!.length + 1);
+  expect(afterForm.audit_events).toHaveLength(beforeForm.audit_events!.length + 3);
+  for (const table of Object.keys(beforeForm)) if (!changed.has(table)) expect(afterForm[table]).toEqual(beforeForm[table]);
+  expect(uiResult).toMatchObject({ currency: "HKD", fx_rate_hkd: "1.000000000000", fx_source: "IDENTITY", received_amount: "6.125000",
+    received_hkd: "6.125000", actual_hkd: "6.125000", actual_hkd_reason: "Synthetic direct form identity evidence." });
+  stage("REPLAY"); await form.getByLabel("實收淨額").fill("006.125000"); await form.getByRole("button", { name: "記錄收款", exact: true }).click();
+  await expect(sheet).toHaveCount(0); await page.unroute(routePath);
+  expect(attempts).toBe(2); expect(replayKey).toBe(originalKey); expect(database()).toEqual(afterForm);
+  await expect(page.getByRole("status").filter({ hasText: "伺服器已回覆收款記錄" })).toBeVisible();
+  stage("SECOND"); sheet = await openDirectForm(); form = await fillDirectForm();
+  const renamed = await page.request.patch(`/api/v1/accounts/${account.id}`, { headers: await headers(page, 1), data: { name: "Synthetic renamed direct receipt account" } });
+  expect(renamed.status()).toBe(200); const beforeRace = database();
+  stage("COMPARE"); await form.getByRole("button", { name: "記錄收款", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("組合資料已變更"); await expect(form.getByLabel("實收淨額")).toHaveValue("6.125");
+  expect(database()).toEqual(beforeRace); await sheet.getByRole("button", { name: "關閉編輯" }).click();
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0); expect(await page.evaluate(() => caches.keys())).toEqual([]);
   stage("FINAL");
 });

@@ -133,6 +133,21 @@ describe("explicit direct receipt entry form", () => {
     fireEvent.change(screen.getByLabelText("實收淨額"), { target: { value } }); submit();
     expect(await screen.findByText(/請輸入可沖銷的精確金額/)).toBeVisible(); expect(post).not.toHaveBeenCalled();
   });
+  it.each([
+    ["DIVIDEND_DIRECT_RECEIPT_SCOPE_CHANGED", "組合資料已變更"],
+    ["DIVIDEND_DIRECT_RECEIPT_ACCOUNT_ARCHIVED", "帳戶已封存"],
+    ["DIVIDEND_DIRECT_RECEIPT_EVENT_WITHDRAWN", "事件已撤回"],
+    ["DIVIDEND_DIRECT_RECEIPT_CONFLICT", "識別碼已使用"],
+    ["DIVIDEND_DIRECT_RECEIPT_DATE_INVALID", "日期不能在未來"],
+    ["DIVIDEND_DIRECT_RECEIPT_HISTORY_UNAVAILABLE", "直接收款歷史無法安全核對"],
+    ["INVALID_DIRECT_RECEIPT_SCOPE", "直接收款範圍不符"],
+  ])("retains inputs on private server failure %s", async (code, message) => {
+    vi.spyOn(api, "POST").mockResolvedValue({ error: { code, message: "synthetic-private-server-diagnostic", request_id: "synthetic", details: {} }, response: new Response(null, { status: 409 }) });
+    const { onSaved } = show(); fill(); submit();
+    expect(await screen.findByRole("alert")).toHaveTextContent(message!);
+    expect(screen.queryByText(/synthetic-private-server-diagnostic/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("實收淨額")).toHaveValue("6.125"); expect(onSaved).not.toHaveBeenCalled();
+  });
   it("fails closed on a rejected frozen direct scope", () => {
     const post = vi.spyOn(api, "POST"); show({ ...target, inputs: { ...target.inputs, rejection_state: "REJECTED", rejection_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } });
     expect(screen.getByRole("alert")).toHaveTextContent(/固定收款範圍無法安全核對/); expect(post).not.toHaveBeenCalled();

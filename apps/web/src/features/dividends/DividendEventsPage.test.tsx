@@ -71,6 +71,36 @@ describe("dividend event workspace", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("opens direct cash only after fresh explicit account inputs and keeps the sheet outside card refresh", async () => {
+    const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/inputs";
+    const inputs: Schemas["DirectReceiptInputs"] = { event_id: event.id, revision_id: event.current_revision_id, revision_no: event.version, workflow_status: event.workflow_status,
+      account_id: receiptAccount.id, portfolio_id: receiptAccount.portfolio_id, broker_id: receiptAccount.broker_id, account_status: "ACTIVE",
+      account_version: "9007199254740993", portfolio_version: "1", broker_version: "1", portfolio_data_revision: "0",
+      rejection_state: "NOT_REJECTED", rejection_id: null, receipt_basis: "DIRECT_EVENT_ACCOUNT", scope: "DIRECT_RECORDED_RECEIPT_INPUTS_ONLY",
+      history_completeness: "UNVERIFIED", current_use_scope: "REVALIDATION_REQUIRED", eligibility_scope: "NOT_ESTABLISHED", payment_scope: "OWNER_RECORDED_NOT_VERIFIED" };
+    const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null },
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts": empty, [path]: inputs });
+    const post = vi.spyOn(api, "POST"); const cache = renderPage(); await openEvent();
+    fireEvent.click(screen.getByRole("button", { name: "查看帳戶收款紀錄" }));
+    expect(screen.queryByRole("button", { name: "準備直接記錄收款" })).not.toBeInTheDocument();
+    expect(get).not.toHaveBeenCalledWith(path, expect.anything());
+    fireEvent.click(await screen.findByRole("button", { name: `選擇收款紀錄帳戶 ${receiptAccount.name}` }));
+    expect(get).not.toHaveBeenCalledWith(path, expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "準備直接記錄收款" }));
+    const open = await screen.findByRole("button", { name: "核對後記錄直接收款" }); await waitFor(() => expect(open).toBeEnabled()); fireEvent.click(open);
+    const dialog = await screen.findByRole("dialog", { name: "記錄直接股息收款" });
+    expect(within(dialog).getByRole("form", { name: "重新驗證" })).toBeVisible();
+    expect(within(dialog).getByRole("form", { name: "記錄直接股息收款" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "關閉編輯" })).toHaveFocus();
+    expect(within(dialog).getByRole("checkbox", { name: /我明白直接收款會持續阻擋/ })).not.toBeChecked();
+    fireEvent.change(within(dialog).getByLabelText("收款依據"), { target: { value: "Synthetic pending direct cash reason." } });
+    await act(async () => cache.setQueriesData({ queryKey: ["dividends", "events"] }, { items: [{ ...event, version: 3,
+      current_revision_id: "88888888-8888-4888-8888-888888888888" }], next_cursor: null }));
+    expect(within(dialog).getByLabelText("收款依據")).toHaveValue("Synthetic pending direct cash reason.");
+    expect(dialog).toHaveTextContent(inputs.revision_id); expect(dialog).toHaveTextContent(inputs.account_version); expect(post).not.toHaveBeenCalled();
+    expect(cache.getQueryCache().getAll().some(query => JSON.stringify(query.queryKey).includes("direct-receipt-inputs"))).toBe(false);
+  });
+
   it("opens a reauthenticated void sheet outside a refreshed event card", async () => {
     const history = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts";
     const voidPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs";
