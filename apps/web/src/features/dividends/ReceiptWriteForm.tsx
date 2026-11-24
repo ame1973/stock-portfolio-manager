@@ -8,6 +8,8 @@ import { checked, mutationHeaders } from "../../lib/api";
 import { EditorCloseContext } from "../../lib/editor-lifecycle";
 import { date, fx, money } from "../ledger/inputs";
 import { useFormAction } from "../settings/data";
+import { validDirectReceiptTarget, type DirectReceiptTarget } from "./direct-receipt-input-validation";
+import { checkedDirectReceiptSaved } from "./direct-receipt-write-validation";
 import { normalizeDecisionText, validDecisionText } from "./event-validation";
 import { fxIntent } from "./projection-input-validation";
 import { checkedReceiptSaved, receiptMoneyIntent, reversibleMoney, validReceiptTarget, type ReceiptTarget } from "./receipt-input-validation";
@@ -17,7 +19,7 @@ const text = z.string().transform(normalizeDecisionText);
 const schema = z.object({ receivedDate: date, currency: z.enum(["", "HKD", "USD"]), received: z.string(),
   taxMode: z.enum(["", "UNKNOWN", "PROVIDED"]), tax: z.string(), feeMode: z.enum(["", "UNKNOWN", "PROVIDED"]), fee: z.string(),
   fxMode: z.enum(["", "UNKNOWN", "PROVIDED"]), fxRate: z.string(), fxSource: text, override: z.boolean(), actualHkd: z.string(), actualReason: text,
-  note: z.string(), reason: text, acknowledged: z.boolean() });
+  note: z.string(), reason: text, acknowledged: z.boolean(), revisionFence: z.boolean() });
 const formSchema = schema.superRefine((value, context) => {
   if (!value.currency) context.addIssue({ code: "custom", path: ["currency"], message: "請明確選擇實收幣別。" });
   if (!reversibleMoney.safeParse(value.received).success) context.addIssue({ code: "custom", path: ["received"], message: "請輸入可沖銷的精確金額，最多 6 位小數。" });
@@ -50,23 +52,31 @@ const formSchema = schema.superRefine((value, context) => {
   if (!value.acknowledged) context.addIssue({ code: "custom", path: ["acknowledged"], message: "請確認收款記錄不證明付款或資格。" });
 });
 
+function validTarget(value: ReceiptTarget | DirectReceiptTarget): boolean {
+  try { return "basis" in value ? validReceiptTarget(value) : validDirectReceiptTarget(value); }
+  catch { return false; }
+}
+
 export function ReceiptWriteForm({ target: observed, onSaved, onCancel, disabled = false, onPendingChange }: {
-  target: ReceiptTarget; onSaved: (record: Schemas["ReceiptCreated"]) => void; onCancel: () => void; disabled?: boolean; onPendingChange?: (pending: boolean) => void;
+  target: ReceiptTarget | DirectReceiptTarget; onSaved: (record: Schemas["ReceiptCreated"] | Schemas["DirectReceiptCreated"]) => void;
+  onCancel: () => void; disabled?: boolean; onPendingChange?: (pending: boolean) => void;
 }) {
   const [target] = useState(() => structuredClone(observed)); const [receiptId] = useState(() => crypto.randomUUID());
+  const direct = target !== null && typeof target === "object" && !("basis" in target);
   const action = useFormAction(onSaved); const submitted = useRef<string | null>(null);
-  const close = useContext(EditorCloseContext); const confirmationId = useId();
+  const close = useContext(EditorCloseContext); const confirmationId = useId(); const fenceId = useId();
   const { register, control, setValue, handleSubmit, formState: { errors, isSubmitting } } = useForm<z.infer<typeof schema>>({
-    resolver: zodResolver(formSchema), defaultValues: { receivedDate: "", currency: "", received: "", taxMode: "", tax: "", feeMode: "", fee: "",
-      fxMode: "", fxRate: "", fxSource: "", override: false, actualHkd: "", actualReason: "", note: "", reason: "", acknowledged: false },
+    resolver: zodResolver(formSchema.refine(value => !direct || value.revisionFence, { path: ["revisionFence"], message: "請另行確認事件修訂限制；作廢收款也不會解除此限制。" })),
+    defaultValues: { receivedDate: "", currency: "", received: "", taxMode: "", tax: "", feeMode: "", fee: "",
+      fxMode: "", fxRate: "", fxSource: "", override: false, actualHkd: "", actualReason: "", note: "", reason: "", acknowledged: false, revisionFence: false },
   });
   const currency = useWatch({ control, name: "currency" }); const fxMode = useWatch({ control, name: "fxMode" });
   const taxMode = useWatch({ control, name: "taxMode" }); const feeMode = useWatch({ control, name: "feeMode" }); const override = useWatch({ control, name: "override" });
-  if (!validReceiptTarget(target)) return <p role="alert" className="text-sm text-danger">固定收款範圍無法安全核對；請關閉並重新載入事件、帳戶及收款依據。</p>;
-  const { event, account, inputs, basis } = target;
+  if (!validTarget(target)) return <p role="alert" className="text-sm text-danger">固定收款範圍無法安全核對；請關閉並重新載入事件、帳戶及收款依據。</p>;
+  const { event, account, inputs } = target;
   const currencyField = register("currency"); const fxField = register("fxMode");
   function clearFx() { setValue("fxMode", ""); setValue("fxRate", ""); setValue("fxSource", ""); setValue("override", false); setValue("actualHkd", ""); setValue("actualReason", ""); }
-  return <FormFrame title="記錄股息收款" submitLabel="記錄收款" error={action.error} pending={isSubmitting || disabled}
+  return <FormFrame title={direct ? "記錄直接股息收款" : "記錄股息收款"} submitLabel="記錄收款" error={action.error} pending={isSubmitting || disabled}
     pendingLabel={disabled ? "等候密碼確認…" : "正在記錄…"} onCancel={close ?? onCancel} onSubmit={submit => {
       if (disabled) { submit.preventDefault(); return; }
       onPendingChange?.(true);
@@ -74,7 +84,7 @@ export function ReceiptWriteForm({ target: observed, onSaved, onCancel, disabled
         if (!values.currency) return;
         const provided = values.currency === "USD" && values.fxMode === "PROVIDED";
         const actualOverride = (values.currency === "HKD" || provided) && values.override;
-        const body: Schemas["ReceiptCreate"] = { receipt_id: receiptId, event_id: event.id, revision_id: inputs.revision_id, entitlement_id: basis.id,
+        const common: Omit<Schemas["ReceiptCreate"], "entitlement_id"> = { receipt_id: receiptId, event_id: event.id, revision_id: inputs.revision_id,
           account_id: account.id, portfolio_id: inputs.portfolio_id, broker_id: inputs.broker_id, account_version: inputs.account_version,
           portfolio_version: inputs.portfolio_version, broker_version: inputs.broker_version, expected_data_revision: inputs.portfolio_data_revision,
           received_date: values.receivedDate, received_amount: values.received, currency: values.currency,
@@ -82,23 +92,34 @@ export function ReceiptWriteForm({ target: observed, onSaved, onCancel, disabled
           fx_rate_hkd: provided ? values.fxRate : null, fx_source: provided ? values.fxSource : null,
           actual_hkd: actualOverride ? values.actualHkd : null, actual_hkd_reason: actualOverride ? values.actualReason : null,
           note: values.note, reason: values.reason, confirmation: "RECORDED_CASH_ONLY" };
+        const body: Schemas["ReceiptCreate"] | Schemas["DirectReceiptCreate"] = "basis" in target
+          ? { ...common, entitlement_id: target.basis.id }
+          : { ...common, confirm_revision_fence: values.revisionFence };
         // Keep the receipt identity even when a changed uncertain intent needs a new key.
         const intent = JSON.stringify({ version: event.version, body: { ...body, received_amount: receiptMoneyIntent(body.received_amount),
           tax: receiptMoneyIntent(body.tax), fee: receiptMoneyIntent(body.fee), fx_rate_hkd: fxIntent(body.fx_rate_hkd), actual_hkd: receiptMoneyIntent(body.actual_hkd) } });
         if (submitted.current !== null && submitted.current !== intent) action.changed();
         submitted.current = intent;
         return action.run(async key => {
-          if (!validReceiptTarget(target)) throw new Error("固定收款範圍無法安全核對；請關閉並重新載入。");
+          if (!validTarget(target)) throw new Error("固定收款範圍無法安全核對；請關閉並重新載入。");
           const header = { ...await mutationHeaders(key), "If-Match": `"${event.version}"` };
-          const result = checked(await api.POST("/api/v1/dividends/receipts", { params: { header }, body }));
-          return checkedReceiptSaved(result, target, body);
+          if ("basis" in target && "entitlement_id" in body) {
+            const result = checked(await api.POST("/api/v1/dividends/receipts", { params: { header }, body }));
+            return checkedReceiptSaved(result, target, body);
+          }
+          if (!("basis" in target) && "confirm_revision_fence" in body) {
+            const result = checked(await api.POST("/api/v1/dividends/direct-receipts", { params: { header }, body }));
+            return checkedDirectReceiptSaved(result, target, body);
+          }
+          throw new Error("固定收款類型不符；請關閉並重新載入。");
         });
       })(submit).finally(() => onPendingChange?.(false));
     }}>
     <div className="grid min-w-0 gap-2 text-sm leading-7 text-secondary sm:col-span-2">
-      <p>本次固定事件、帳戶和選定的舊應收；這些舊資料未驗證，不代表持倉資格、收入或實際付款。</p>
+      <p>{direct ? "本次直接固定事件與帳戶，不需要或建立舊應收；這只是明確記錄的現金，不代表持倉資格、收入或實際付款。" : "本次固定事件、帳戶和選定的舊應收；這些舊資料未驗證，不代表持倉資格、收入或實際付款。"}</p>
       <p className="break-all">事件 {event.id}；目前修訂 {event.version}／{inputs.revision_id}；帳戶 {account.name}／{account.id}。</p>
-      <p className="break-all">舊應收 {basis.id}；原修訂 {basis.revision_no}／{basis.revision_id}；記錄股數 {basis.recorded_shares}；舊預計淨額 {basis.currency} {basis.recorded_expected_net}，不會自動帶入實收。</p>
+      {"basis" in target && <p className="break-all">舊應收 {target.basis.id}；原修訂 {target.basis.revision_no}／{target.basis.revision_id}；記錄股數 {target.basis.recorded_shares}；舊預計淨額 {target.basis.currency} {target.basis.recorded_expected_net}，不會自動帶入實收。</p>}
+      {direct && <p className="font-semibold text-danger">任何直接收款紀錄都會阻擋事件修訂、撤回及拒絕；即使之後作廢收款，也不會解除此限制。目前尚無支援的解除流程。</p>}
       <p className="break-all">組合 {inputs.portfolio_id}；券商 {inputs.broker_id}；帳戶／組合／券商版本 {inputs.account_version}／{inputs.portfolio_version}／{inputs.broker_version}；資料版本 {inputs.portfolio_data_revision}。</p>
       <p className="font-semibold text-danger">記錄會新增現金流水；付款日不會自動入賬。稅費是說明欄位，不會再次從淨收款扣除。</p>
       <p>回應未確認時請保留視窗，以相同內容重試；即使修改內容，本次收款識別碼不變，可避免重複入賬。關閉後請先核對歷史，不要假定未曾記錄。</p>
@@ -124,5 +145,7 @@ export function ReceiptWriteForm({ target: observed, onSaved, onCancel, disabled
     <Field label="收款依據" maxLength={2002} {...register("reason")} error={errors.reason?.message} help="至少 10 個字元；不要輸入密碼或金鑰。" />
     <div className="grid gap-2 sm:col-span-2"><label className="flex min-h-11 items-start gap-3 text-sm leading-7"><input className="mt-2 shrink-0" type="checkbox" aria-invalid={!!errors.acknowledged} aria-describedby={errors.acknowledged ? confirmationId : undefined} {...register("acknowledged")} />我明白這只是擁有人記錄的現金，不證明實際付款、持倉資格或收入。</label>
       {errors.acknowledged && <p id={confirmationId} role="alert" className="text-sm text-danger">{errors.acknowledged.message}</p>}</div>
+    {direct && <div className="grid gap-2 sm:col-span-2"><label className="flex min-h-11 items-start gap-3 text-sm leading-7"><input className="mt-2 shrink-0" type="checkbox" aria-invalid={!!errors.revisionFence} aria-describedby={errors.revisionFence ? fenceId : undefined} {...register("revisionFence")} />我明白直接收款會持續阻擋事件修訂、撤回及拒絕，之後作廢收款也不會解除限制。</label>
+      {errors.revisionFence && <p id={fenceId} role="alert" className="text-sm text-danger">{errors.revisionFence.message}</p>}</div>}
   </FormFrame>;
 }
