@@ -209,6 +209,8 @@ def test_cash_numeric_affinity_cannot_turn_a_real_into_an_exact_integer() -> Non
     "changes",
     [
         {"entry_role": "OTHER"},
+        {"source_type": "OTHER"},
+        {"source_id": str(uuid4())},
         {"account_id": str(uuid4())},
         {"effective_date": "2026-01-10"},
         {"currency": "HKD"},
@@ -232,6 +234,8 @@ def test_inconsistent_primary_cash_fails_closed(changes: dict[str, Any]) -> None
     "changes",
     [
         {"reverses_entry_id": str(uuid4())},
+        {"source_type": "OTHER"},
+        {"source_id": str(uuid4())},
         {"account_id": str(uuid4())},
         {"effective_date": "2026-01-10"},
         {"currency": "HKD"},

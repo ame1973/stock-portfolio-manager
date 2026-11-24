@@ -66,7 +66,7 @@ def populate_previous(engine: Engine) -> tuple[Any, str, dict[str, Any]]:
 
 
 def test_current_head_adds_empty_fee_projection_provenance(engine: Engine) -> None:
-    assert schema_head() == "0029_receipt_fx_guard"
+    assert schema_head() == "0030_direct_receipts"
     with unit_of_work(engine) as con:
         columns = {
             row.name

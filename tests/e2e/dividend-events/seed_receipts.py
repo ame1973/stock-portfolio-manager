@@ -34,7 +34,7 @@ def main() -> None:
     try:
         with unit_of_work(engine, write=True) as con:
             if con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() != (
-                "0029_receipt_fx_guard"
+                "0030_direct_receipts"
             ):
                 raise RuntimeError("SYNTHETIC_RECEIPT_FIXTURE_REQUIRED")
             scope = con.execute(

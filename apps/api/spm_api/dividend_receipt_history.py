@@ -117,15 +117,20 @@ def _cash_numbers(row: RowMapping) -> None:
         _integer(row["booked_hkd_micro"])
 
 
-def _cash_scope(con: Connection, receipt: RowMapping) -> CashScope:
+def _cash_scope(
+    con: Connection,
+    receipt: RowMapping,
+    *,
+    source_type: Literal["DIVIDEND_RECEIPT", "DIVIDEND_DIRECT_RECEIPT"] = "DIVIDEND_RECEIPT",
+) -> CashScope:
     rows = (
         con.execute(
             text("""
                 SELECT * FROM cash_ledger_entries
-                WHERE source_type='DIVIDEND_RECEIPT' AND source_id=:id
+                WHERE source_type=:source_type AND source_id=:id
                 ORDER BY entry_role,id
             """),
-            {"id": receipt["id"]},
+            {"id": receipt["id"], "source_type": source_type},
         )
         .mappings()
         .all()
@@ -153,7 +158,9 @@ def _cash_scope(con: Connection, receipt: RowMapping) -> CashScope:
     }:
         raise ValueError("Inconsistent retained reversal links")
     if (
-        primary["account_id"] != receipt["account_id"]
+        primary["source_type"] != source_type
+        or primary["source_id"] != receipt["id"]
+        or primary["account_id"] != receipt["account_id"]
         or primary["effective_date"] != receipt["received_date"]
         or primary["currency"] != receipt["currency"]
         or primary["amount_micro"] != receipt["received_micro"]
@@ -177,6 +184,8 @@ def _cash_scope(con: Connection, receipt: RowMapping) -> CashScope:
     booked = receipt["received_hkd_micro"]
     if (
         reversal["reverses_entry_id"] != str(primary_id)
+        or reversal["source_type"] != source_type
+        or reversal["source_id"] != receipt["id"]
         or reversal["account_id"] != primary["account_id"]
         or reversal["effective_date"] != primary["effective_date"]
         or reversal["currency"] != primary["currency"]
@@ -190,7 +199,13 @@ def _cash_scope(con: Connection, receipt: RowMapping) -> CashScope:
     return "MATCHING_CASH_REVERSAL_RECORDED_UNVERIFIED"
 
 
-def _receipt(con: Connection, row: RowMapping, account_id: UUID) -> RetainedReceipt:
+def _receipt(
+    con: Connection,
+    row: RowMapping,
+    account_id: UUID,
+    *,
+    source_type: Literal["DIVIDEND_RECEIPT", "DIVIDEND_DIRECT_RECEIPT"] = "DIVIDEND_RECEIPT",
+) -> RetainedReceipt:
     identifier = events._uuid(row["id"])
     if row["account_id"] != str(account_id) or row["source"] not in ("MANUAL", "IMPORT"):
         raise ValueError("Invalid retained receipt scope")
@@ -218,7 +233,7 @@ def _receipt(con: Connection, row: RowMapping, account_id: UUID) -> RetainedRece
         version=version,
         created_at=created_at,
         voided_at=voided_at,
-        cash_scope=_cash_scope(con, row),
+        cash_scope=_cash_scope(con, row, source_type=source_type),
     )
 
 
@@ -241,6 +256,19 @@ def history(
         current = events.get(con, owner, event_id)
         if current is None or account(con, owner, account_id) is None:
             return None
+        # Do not return a partial history before the direct-receipt reader is installed.
+        direct = con.execute(
+            text("""
+                SELECT 1 FROM dividend_direct_receipts
+                WHERE event_id=:event AND account_id=:account
+                UNION ALL
+                SELECT 1 FROM dividend_direct_receipt_origins
+                WHERE event_id=:event AND account_id=:account LIMIT 1
+            """),
+            {"event": str(event_id), "account": str(account_id)},
+        ).first()
+        if direct is not None:
+            raise ValueError("Direct receipt history is not yet available")
         mismatch = con.execute(
             text("""
                 SELECT 1 FROM dividend_receipts receipt

@@ -80,9 +80,8 @@ def _writer(con: Connection, owner_id: UUID) -> None:
 
 def _has_financial_history(con: Connection, event_id: UUID) -> bool:
     """Inspect retained revisions inside the caller's owner-scoped writer transaction."""
-    return (
-        con.execute(
-            text("""
+    existing = con.execute(
+        text("""
             SELECT 1 FROM dividend_entitlements ent
             JOIN dividend_event_revisions r ON r.id=ent.revision_id
             WHERE r.event_id=:id
@@ -91,6 +90,18 @@ def _has_financial_history(con: Connection, event_id: UUID) -> bool:
             WHERE projection.event_id=:id
             LIMIT 1
         """),
+        {"id": str(event_id)},
+    ).first()
+    if existing is not None:
+        return True
+    return (
+        con.execute(
+            text("""
+                SELECT 1 FROM dividend_direct_receipts receipt WHERE receipt.event_id=:id
+                UNION ALL
+                SELECT 1 FROM dividend_direct_receipt_origins origin WHERE origin.event_id=:id
+                LIMIT 1
+            """),
             {"id": str(event_id)},
         ).first()
         is not None

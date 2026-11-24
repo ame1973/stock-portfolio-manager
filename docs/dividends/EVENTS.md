@@ -1696,6 +1696,33 @@ insert origins or invoke internal writers on deployment data. The separate prote
 also preserves the retained origin; economic authorization and atomic reconciliation remain
 unfinished.
 
+## Direct recorded-receipt storage
+
+Migration `0030_direct_receipts` adds two initially empty tables for cash explicitly associated
+with an owned event, the observed physical revision and an account. This path does not create a
+legacy entitlement or require a projection to be computable: a recorded cash assertion is not
+proof of a position, eligibility or payment. The separate origin independently pins the event,
+physical revision and account, alongside the observed current portfolio/broker versions, primary
+cash link, request, creation-audit reference, FX source and
+optional actual-HKD override reason. Unknown tax, fee or USD FX remain distinct from zero;
+HKD identity and signed cash limits are enforced without rewriting old receipts, cash or FX.
+
+SQL guards reject cross-owner or mismatched current scope, duplicate IDs across the legacy and
+direct receipt tables, inconsistent cash links and replacement or deletion. A matching
+reversal and void-audit shape are required for the direct receipt's one-way void transition. Any direct receipt,
+including an unsealed or void one, also fences event revision and rejection until atomic
+reconciliation exists. During this intermediate step, the existing legacy receipt reader and
+comparison fail closed for an event/account containing a direct receipt rather than silently
+omitting it. Other scopes remain readable.
+
+The migration adds storage only: **there is no application reader, protected create/void API,
+or browser workflow for direct receipts**. SQL does not prove authentication, payment,
+complete history, exact FX arithmetic or an atomic receipt/cash/audit transaction; a receipt
+row can exist without its origin if inserted outside a correctly implemented writer. Do not
+insert these rows or invoke internal financial operations on deployment data. The existing
+receipt entry still requires a legacy entitlement, so new installations remain unable to
+record a receipt through the app until the remaining integration is complete.
+
 ## Internal retained-receipt link reader
 
 The internal `dividend_receipt_history.history` reader resolves all retained entitlement

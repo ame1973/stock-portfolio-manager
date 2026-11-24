@@ -55,7 +55,7 @@ def populated(engine: Engine) -> tuple[Any, str, dict[str, Any], dict[str, Any]]
 
 
 def test_schema_head_allows_unknown_tax_and_fee_without_defaulting_to_zero(engine: Engine) -> None:
-    assert schema_head() == "0029_receipt_fx_guard"
+    assert schema_head() == "0030_direct_receipts"
     with unit_of_work(engine) as con:
         columns = {
             row.name: (row.notnull, row.dflt_value)
@@ -100,14 +100,11 @@ def test_upgrade_preserves_financial_rows_rowids_audits_cash_fx_and_schema_guard
         )
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         assert con.exec_driver_sql("PRAGMA integrity_check").scalar_one() == "ok"
-        retained = receipt_history.history(con, OWNER, event.event_id, UUID(account))
-        assert retained is not None
-        recorded = next(
-            item for item in retained.entitlements if item.id == UUID(receipt["entitlement_id"])
-        )
-        assert recorded.receipts[0].id == UUID(receipt["id"])
-        assert recorded.receipts[0].cash_scope == "MATCHING_CASH_RECORDED_UNVERIFIED"
-        assert str(recorded.receipts[0].fx_rate_hkd) == "7.800000000000"
+        recorded = con.exec_driver_sql(
+            "SELECT entitlement_id,fx_rate_hkd_e12 FROM dividend_receipts WHERE id=?",
+            (receipt["id"],),
+        ).one()
+        assert tuple(recorded) == (receipt["entitlement_id"], 7_800_000_000_000)
         assert con.exec_driver_sql(
             "SELECT count(*) FROM audit_events WHERE action=?", (ACTION,)
         ).scalar_one() == len(before["owners"])
@@ -132,6 +129,21 @@ def test_upgrade_preserves_financial_rows_rowids_audits_cash_fx_and_schema_guard
         )
     upgrade_to(previous_engine, HEAD)
     assert database_snapshot(previous_engine) == after
+    # Current application readers require the complete current schema, not only revision 0027.
+    upgrade_to(previous_engine, schema_head())
+    final = database_snapshot(previous_engine)
+    for table, rows in after.items():
+        if table not in {"alembic_version", "audit_events"}:
+            assert final[table] == rows
+    with unit_of_work(previous_engine) as con:
+        retained = receipt_history.history(con, OWNER, event.event_id, UUID(account))
+        assert retained is not None
+        recorded_entitlement = next(
+            item for item in retained.entitlements if item.id == UUID(receipt["entitlement_id"])
+        )
+        assert recorded_entitlement.receipts[0].id == UUID(receipt["id"])
+        assert recorded_entitlement.receipts[0].cash_scope == "MATCHING_CASH_RECORDED_UNVERIFIED"
+        assert str(recorded_entitlement.receipts[0].fx_rate_hkd) == "7.800000000000"
 
 
 def test_new_unknown_and_explicit_zero_remain_distinct_without_touching_old_rows(

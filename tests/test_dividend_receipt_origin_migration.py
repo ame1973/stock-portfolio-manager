@@ -147,7 +147,7 @@ def origin_values(
 
 
 def test_current_schema_starts_with_no_inferred_receipt_origins(engine: Engine) -> None:
-    assert schema_head() == "0029_receipt_fx_guard"
+    assert schema_head() == "0030_direct_receipts"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
