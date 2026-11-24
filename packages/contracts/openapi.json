@@ -2923,6 +2923,491 @@
         "title": "CurrencyCashBalance",
         "type": "object"
       },
+      "DirectReceiptCreate": {
+        "additionalProperties": false,
+        "description": "A stable client receipt ID, explicit observed pins and a separate fence acknowledgment.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "account_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Account Version",
+            "type": "string"
+          },
+          "actual_hkd": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Hkd"
+          },
+          "actual_hkd_reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 10,
+                "pattern": "^[^\\x00]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Hkd Reason"
+          },
+          "broker_id": {
+            "format": "uuid",
+            "title": "Broker Id",
+            "type": "string"
+          },
+          "broker_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Broker Version",
+            "type": "string"
+          },
+          "confirm_revision_fence": {
+            "title": "Confirm Revision Fence",
+            "type": "boolean"
+          },
+          "confirmation": {
+            "const": "RECORDED_CASH_ONLY",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "HKD",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "expected_data_revision": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Expected Data Revision",
+            "type": "string"
+          },
+          "fee": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee"
+          },
+          "fx_rate_hkd": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Rate Hkd"
+          },
+          "fx_source": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[^\\x00]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Source"
+          },
+          "note": {
+            "maxLength": 1000,
+            "pattern": "^[^\\x00]*$",
+            "title": "Note",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "portfolio_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Portfolio Version",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "pattern": "^[^\\x00]+$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "receipt_id": {
+            "format": "uuid",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "received_amount": {
+            "maxLength": 50,
+            "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+            "title": "Received Amount",
+            "type": "string"
+          },
+          "received_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Received Date",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "tax": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax"
+          }
+        },
+        "required": [
+          "received_amount",
+          "currency",
+          "tax",
+          "fee",
+          "fx_rate_hkd",
+          "fx_source",
+          "actual_hkd",
+          "actual_hkd_reason",
+          "receipt_id",
+          "event_id",
+          "revision_id",
+          "account_id",
+          "portfolio_id",
+          "broker_id",
+          "account_version",
+          "portfolio_version",
+          "broker_version",
+          "expected_data_revision",
+          "received_date",
+          "note",
+          "reason",
+          "confirmation",
+          "confirm_revision_fence"
+        ],
+        "title": "DirectReceiptCreate",
+        "type": "object"
+      },
+      "DirectReceiptCreated": {
+        "additionalProperties": false,
+        "description": "Original recorded creation cash, not the current lifecycle or verified payment.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "account_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Account Version",
+            "type": "string"
+          },
+          "actual_hkd": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Hkd"
+          },
+          "actual_hkd_reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 10,
+                "pattern": "^[^\\x00]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Hkd Reason"
+          },
+          "audit_scope": {
+            "const": "RECORDED_AUDIT_MATCHED_ONLY",
+            "title": "Audit Scope",
+            "type": "string"
+          },
+          "broker_id": {
+            "format": "uuid",
+            "title": "Broker Id",
+            "type": "string"
+          },
+          "broker_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Broker Version",
+            "type": "string"
+          },
+          "cash_entry_id": {
+            "format": "uuid",
+            "title": "Cash Entry Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "HKD",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "fee": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee"
+          },
+          "fx_rate_hkd": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Rate Hkd"
+          },
+          "fx_source": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[^\\x00]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Source"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "payment_scope": {
+            "const": "OWNER_RECORDED_NOT_VERIFIED",
+            "title": "Payment Scope",
+            "type": "string"
+          },
+          "portfolio_data_revision": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Portfolio Data Revision",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "portfolio_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Portfolio Version",
+            "type": "string"
+          },
+          "receipt_basis": {
+            "const": "DIRECT_EVENT_ACCOUNT",
+            "title": "Receipt Basis",
+            "type": "string"
+          },
+          "received_amount": {
+            "maxLength": 50,
+            "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+            "title": "Received Amount",
+            "type": "string"
+          },
+          "received_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Received Date",
+            "type": "string"
+          },
+          "received_hkd": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received Hkd"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "HISTORICAL_DIRECT_RECEIPT_CREATION_RESPONSE_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "const": "MANUAL",
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "const": "ACTIVE",
+            "title": "Status",
+            "type": "string"
+          },
+          "tax": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax"
+          },
+          "version": {
+            "const": "1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "received_amount",
+          "currency",
+          "tax",
+          "fee",
+          "fx_rate_hkd",
+          "fx_source",
+          "actual_hkd",
+          "actual_hkd_reason",
+          "id",
+          "event_id",
+          "account_id",
+          "revision_id",
+          "revision_no",
+          "portfolio_id",
+          "broker_id",
+          "account_version",
+          "portfolio_version",
+          "broker_version",
+          "portfolio_data_revision",
+          "cash_entry_id",
+          "received_date",
+          "received_hkd",
+          "receipt_basis",
+          "source",
+          "status",
+          "version",
+          "created_at",
+          "audit_scope",
+          "scope",
+          "history_completeness",
+          "current_use_scope",
+          "eligibility_scope",
+          "payment_scope"
+        ],
+        "title": "DirectReceiptCreated",
+        "type": "object"
+      },
       "DirectReceiptInputs": {
         "additionalProperties": false,
         "properties": {
@@ -20440,6 +20925,147 @@
         "summary": "Revisions",
         "tags": [
           "Dividend candidate review"
+        ]
+      }
+    },
+    "/api/v1/dividends/direct-receipts": {
+      "post": {
+        "operationId": "create_direct_dividend_receipt",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "maxLength": 12,
+              "pattern": "^\"[1-9][0-9]{0,9}\"$",
+              "title": "If-Match",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectReceiptCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectReceiptCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Create Receipt",
+        "tags": [
+          "Direct recorded dividend receipt writes"
         ]
       }
     },

@@ -1715,14 +1715,13 @@ reconciliation exists. The existing legacy-only receipt reader still fails close
 account containing a direct receipt rather than silently omitting it; the separate recorded
 comparison validates both stores. Other scopes remain readable.
 
-The migration adds storage only; the separate combined-history API below reads both stores.
-There is no protected direct-create/void API or browser workflow for direct receipts. SQL does
-not prove authentication, payment, complete
+The migration adds storage only; separate combined-history and protected direct-create APIs
+are described below. SQL does not prove authentication, payment, complete
 history, exact FX arithmetic or an atomic receipt/cash/audit transaction; a receipt row can
 exist without its origin if inserted outside a correctly implemented writer. Do not insert
-these rows or invoke internal financial operations on deployment data. The existing receipt
-entry still requires a legacy entitlement, so new installations remain unable to record a
-receipt through the app until the remaining integration is complete.
+these rows or invoke internal financial operations on deployment data. The existing browser
+entry still requires a legacy entitlement; direct browser entry and direct-void HTTP remain
+unavailable.
 
 ## Internal direct-recorded-receipt history reader
 
@@ -1803,8 +1802,9 @@ cash amount, currency, tax, fee, date or FX rate. The scope is
 `REVALIDATION_REQUIRED`, eligibility `NOT_ESTABLISHED`, and payment
 `OWNER_RECORDED_NOT_VERIFIED`. Missing/foreign scopes return 404; an inconsistent or unsealed
 history returns a fixed private 503 instead of partial input pins. No facts, audits or caches
-are written and no provider is contacted. The endpoint is not a protected direct-create/void
-operation or a browser entry form; those workflows remain unavailable.
+are written and no provider is contacted. This endpoint does not write cash; the separate
+protected direct-create operation below handles writes. Direct-void HTTP and direct browser
+entry remain unavailable.
 
 ## Internal direct recorded-cash creation
 
@@ -1830,11 +1830,56 @@ An unchanged stable-ID/request replay validates its original intent and writes n
 after account archive or a recorded void; it does not reopen or repost cash. Conflicting reuse,
 stale scope, malformed retained evidence and derived monetary overflow fail closed.
 
-There is still no protected direct-create/void API or direct-entry browser workflow. Existing
-legacy-only receipt readers and writers remain fenced when direct records would be omitted.
-New installations still cannot record receipts through the app. Session/Origin/CSRF,
-reauthentication, HTTP-intent/idempotency rechecks and protected direct void integration must be
-completed separately; neither this primitive nor an audit digest proves payment or eligibility.
+The protected direct-create API below adds session/Origin/CSRF, reauthentication and
+HTTP-intent/idempotency checks. Existing legacy-only receipt readers and writers remain fenced
+when direct records would be omitted. Direct-void HTTP and direct-entry browser integration
+remain unfinished; neither this primitive nor an audit digest proves payment or eligibility.
+
+## Protected direct recorded-cash creation
+
+`POST /api/v1/dividends/direct-receipts` records an explicit event/current physical
+revision/account cash assertion without requiring or creating a legacy entitlement or a
+computable projection. It requires an active owner session, trusted Origin, CSRF,
+recent password reauthentication, `Idempotency-Key` and the exact observed event version
+in `If-Match`. The body uses `DirectReceiptCreate` and rejects any `entitlement_id` field.
+
+For an API client:
+
+1. Read the direct input snapshot for the explicitly chosen event and account. Preserve the
+   physical revision, account/portfolio/broker IDs, all exact version strings and portfolio
+   data revision. A readable snapshot is not write permission: rejected or withdrawn events,
+   archived accounts and exhausted data revisions cannot accept new cash.
+2. Generate and retain one receipt UUID and one idempotency key. Supply every cash component
+   explicitly: date, actual net amount/currency, known-or-unknown tax/fee and historical FX/source,
+   optional actual-HKD value/reason, note and recording reason. Tax and fee are informational,
+   not subtracted from the net amount again. HKD uses identity; missing foreign FX stays unknown.
+3. Confirm `confirmation="RECORDED_CASH_ONLY"` and independently
+   `confirm_revision_fence=true`. **Any retained direct receipt, even after a later void,
+   currently prevents event revision, withdrawal and rejection. There is no supported fence
+   removal while atomic event reconciliation remains unfinished.**
+4. Reauthenticate and submit the unchanged body and key. A lost response is uncertain, not a
+   failed posting: retry the same UUID/body/key, and inspect combined receipt and cash history
+   before starting another receipt. Do not rotate identifiers to resolve uncertainty.
+
+Receipt, cash, origin, creation/recording/HTTP-intent audits, any opening-cash rebase,
+portfolio invalidation and idempotency share one writer transaction. Session/CSRF/reauth and
+current scope are checked again before commit; failures roll back the entire operation. The
+response is independently compared with retained audited history, not merely trusted because
+a writer returned an object. No provider or password hashing runs inside this transaction.
+
+A `201` response has `receipt_basis=DIRECT_EVENT_ACCOUNT`, the original physical revision,
+exact original cash/FX and any actual-HKD value with its original reason. Its scope is
+`HISTORICAL_DIRECT_RECEIPT_CREATION_RESPONSE_ONLY`; audit matching does not prove payment,
+original authorization, ownership or eligibility. Same-key replay validates retained history
+and HTTP intent without writes, even after a later void or account archive; the original
+response still says `ACTIVE`/`1` and is not the current lifecycle. Changed intent conflicts.
+A new key or missing idempotency entry cannot adopt an existing internal or HTTP receipt,
+even with a reused request UUID; it cannot repost the stable receipt ID.
+
+New installations can use this API without legacy entitlement. The existing browser can read
+these records, but direct entry and direct-void forms are not yet available; direct-void HTTP
+remains unfinished. Existing legacy routes and missing-origin/event fences are unchanged.
+This is recorded cash, not bank confirmation, income recognition or atomic reconciliation.
 
 ## Internal direct recorded-cash void
 
@@ -1854,9 +1899,9 @@ recompute the original HKD amount or replace unknown FX with zero.
 Same-request unchanged-intent replay is zero-write; conflicting reuse, changed scope,
 inconsistent audits, exhausted data revisions and partial writes fail closed. The event
 revision/rejection fence remains even after void. This is not payment verification, receipt
-history authentication, eligibility or atomic event reconciliation. Protected direct-create
-and direct-void APIs, session/Origin/CSRF/reauthentication, HTTP idempotency binding and browser
-entry remain unfinished; do not invoke internal financial writers on deployment data.
+history authentication, eligibility or atomic event reconciliation. Protected direct-void HTTP,
+its session/Origin/CSRF/reauthentication and idempotency binding, and direct browser entry remain
+unfinished; do not invoke internal financial writers on deployment data.
 
 ## Internal retained-receipt link reader
 

@@ -36,6 +36,7 @@
     "test:e2e:projection-history": "node tests/e2e/credentials/check.mjs --projection-history",
     "test:e2e:receipt-history": "node tests/e2e/credentials/check.mjs --receipt-history",
     "test:e2e:receipt-write": "node tests/e2e/credentials/check.mjs --receipt-write",
+    "test:e2e:direct-receipt-write": "node tests/e2e/credentials/check.mjs --direct-receipt-write",
     "test:e2e:projection-write": "node tests/e2e/credentials/check.mjs --projection-write",
     "test:e2e:reconciliation-direct": "node tests/e2e/credentials/check.mjs --reconciliation-direct",
     "generate:contracts": "uv run python scripts/export_openapi.py && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",

@@ -39,6 +39,8 @@ jobs:
         run: npm run test:e2e:trade-review
       - name: Verify isolated recorded receipt API workflow
         run: npm run test:e2e:receipt-write
+      - name: Verify isolated direct receipt API workflow
+        run: npm run test:e2e:direct-receipt-write
       - name: Build containers
         run: docker compose -p spm-e2e-ci build
       - name: Smoke test containers

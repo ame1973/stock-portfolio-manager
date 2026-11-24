@@ -138,6 +138,7 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "{receipt_id}/void-inputs",
             "get",
         ): "get_recorded_dividend_receipt_void_inputs",
+        ("/api/v1/dividends/direct-receipts", "post"): "create_direct_dividend_receipt",
         ("/api/v1/dividends/candidates", "get"): "list_dividend_candidates",
         ("/api/v1/dividends/candidates", "post"): "create_dividend_candidate",
         ("/api/v1/dividends/candidates/{id}", "get"): "get_dividend_candidate",
@@ -393,6 +394,35 @@ def test_recorded_receipt_void_contract_requires_explicit_scope_and_headers() ->
         ("payment_scope", "OWNER_RECORDED_NOT_VERIFIED"),
     ):
         assert response["properties"][name]["const"] == value
+
+
+def test_direct_receipt_creation_contract_requires_explicit_cash_and_fence() -> None:
+    spec = create_app().openapi()
+    operation = spec["paths"]["/api/v1/dividends/direct-receipts"]["post"]
+    assert operation["operationId"] == "create_direct_dividend_receipt"
+    assert operation["security"] == [{"cookieAuth": []}]
+    headers = {item["name"] for item in operation["parameters"] if item["in"] == "header"}
+    assert {"X-CSRF-Token", "Idempotency-Key", "If-Match"} <= headers
+    for name in ("DirectReceiptCreate", "DirectReceiptCreated"):
+        schema = spec["components"]["schemas"][name]
+        assert schema["additionalProperties"] is False
+        assert set(schema["required"]) == set(schema["properties"])
+        assert "entitlement_id" not in schema["properties"]
+        for field in ("account_version", "portfolio_version", "broker_version", "received_amount"):
+            assert schema["properties"][field]["type"] == "string"
+        for field in ("tax", "fee", "fx_rate_hkd", "actual_hkd"):
+            assert {value["type"] for value in schema["properties"][field]["anyOf"]} == {
+                "string",
+                "null",
+            }
+    request = spec["components"]["schemas"]["DirectReceiptCreate"]["properties"]
+    assert request["confirm_revision_fence"]["type"] == "boolean"
+    assert request["confirmation"]["const"] == "RECORDED_CASH_ONLY"
+    response = spec["components"]["schemas"]["DirectReceiptCreated"]["properties"]
+    assert response["receipt_basis"]["const"] == "DIRECT_EVENT_ACCOUNT"
+    assert response["scope"]["const"] == "HISTORICAL_DIRECT_RECEIPT_CREATION_RESPONSE_ONLY"
+    assert response["payment_scope"]["const"] == "OWNER_RECORDED_NOT_VERIFIED"
+    assert response["eligibility_scope"]["const"] == "NOT_ESTABLISHED"
 
 
 def test_recorded_receipt_creation_contract_requires_explicit_scope_and_cash() -> None:

@@ -198,6 +198,31 @@ This is not payment or eligibility verification, nor a container, worker, live-p
 or TLS acceptance claim. The application still cannot create the legacy entitlement prerequisite
 on a fresh installation.
 
+## Separate direct recorded-cash API fixture
+
+```sh
+npm run build
+npm run test:e2e:direct-receipt-write
+```
+
+This fixture creates a fresh owner through real Chromium onboarding and reauthentication,
+then uses authenticated requests against the actual Uvicorn API. No entitlement, projection,
+receipt or financial seed is inserted: the protected direct-create API records explicit cash
+in a new-install scope. Concurrent identical requests create one receipt/cash/origin/HTTP
+intent, and equivalent-decimal same-key replay writes nothing. A second committed response
+is deliberately dropped, then replayed with its unchanged body, UUID and key. Stale data pins
+and event rejection after financial history remain fenced.
+
+Full-table comparisons check the expected atomic audit, cash, origin, idempotency and
+invalidation changes while legacy entitlements/receipts, projections and provider state stay
+unchanged. The built SPA then reads both newly recorded direct receipts at 360/768/1440,
+checks keyboard account selection, no-store and unverified labels, and offers no legacy void
+action for direct records. Browser storage stays empty. This exercises direct creation over
+the real socket and its history UI, not a direct entry or direct-void form, external payment,
+eligibility, deployment, NAS or TLS. The pinned private reporter, exclusive temporary root,
+no-debug/no-recording rules and fixed safe output remain mandatory. CI defines this fixture;
+that definition is not evidence of a hosted CI run.
+
 ## Separate recorded-projection and comparison browser fixture
 
 ```sh

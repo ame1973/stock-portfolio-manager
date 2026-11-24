@@ -450,6 +450,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/direct-receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Receipt */
+        post: operations["create_direct_dividend_receipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events": {
         parameters: {
             query?: never;
@@ -2808,6 +2825,217 @@ export interface components {
             recorded_balance: string;
             /** Unvalued Entries */
             unvalued_entries: number;
+        };
+        /**
+         * DirectReceiptCreate
+         * @description A stable client receipt ID, explicit observed pins and a separate fence acknowledgment.
+         */
+        DirectReceiptCreate: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Account Version */
+            account_version: string;
+            /** Actual Hkd */
+            actual_hkd: string | null;
+            /** Actual Hkd Reason */
+            actual_hkd_reason: string | null;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /** Confirm Revision Fence */
+            confirm_revision_fence: boolean;
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "RECORDED_CASH_ONLY";
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Expected Data Revision */
+            expected_data_revision: string;
+            /** Fee */
+            fee: string | null;
+            /** Fx Rate Hkd */
+            fx_rate_hkd: string | null;
+            /** Fx Source */
+            fx_source: string | null;
+            /** Note */
+            note: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Portfolio Version */
+            portfolio_version: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Receipt Id
+             * Format: uuid
+             */
+            receipt_id: string;
+            /** Received Amount */
+            received_amount: string;
+            /**
+             * Received Date
+             * Format: date
+             */
+            received_date: string;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Tax */
+            tax: string | null;
+        };
+        /**
+         * DirectReceiptCreated
+         * @description Original recorded creation cash, not the current lifecycle or verified payment.
+         */
+        DirectReceiptCreated: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Account Version */
+            account_version: string;
+            /** Actual Hkd */
+            actual_hkd: string | null;
+            /** Actual Hkd Reason */
+            actual_hkd_reason: string | null;
+            /**
+             * Audit Scope
+             * @constant
+             */
+            audit_scope: "RECORDED_AUDIT_MATCHED_ONLY";
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Cash Entry Id
+             * Format: uuid
+             */
+            cash_entry_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Fee */
+            fee: string | null;
+            /** Fx Rate Hkd */
+            fx_rate_hkd: string | null;
+            /** Fx Source */
+            fx_source: string | null;
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Payment Scope
+             * @constant
+             */
+            payment_scope: "OWNER_RECORDED_NOT_VERIFIED";
+            /** Portfolio Data Revision */
+            portfolio_data_revision: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Portfolio Version */
+            portfolio_version: string;
+            /**
+             * Receipt Basis
+             * @constant
+             */
+            receipt_basis: "DIRECT_EVENT_ACCOUNT";
+            /** Received Amount */
+            received_amount: string;
+            /**
+             * Received Date
+             * Format: date
+             */
+            received_date: string;
+            /** Received Hkd */
+            received_hkd: string | null;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "HISTORICAL_DIRECT_RECEIPT_CREATION_RESPONSE_ONLY";
+            /**
+             * Source
+             * @constant
+             */
+            source: "MANUAL";
+            /**
+             * Status
+             * @constant
+             */
+            status: "ACTIVE";
+            /** Tax */
+            tax: string | null;
+            /**
+             * Version
+             * @constant
+             */
+            version: "1";
         };
         /** DirectReceiptInputs */
         DirectReceiptInputs: {
@@ -11368,6 +11596,97 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_CandidateRecord_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    create_direct_dividend_receipt: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectReceiptCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectReceiptCreated"];
                 };
             };
             /** @description Unauthorized */
