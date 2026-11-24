@@ -1715,13 +1715,35 @@ reconciliation exists. During this intermediate step, the existing legacy receip
 comparison fail closed for an event/account containing a direct receipt rather than silently
 omitting it. Other scopes remain readable.
 
-The migration adds storage only: **there is no application reader, protected create/void API,
-or browser workflow for direct receipts**. SQL does not prove authentication, payment,
-complete history, exact FX arithmetic or an atomic receipt/cash/audit transaction; a receipt
-row can exist without its origin if inserted outside a correctly implemented writer. Do not
-insert these rows or invoke internal financial operations on deployment data. The existing
-receipt entry still requires a legacy entitlement, so new installations remain unable to
-record a receipt through the app until the remaining integration is complete.
+The migration adds storage only: there is no protected create/void or direct-history API or
+browser workflow for direct receipts. SQL does not prove authentication, payment, complete
+history, exact FX arithmetic or an atomic receipt/cash/audit transaction; a receipt row can
+exist without its origin if inserted outside a correctly implemented writer. Do not insert
+these rows or invoke internal financial operations on deployment data. The existing receipt
+entry still requires a legacy entitlement, so new installations remain unable to record a
+receipt through the app until the remaining integration is complete.
+
+## Internal direct-recorded-receipt history reader
+
+`dividend_direct_receipt_history.history` reads an owned event/account's direct receipts in one
+existing database transaction. It checks both independently recorded origin scope and receipt
+scope so a mismatched link cannot disappear from the origin's history. Each record must have a
+matched origin, the original physical event revision and audit, exact retained account and
+portfolio/broker versions, and a structurally matching primary cash entry. The reader
+reconstructs the creation fingerprint, recomputes the original explicit FX/actual-HKD terms
+with Decimal, and, for a void, verifies the exact reversal and before/after audit fingerprints.
+Unknown components remain unknown; values and original origin pins are retained after a
+same-owner account move or archive. An unsealed or inconsistent direct record fails the
+entire scoped read rather than being silently omitted or treated as zero.
+
+Results are internal-only and explicitly `RECORDED_AUDIT_MATCHED_ONLY`,
+`UNVERIFIED`, `REVALIDATION_REQUIRED`, `NOT_ESTABLISHED` and
+`OWNER_RECORDED_NOT_VERIFIED`. A matching digest does not authenticate the original actor,
+prove payment, historical ownership or completeness, or grant eligibility or current use.
+This reader does not combine the legacy and direct histories, expose HTTP, post or reverse
+cash, or remove event fences. The existing legacy receipt reader still fails closed when a
+scope contains direct records; protected creation, void and browser integration remain
+unfinished.
 
 ## Internal retained-receipt link reader
 
