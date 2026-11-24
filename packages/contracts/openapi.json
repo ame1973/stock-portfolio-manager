@@ -3562,6 +3562,41 @@
         "title": "DirectReceiptInputs",
         "type": "object"
       },
+      "DirectReceiptVoidInputs": {
+        "additionalProperties": false,
+        "properties": {
+          "cash_entry_id": {
+            "format": "uuid",
+            "title": "Cash Entry Id",
+            "type": "string"
+          },
+          "current": {
+            "$ref": "#/components/schemas/DirectReceiptInputs"
+          },
+          "origin_portfolio_id": {
+            "format": "uuid",
+            "title": "Origin Portfolio Id",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/CombinedRecordedReceipt"
+          },
+          "scope": {
+            "const": "DIRECT_RECORDED_RECEIPT_VOID_INPUTS_ONLY",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current",
+          "receipt",
+          "cash_entry_id",
+          "origin_portfolio_id",
+          "scope"
+        ],
+        "title": "DirectReceiptVoidInputs",
+        "type": "object"
+      },
       "DividendBasisCreate": {
         "additionalProperties": false,
         "properties": {
@@ -23380,6 +23415,114 @@
           }
         ],
         "summary": "Receipt Inputs",
+        "tags": [
+          "Direct recorded dividend receipt inputs"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/{receipt_id}/void-inputs": {
+      "get": {
+        "operationId": "get_direct_recorded_dividend_receipt_void_inputs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectReceiptVoidInputs"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Void Inputs",
         "tags": [
           "Direct recorded dividend receipt inputs"
         ]

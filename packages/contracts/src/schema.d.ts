@@ -692,6 +692,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/{receipt_id}/void-inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Void Inputs */
+        get: operations["get_direct_recorded_dividend_receipt_void_inputs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
         parameters: {
             query?: never;
@@ -3121,6 +3138,26 @@ export interface components {
              * @enum {string}
              */
             workflow_status: "PROVISIONAL" | "CORROBORATED" | "VERIFIED" | "CONFLICT" | "INCOMPLETE" | "WITHDRAWN";
+        };
+        /** DirectReceiptVoidInputs */
+        DirectReceiptVoidInputs: {
+            /**
+             * Cash Entry Id
+             * Format: uuid
+             */
+            cash_entry_id: string;
+            current: components["schemas"]["DirectReceiptInputs"];
+            /**
+             * Origin Portfolio Id
+             * Format: uuid
+             */
+            origin_portfolio_id: string;
+            receipt: components["schemas"]["CombinedRecordedReceipt"];
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "DIRECT_RECORDED_RECEIPT_VOID_INPUTS_ONLY";
         };
         /** DividendBasisCreate */
         DividendBasisCreate: {
@@ -13052,6 +13089,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DirectReceiptInputs"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_direct_recorded_dividend_receipt_void_inputs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+                account_id: string;
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectReceiptVoidInputs"];
                 };
             };
             /** @description Unauthorized */

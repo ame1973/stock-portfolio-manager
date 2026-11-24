@@ -126,6 +126,11 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "get",
         ): "get_direct_recorded_dividend_receipt_inputs",
         (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/"
+            "{receipt_id}/void-inputs",
+            "get",
+        ): "get_direct_recorded_dividend_receipt_void_inputs",
+        (
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts",
             "get",
         ): "list_recorded_dividend_receipts",
@@ -312,6 +317,38 @@ def test_direct_receipt_inputs_contract_has_exact_pins_but_no_entitlement_or_cas
         ("payment_scope", "OWNER_RECORDED_NOT_VERIFIED"),
     ):
         assert properties[name]["const"] == value
+
+
+def test_direct_receipt_void_inputs_reuse_exact_current_and_recorded_contracts() -> None:
+    spec = create_app().openapi()
+    path = (
+        "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/"
+        "{receipt_id}/void-inputs"
+    )
+    operation = spec["paths"][path]["get"]
+    assert operation["operationId"] == "get_direct_recorded_dividend_receipt_void_inputs"
+    assert operation["security"] == [{"cookieAuth": []}]
+    assert {item["name"] for item in operation["parameters"]} == {
+        "event_id",
+        "account_id",
+        "receipt_id",
+    }
+    schema = spec["components"]["schemas"]["DirectReceiptVoidInputs"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+    properties = schema["properties"]
+    assert set(properties) == {
+        "current",
+        "receipt",
+        "cash_entry_id",
+        "origin_portfolio_id",
+        "scope",
+    }
+    assert properties["current"]["$ref"] == "#/components/schemas/DirectReceiptInputs"
+    assert properties["receipt"]["$ref"] == "#/components/schemas/CombinedRecordedReceipt"
+    for name in ("cash_entry_id", "origin_portfolio_id"):
+        assert properties[name]["type"] == "string" and properties[name]["format"] == "uuid"
+    assert properties["scope"]["const"] == "DIRECT_RECORDED_RECEIPT_VOID_INPUTS_ONLY"
 
 
 def test_recorded_receipt_void_inputs_contract_retains_unverified_scope() -> None:

@@ -118,6 +118,28 @@ test("direct receipt API records explicit cash without a legacy entitlement", as
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   stage("COMPARE"); expect(database()).toEqual(afterLost);
+  for (const id of [result.id, lostBody.receipt_id]) {
+    const response = await page.request.get(`${base}/${id}/void-inputs`);
+    expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
+    const review = await response.json() as Schemas["DirectReceiptVoidInputs"];
+    expect(review.scope).toBe("DIRECT_RECORDED_RECEIPT_VOID_INPUTS_ONLY");
+    expect(review.origin_portfolio_id).toBe(portfolio.id);
+    expect(review.current).toMatchObject({ event_id: event.id, account_id: account.id, portfolio_id: portfolio.id,
+      revision_id: event.current_revision_id, revision_no: event.version, account_version: inputs.account_version,
+      portfolio_data_revision: (BigInt(inputs.portfolio_data_revision) + 2n).toString(),
+      receipt_basis: "DIRECT_EVENT_ACCOUNT", current_use_scope: "REVALIDATION_REQUIRED" });
+    expect(review.receipt).toMatchObject({ id, event_id: event.id, account_id: account.id, entitlement_id: null,
+      receipt_basis: "DIRECT_EVENT_ACCOUNT", revision_id: event.current_revision_id, revision_no: event.version,
+      recorded_amount: "6.125000", recorded_tax: null, recorded_fee: "0.000000", received_hkd: "47.775000",
+      fx_rate_hkd: "7.800000000000", status: "ACTIVE", version: "1", audit_scope: "RECORDED_AUDIT_MATCHED_ONLY",
+      eligibility_scope: "NOT_ESTABLISHED", payment_scope: "OWNER_RECORDED_NOT_VERIFIED" });
+    expect(review.cash_entry_id).toBe(id === result.id ? result.cash_entry_id : lostResult!.cash_entry_id);
+    const legacy = await page.request.get(`${base.replace("recorded-receipts", "receipts")}/${id}/void-inputs`);
+    expect(legacy.status()).toBe(503); expect(legacy.headers()["cache-control"]).toBe("no-store");
+  }
+  const absent = await page.request.get(`${base}/${randomUUID()}/void-inputs`);
+  expect(absent.status()).toBe(404); expect(absent.headers()["cache-control"]).toBe("no-store");
+  expect(database()).toEqual(afterLost);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0); expect(await page.evaluate(() => caches.keys())).toEqual([]);
   stage("FINAL");
 });

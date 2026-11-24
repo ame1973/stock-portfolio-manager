@@ -217,8 +217,12 @@ Full-table comparisons check the expected atomic audit, cash, origin, idempotenc
 invalidation changes while legacy entitlements/receipts, projections and provider state stay
 unchanged. The built SPA then reads both newly recorded direct receipts at 360/768/1440,
 checks keyboard account selection, no-store and unverified labels, and offers no legacy void
-action for direct records. Browser storage stays empty. This exercises direct creation over
-the real socket and its history UI, not a direct entry or direct-void form, external payment,
+action for direct records. Authenticated socket reads of both direct void-input snapshots check
+matching current/original pins, exact cash/FX, null versus zero, original cash IDs and no-grant
+labels without changing any tables. Missing IDs return 404; legacy-only void inputs remain
+fenced rather than adopting direct receipts. Browser storage stays empty. This exercises direct
+creation over the real socket, its history UI and read-only void inputs, not a direct entry or
+direct-void form, external payment,
 eligibility, deployment, NAS or TLS. The pinned private reporter, exclusive temporary root,
 no-debug/no-recording rules and fixed safe output remain mandatory. CI defines this fixture;
 that definition is not evidence of a hosted CI run.

@@ -1881,6 +1881,29 @@ these records, but direct entry and direct-void forms are not yet available; dir
 remains unfinished. Existing legacy routes and missing-origin/event fences are unchanged.
 This is recorded cash, not bank confirmation, income recognition or atomic reconciliation.
 
+## Protected direct recorded-receipt void input snapshot
+
+`GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/{receipt_id}/void-inputs`
+requires an active owner session and returns `Cache-Control: no-store`. It validates the current
+owned event/account/portfolio/broker and rejection history plus both complete receipt stores in
+one WAL snapshot. It returns `DirectReceiptVoidInputs`, composing the existing `current`
+`DirectReceiptInputs` and a direct-only `receipt` `CombinedRecordedReceipt`, alongside the
+original `cash_entry_id` and `origin_portfolio_id`. The nested event/account and current physical
+revision pins must agree. A legacy receipt ID is not adopted into this direct workflow.
+
+The receipt retains its original physical revision, exact cash, tax/fee unknowns, locked FX/HKD,
+audit label and lifecycle. The current account can be archived or have moved to another owned
+portfolio; the original portfolio remains separate. A voided receipt and exhausted revision are
+still readable, not actionable. Missing/foreign scopes and legacy IDs return 404; malformed or
+unsealed history fails the whole read with a fixed private 503, even when the requested record
+itself is intact. Concurrent cash voids or account changes do not mix versions within the read.
+
+The scope is `DIRECT_RECORDED_RECEIPT_VOID_INPUTS_ONLY`; nested history/current-use/eligibility/
+payment labels remain unverified and do not grant a correction. This read writes no reversal,
+audit, invalidation or idempotency record, contacts no provider and does not reprice original
+cash. Protected direct-void mutation and direct entry/void forms remain unfinished. The existing
+legacy-only and event financial-history fences are unchanged, including after a recorded void.
+
 ## Internal direct recorded-cash void
 
 `dividend_direct_receipt_void.void` is an internal correction primitive, not an authenticated
