@@ -11,6 +11,11 @@ const acceptableStatuses = new Set<Schemas["DividendEventRecord"]["workflow_stat
 // eslint-disable-next-line no-control-regex -- Python str.strip includes these information separators.
 const pythonStrip = /^[\p{White_Space}\u001c-\u001f]+|[\p{White_Space}\u001c-\u001f]+$/gu;
 export function normalizeDecisionText(value: string): string { return value.replace(pythonStrip, ""); }
+export function validDecisionText(value: string, min: number, max: number): boolean {
+  const characters = Array.from(value);
+  return characters.length >= min && characters.length <= max && !value.includes("\0")
+    && characters.every(character => { const point = character.codePointAt(0)!; return point < 0xd800 || point > 0xdfff; });
+}
 
 const normalizedText = z.string().transform(normalizeDecisionText);
 export const decisionCitation = normalizedText.pipe(z.string().min(1, "請提供引用參考。").max(300, "引用參考最多 300 個字元。")

@@ -8,7 +8,7 @@ import { checked, mutationHeaders } from "../../lib/api";
 import { EditorCloseContext } from "../../lib/editor-lifecycle";
 import { date, fx, money } from "../ledger/inputs";
 import { useFormAction } from "../settings/data";
-import { normalizeDecisionText } from "./event-validation";
+import { normalizeDecisionText, validDecisionText } from "./event-validation";
 import { fxIntent } from "./projection-input-validation";
 import { checkedReceiptSaved, receiptMoneyIntent, reversibleMoney, validReceiptTarget, type ReceiptTarget } from "./receipt-input-validation";
 
@@ -18,11 +18,6 @@ const schema = z.object({ receivedDate: date, currency: z.enum(["", "HKD", "USD"
   taxMode: z.enum(["", "UNKNOWN", "PROVIDED"]), tax: z.string(), feeMode: z.enum(["", "UNKNOWN", "PROVIDED"]), fee: z.string(),
   fxMode: z.enum(["", "UNKNOWN", "PROVIDED"]), fxRate: z.string(), fxSource: text, override: z.boolean(), actualHkd: z.string(), actualReason: text,
   note: z.string(), reason: text, acknowledged: z.boolean() });
-function validText(value: string, min: number, max: number): boolean {
-  const characters = Array.from(value);
-  return characters.length >= min && characters.length <= max && !value.includes("\0")
-    && characters.every(character => { const point = character.codePointAt(0)!; return point < 0xd800 || point > 0xdfff; });
-}
 const formSchema = schema.superRefine((value, context) => {
   if (!value.currency) context.addIssue({ code: "custom", path: ["currency"], message: "請明確選擇實收幣別。" });
   if (!reversibleMoney.safeParse(value.received).success) context.addIssue({ code: "custom", path: ["received"], message: "請輸入可沖銷的精確金額，最多 6 位小數。" });
@@ -36,7 +31,7 @@ const formSchema = schema.superRefine((value, context) => {
     if (!value.fxMode) context.addIssue({ code: "custom", path: ["fxMode"], message: "請明確選擇是否提供港幣匯率。" });
     if (value.fxMode === "PROVIDED") {
       if (!fx.max(50).safeParse(value.fxRate).success) context.addIssue({ code: "custom", path: ["fxRate"], message: "請輸入正數匯率，最多 12 位小數。" });
-      if (!validText(value.fxSource, 1, 100) || value.fxSource === "IDENTITY") context.addIssue({ code: "custom", path: ["fxSource"], message: "請輸入 1 至 100 個有效字元的歷史匯率來源。" });
+      if (!validDecisionText(value.fxSource, 1, 100) || value.fxSource === "IDENTITY") context.addIssue({ code: "custom", path: ["fxSource"], message: "請輸入 1 至 100 個有效字元的歷史匯率來源。" });
     }
   }
   if (value.override && (value.currency === "HKD" || (value.currency === "USD" && value.fxMode === "PROVIDED"))) {
@@ -48,10 +43,10 @@ const formSchema = schema.superRefine((value, context) => {
       else if ((received === 0n && actual !== 0n) || (received > 0n && actual < 0n) || (received < 0n && actual > 0n))
         context.addIssue({ code: "custom", path: ["actualHkd"], message: "實際港幣金額的正負號須與原幣一致；原幣為零時港幣亦須為零。" });
     }
-    if (!validText(value.actualReason, 10, 1000)) context.addIssue({ code: "custom", path: ["actualReason"], message: "請提供 10 至 1000 個有效字元的實際金額依據。" });
+    if (!validDecisionText(value.actualReason, 10, 1000)) context.addIssue({ code: "custom", path: ["actualReason"], message: "請提供 10 至 1000 個有效字元的實際金額依據。" });
   }
-  if (!validText(value.note, 0, 1000)) context.addIssue({ code: "custom", path: ["note"], message: "備註最多 1000 個有效字元，不能包含 NUL。" });
-  if (!validText(value.reason, 10, 1000)) context.addIssue({ code: "custom", path: ["reason"], message: "請提供 10 至 1000 個有效字元的收款依據。" });
+  if (!validDecisionText(value.note, 0, 1000)) context.addIssue({ code: "custom", path: ["note"], message: "備註最多 1000 個有效字元，不能包含 NUL。" });
+  if (!validDecisionText(value.reason, 10, 1000)) context.addIssue({ code: "custom", path: ["reason"], message: "請提供 10 至 1000 個有效字元的收款依據。" });
   if (!value.acknowledged) context.addIssue({ code: "custom", path: ["acknowledged"], message: "請確認收款記錄不證明付款或資格。" });
 });
 
