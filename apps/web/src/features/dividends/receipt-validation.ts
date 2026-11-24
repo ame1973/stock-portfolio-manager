@@ -23,7 +23,7 @@ const receipt = z.object({
   scope: z.literal("UNVERIFIED_RECEIPT_HISTORY_ONLY"), current_use_scope: z.literal("REVALIDATION_REQUIRED"), eligibility_scope: z.literal("NOT_ESTABLISHED"),
 });
 
-function micros(value: string): bigint {
+export function timestampMicros(value: string): bigint {
   const fraction = /\.(\d{1,6})/.exec(value)?.[1] ?? "";
   return BigInt(Date.parse(value)) * 1000n + BigInt(fraction.padEnd(6, "0").slice(3));
 }
@@ -31,7 +31,7 @@ function micros(value: string): bigint {
 function consistent(item: Receipt, event: Event): boolean {
   if (item.status === "ACTIVE") {
     if (item.voided_at !== null || ["CASH_REVERSAL_NOT_RECORDED", "MATCHING_CASH_REVERSAL_RECORDED_UNVERIFIED"].includes(item.cash_scope)) return false;
-  } else if (item.voided_at === null || BigInt(item.version) < 2n || micros(item.voided_at) < micros(item.created_at)
+  } else if (item.voided_at === null || BigInt(item.version) < 2n || timestampMicros(item.voided_at) < timestampMicros(item.created_at)
     || item.cash_scope === "MATCHING_CASH_RECORDED_UNVERIFIED") return false;
   if (sameId(item.current_revision_id, event.current_revision_id)) {
     if (item.revision_no > event.version || (item.revision_no === event.version) !== sameId(item.revision_id, item.current_revision_id)) return false;
