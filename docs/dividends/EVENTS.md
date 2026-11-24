@@ -1786,8 +1786,30 @@ stale scope, malformed retained evidence and derived monetary overflow fail clos
 There is still no protected direct-create/void API or direct-entry browser workflow. Existing
 legacy-only receipt readers and writers remain fenced when direct records would be omitted.
 New installations still cannot record receipts through the app. Session/Origin/CSRF,
-reauthentication, HTTP-intent/idempotency rechecks and direct void integration must be completed
-separately; neither this primitive nor an audit digest proves payment or eligibility.
+reauthentication, HTTP-intent/idempotency rechecks and protected direct void integration must be
+completed separately; neither this primitive nor an audit digest proves payment or eligibility.
+
+## Internal direct recorded-cash void
+
+`dividend_direct_receipt_void.void` is an internal correction primitive, not an authenticated
+endpoint. It validates the combined retained history and a matched direct receipt origin,
+requiring the stable receipt/event/account, current event and account/portfolio/broker/data
+pins, original physical revision/version, original cash-entry ID, reason and
+`VOID_RECORDED_CASH`. It does not adopt legacy receipts or invent missing provenance.
+
+The original receipt amount, tax/fee, currency, cash and locked FX are retained. One exact
+reversal, the receipt's one-way void transition, reversal and intent audits, pre-opening cash
+rebase and current/retained portfolio invalidations share one safe savepoint. Archived accounts
+can correct recorded cash; after a same-owner account move both portfolios are invalidated,
+and their versions are rechecked after final audit verification. The reversal does not
+recompute the original HKD amount or replace unknown FX with zero.
+
+Same-request unchanged-intent replay is zero-write; conflicting reuse, changed scope,
+inconsistent audits, exhausted data revisions and partial writes fail closed. The event
+revision/rejection fence remains even after void. This is not payment verification, receipt
+history authentication, eligibility or atomic event reconciliation. Protected direct-create
+and direct-void APIs, session/Origin/CSRF/reauthentication, HTTP idempotency binding and browser
+entry remain unfinished; do not invoke internal financial writers on deployment data.
 
 ## Internal retained-receipt link reader
 
