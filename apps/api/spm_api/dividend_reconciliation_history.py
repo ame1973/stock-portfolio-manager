@@ -9,9 +9,9 @@ from uuid import UUID
 from sqlalchemy import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
+import spm_api.dividend_combined_receipt_history as receipts
 import spm_api.dividend_event_service as events
 import spm_api.dividend_projection_history as projections
-import spm_api.dividend_receipt_audit as receipts
 from spm_api.dividend_math import Receipt, reconcile
 from spm_api.dividend_projection import ProjectionState
 from spm_api.finance import FinanceError, Quality
@@ -178,7 +178,7 @@ def read(
     except (
         events.EventError,
         projections.ProjectionHistoryError,
-        receipts.ReceiptAuditError,
+        receipts.CombinedReceiptHistoryError,
         FinanceError,
         ValueError,
         TypeError,

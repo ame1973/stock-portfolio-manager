@@ -1711,9 +1711,9 @@ SQL guards reject cross-owner or mismatched current scope, duplicate IDs across 
 direct receipt tables, inconsistent cash links and replacement or deletion. A matching
 reversal and void-audit shape are required for the direct receipt's one-way void transition. Any direct receipt,
 including an unsealed or void one, also fences event revision and rejection until atomic
-reconciliation exists. During this intermediate step, the existing legacy receipt reader and
-comparison fail closed for an event/account containing a direct receipt rather than silently
-omitting it. Other scopes remain readable.
+reconciliation exists. The existing legacy-only receipt reader still fails closed for an
+account containing a direct receipt rather than silently omitting it; the separate recorded
+comparison validates both stores. Other scopes remain readable.
 
 The migration adds storage only: there is no protected create/void or direct-history API or
 browser workflow for direct receipts. SQL does not prove authentication, payment, complete
@@ -1757,8 +1757,7 @@ its original revision, cash and audit labels; a missing legacy origin remains un
 This internal reader does not authenticate a caller, establish completeness, ownership,
 eligibility or payment, post or reverse cash, or remove event fences. The existing legacy-only
 public readers still fail closed when direct records are present; the combined history is not
-exposed by the receipt-history API. The existing recorded comparison also remains fenced until
-it is separately integrated.
+exposed by the receipt-history API. The separate recorded comparison uses both histories.
 
 ## Internal retained-receipt link reader
 
@@ -1982,10 +1981,12 @@ selected existing entitlement.
 
 `dividend_reconciliation_history.read` is an internal, read-only comparison for an explicitly
 supplied owner, stable event and account within one database transaction. It reads the event,
-complete retained projection chain and linked receipt/audit history in the same WAL snapshot.
-It selects only the latest recorded projection, never adds older projection amounts, and follows
-receipts through their original entitlement revisions to the stable event and account. The
-original receipts, cash entries, FX snapshots and audit records are not changed. The projection's
+complete retained projection chain and both legacy and direct receipt/audit histories in the
+same WAL snapshot. It selects only the latest recorded projection, never adds older projection
+amounts, and follows legacy receipts through their original entitlement revisions and direct
+receipts through their retained physical revisions to the stable event and account. It counts
+each active recorded receipt once without manufacturing an entitlement. The original receipts,
+cash entries, FX snapshots and audit records are not changed. The projection's
 as-of date applies to that projection only; the receipt side includes all retained active receipts,
 not just receipts dated on or before the projection's as-of date.
 
@@ -2040,6 +2041,9 @@ counts and distinct projection/comparison quality. Empty history, missing cash l
 currencies and unavailable or stale projections remain explicit rather than becoming zero.
 The projection as-of date does not filter receipt dates. These are unverified recorded values,
 not a confirmation of payment, holdings, eligibility, complete history or current income.
+The legacy-only receipt-history panel fails closed when direct records exist; the independent
+comparison can still display both validated stores, without silently presenting that panel as
+complete.
 
 The event card, receipt pages and comparison are independent reads. If the comparison reports a
 different event head from the card, the amounts are withheld and the event must be reloaded.

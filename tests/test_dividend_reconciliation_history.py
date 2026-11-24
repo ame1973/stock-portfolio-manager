@@ -12,6 +12,7 @@ import httpx
 import pytest
 from sqlalchemy import Engine
 
+import spm_api.dividend_combined_receipt_history as combined
 import spm_api.dividend_event_service as events
 import spm_api.dividend_event_writer as event_writer
 import spm_api.dividend_projection_history as projections
@@ -411,7 +412,7 @@ async def test_duplicate_receipt_or_unavailable_history_fails_closed(
     assert retained is not None and len(retained) == 1
     before = database_snapshot(engine)
     with (
-        patch.object(receipts, "history", return_value=(retained[0], retained[0])),
+        patch.object(combined, "history", return_value=(retained[0], retained[0])),
         pytest.raises(
             reconciliation.ReconciliationHistoryError, match="^DIVIDEND_RECONCILIATION_UNAVAILABLE$"
         ),
@@ -430,7 +431,7 @@ async def test_duplicate_receipt_or_unavailable_history_fails_closed(
         read(engine, book)
     assert "synthetic-private" not in str(error.value)
     with (
-        patch.object(receipts, "history", return_value=None),
+        patch.object(combined, "history", return_value=None),
         pytest.raises(
             reconciliation.ReconciliationHistoryError, match="^DIVIDEND_RECONCILIATION_UNAVAILABLE$"
         ),
@@ -438,7 +439,9 @@ async def test_duplicate_receipt_or_unavailable_history_fails_closed(
         read(engine, book)
     with (
         patch.object(
-            receipts, "history", side_effect=receipts.ReceiptAuditError("synthetic-private")
+            combined,
+            "history",
+            side_effect=combined.CombinedReceiptHistoryError("synthetic-private"),
         ),
         pytest.raises(
             reconciliation.ReconciliationHistoryError, match="^DIVIDEND_RECONCILIATION_UNAVAILABLE$"
@@ -513,7 +516,7 @@ async def test_stale_projection_and_missing_reversal_fail_closed(
         voided_at=retained[0].receipt.created_at,
         cash_scope="CASH_REVERSAL_NOT_RECORDED",
     )
-    with patch.object(receipts, "history", return_value=(replace(retained[0], receipt=broken),)):
+    with patch.object(combined, "history", return_value=(replace(retained[0], receipt=broken),)):
         unavailable = read(engine, book)
     assert unavailable is not None and unavailable.state == "CASH_LINK_UNAVAILABLE"
     assert unavailable.unavailable_cash_links == 1 and unavailable.recorded_outstanding is None

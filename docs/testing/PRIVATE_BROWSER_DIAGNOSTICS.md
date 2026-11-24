@@ -214,3 +214,23 @@ the event, account and comparison because the responsive table remounts the card
 does not create a receipt or prove a cross-revision cash reconciliation; dedicated backend tests
 cover synthetic recorded receipts.
 No screenshots, deployment volumes, worker or provider traffic are used.
+
+## Separate cross-store recorded comparison fixture
+
+```sh
+npm run build
+npm run test:e2e:reconciliation-direct
+```
+
+This isolated actual-app fixture creates an event successor before any financial history, then
+records a synthetic projection through the protected API. A guarded test-only seeder adds one
+legacy receipt on the earlier revision and one direct receipt on the current revision in an
+exclusive temporary database. The seeder checks its environment, root, schema, named synthetic
+scope, projection and empty receipt stores; a repeated seed is rejected without changing data.
+
+The browser verifies no-store legacy-history failure rather than a partial page, and an
+independent comparison of 11 expected, 8 recorded and 3 difference, with unverified labels and
+the event-rejection fence intact. It covers keyboard access, 360/768/1440, unchanged synthetic
+tables and empty browser storage. This is not a direct receipt writer, a revision after financial
+history, proof of payment or eligibility, or deployment/provider acceptance. No screenshots,
+worker, provider traffic or deployment data are used.
