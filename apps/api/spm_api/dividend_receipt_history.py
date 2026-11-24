@@ -237,14 +237,10 @@ def _receipt(
     )
 
 
-def history(
+def _legacy_history(
     con: Connection, owner: UUID, event_id: UUID, account_id: UUID
 ) -> ReceiptHistory | None:
-    """Resolve every linked physical entitlement in one snapshot, without granting use.
-
-    A matching cash row is structural evidence only. Legacy receipt and entitlement
-    audit content, external ownership and the completeness of the input are not verified.
-    """
+    """Read legacy links only; callers must separately fence or validate direct receipts."""
     if (
         not con.in_transaction()
         or not isinstance(owner, UUID)
@@ -256,19 +252,6 @@ def history(
         current = events.get(con, owner, event_id)
         if current is None or account(con, owner, account_id) is None:
             return None
-        # Do not return a partial history before the direct-receipt reader is installed.
-        direct = con.execute(
-            text("""
-                SELECT 1 FROM dividend_direct_receipts
-                WHERE event_id=:event AND account_id=:account
-                UNION ALL
-                SELECT 1 FROM dividend_direct_receipt_origins
-                WHERE event_id=:event AND account_id=:account LIMIT 1
-            """),
-            {"event": str(event_id), "account": str(account_id)},
-        ).first()
-        if direct is not None:
-            raise ValueError("Direct receipt history is not yet available")
         mismatch = con.execute(
             text("""
                 SELECT 1 FROM dividend_receipts receipt
@@ -347,4 +330,32 @@ def history(
             )
         return ReceiptHistory(event_id, current.record.revision_id, account_id, tuple(retained))
     except (events.EventError, ValueError, TypeError, KeyError, OverflowError, SQLAlchemyError):
+        raise ReceiptHistoryError("DIVIDEND_RECEIPT_HISTORY_UNAVAILABLE") from None
+
+
+def history(
+    con: Connection, owner: UUID, event_id: UUID, account_id: UUID
+) -> ReceiptHistory | None:
+    """Read legacy links only when no direct receipt scope would be omitted.
+
+    Matching links remain structural evidence, not proof of payment or ownership.
+    """
+    base = _legacy_history(con, owner, event_id, account_id)
+    if base is None:
+        return None
+    try:
+        direct = con.execute(
+            text("""
+                SELECT 1 FROM dividend_direct_receipts
+                WHERE event_id=:event AND account_id=:account
+                UNION ALL
+                SELECT 1 FROM dividend_direct_receipt_origins
+                WHERE event_id=:event AND account_id=:account LIMIT 1
+            """),
+            {"event": str(event_id), "account": str(account_id)},
+        ).first()
+        if direct is not None:
+            raise ValueError("Direct receipt history would be omitted")
+        return base
+    except (ValueError, TypeError, KeyError, SQLAlchemyError):
         raise ReceiptHistoryError("DIVIDEND_RECEIPT_HISTORY_UNAVAILABLE") from None

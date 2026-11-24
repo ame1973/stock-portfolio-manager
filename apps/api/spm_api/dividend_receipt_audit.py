@@ -401,16 +401,20 @@ def _origin(
     )
 
 
-def history(
-    con: Connection, owner: UUID, event_id: UUID, account_id: UUID
+def _history(
+    con: Connection, owner: UUID, event_id: UUID, account_id: UUID, *, legacy_only: bool
 ) -> tuple[AuditedReceipt, ...] | None:
-    """Read complete retained links in one snapshot, not HTTP authority or payment proof."""
+    """Read legacy audits; a legacy-only caller must also validate direct receipts."""
     if not con.in_transaction() or not all(
         isinstance(value, UUID) for value in (owner, event_id, account_id)
     ):
         raise ReceiptAuditError("INVALID_DIVIDEND_RECEIPT_AUDIT_SCOPE")
     try:
-        base = retained.history(con, owner, event_id, account_id)
+        base = (
+            retained._legacy_history(con, owner, event_id, account_id)
+            if legacy_only
+            else retained.history(con, owner, event_id, account_id)
+        )
         if base is None:
             return None
         current_account = account(con, owner, account_id)
@@ -485,3 +489,10 @@ def history(
         SQLAlchemyError,
     ):
         raise ReceiptAuditError("DIVIDEND_RECEIPT_AUDIT_UNAVAILABLE") from None
+
+
+def history(
+    con: Connection, owner: UUID, event_id: UUID, account_id: UUID
+) -> tuple[AuditedReceipt, ...] | None:
+    """Read retained links without omitting direct receipts or granting financial use."""
+    return _history(con, owner, event_id, account_id, legacy_only=False)

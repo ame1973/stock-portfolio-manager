@@ -1745,6 +1745,21 @@ cash, or remove event fences. The existing legacy receipt reader still fails clo
 scope contains direct records; protected creation, void and browser integration remain
 unfinished.
 
+## Internal combined receipt history
+
+`dividend_combined_receipt_history.history` validates the direct and legacy stores for one
+owned event/account in the same read transaction and returns their distinct records ordered by
+recorded date, creation time and receipt ID. It does not create an entitlement for a direct
+receipt. Duplicate identities, an unsealed or inconsistent direct record, or an unavailable
+legacy history fail the whole read rather than returning a partial history. Each record keeps
+its original revision, cash and audit labels; a missing legacy origin remains unverified.
+
+This internal reader does not authenticate a caller, establish completeness, ownership,
+eligibility or payment, post or reverse cash, or remove event fences. The existing legacy-only
+public readers still fail closed when direct records are present; the combined history is not
+exposed by the receipt-history API. The existing recorded comparison also remains fenced until
+it is separately integrated.
+
 ## Internal retained-receipt link reader
 
 The internal `dividend_receipt_history.history` reader resolves all retained entitlement
