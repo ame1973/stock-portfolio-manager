@@ -1715,8 +1715,9 @@ reconciliation exists. The existing legacy-only receipt reader still fails close
 account containing a direct receipt rather than silently omitting it; the separate recorded
 comparison validates both stores. Other scopes remain readable.
 
-The migration adds storage only: there is no protected create/void or direct-history API or
-browser workflow for direct receipts. SQL does not prove authentication, payment, complete
+The migration adds storage only; the separate combined-history API below reads both stores.
+There is no protected direct-create/void API or browser workflow for direct receipts. SQL does
+not prove authentication, payment, complete
 history, exact FX arithmetic or an atomic receipt/cash/audit transaction; a receipt row can
 exist without its origin if inserted outside a correctly implemented writer. Do not insert
 these rows or invoke internal financial operations on deployment data. The existing receipt
@@ -1756,8 +1757,33 @@ its original revision, cash and audit labels; a missing legacy origin remains un
 
 This internal reader does not authenticate a caller, establish completeness, ownership,
 eligibility or payment, post or reverse cash, or remove event fences. The existing legacy-only
-public readers still fail closed when direct records are present; the combined history is not
-exposed by the receipt-history API. The separate recorded comparison uses both histories.
+public readers still fail closed when direct records are present. A separate combined-history
+API below exposes both stores; the recorded comparison also uses both histories.
+
+## Protected combined recorded-receipt history API
+
+`GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts` requires an
+active owner session and returns `Cache-Control: no-store` pages of both retained receipt
+stores. It validates the complete event/account history before applying receipt-ID search or
+keyset pagination, all in one WAL read snapshot. Search is literal; page size is bounded at
+100. Each page is an independent read, not a snapshot spanning multiple requests.
+
+Each item states `receipt_basis=LEGACY_ENTITLEMENT` with its original entitlement ID, or
+`DIRECT_EVENT_ACCOUNT` with `entitlement_id=null`. A direct association never fabricates an
+entitlement or asserts eligible holdings. Original and observed current event revisions, exact
+decimal-string amounts/FX and receipt versions, lifecycle and cash links remain explicit.
+`RECORDED_AUDIT_MATCHED_ONLY` means retained fingerprints matched, not that an original actor,
+bank payment or financial entitlement was authenticated; missing legacy origins remain
+`RECEIPT_AUDIT_NOT_VERIFIED`.
+
+The fixed scope is `UNVERIFIED_COMBINED_RECEIPT_HISTORY_ONLY`; completeness stays `UNVERIFIED`,
+current use `REVALIDATION_REQUIRED`, eligibility `NOT_ESTABLISHED` and payment
+`OWNER_RECORDED_NOT_VERIFIED`. Missing/foreign scopes return 404; inconsistent or unsealed
+history fails the whole read with a fixed private 503 rather than silently omitting records.
+An empty page is not confirmed zero. The endpoint writes nothing, contacts no provider and
+does not replace the legacy-only receipt write/input/void workflows or remove their fences.
+The existing browser history still uses the legacy-only endpoint; combined history has no
+mounted browser view yet.
 
 ## Internal direct recorded-cash creation
 

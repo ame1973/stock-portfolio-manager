@@ -641,6 +641,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Receipt History */
+        get: operations["list_combined_recorded_dividend_receipts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
         parameters: {
             query?: never;
@@ -2511,6 +2528,119 @@ export interface components {
             /** Source Adjustment Type */
             source_adjustment_type?: ("FORWARD_SPLIT" | "REVERSE_SPLIT" | "STOCK_DIVIDEND") | null;
         };
+        /** CombinedRecordedReceipt */
+        CombinedRecordedReceipt: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Audit Scope
+             * @enum {string}
+             */
+            audit_scope: "RECEIPT_AUDIT_NOT_VERIFIED" | "RECORDED_AUDIT_MATCHED_ONLY";
+            /**
+             * Cash Scope
+             * @enum {string}
+             */
+            cash_scope: "CASH_NOT_RECORDED" | "CASH_REVERSAL_NOT_RECORDED" | "MATCHING_CASH_RECORDED_UNVERIFIED" | "MATCHING_CASH_REVERSAL_RECORDED_UNVERIFIED";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /**
+             * Current Revision Id
+             * Format: uuid
+             */
+            current_revision_id: string;
+            /** Current Revision No */
+            current_revision_no: number;
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /** Entitlement Id */
+            entitlement_id: string | null;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Fx Rate Hkd */
+            fx_rate_hkd: string | null;
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Payment Scope
+             * @constant
+             */
+            payment_scope: "OWNER_RECORDED_NOT_VERIFIED";
+            /**
+             * Receipt Basis
+             * @enum {string}
+             */
+            receipt_basis: "LEGACY_ENTITLEMENT" | "DIRECT_EVENT_ACCOUNT";
+            /**
+             * Received Date
+             * Format: date
+             */
+            received_date: string;
+            /** Received Hkd */
+            received_hkd: string | null;
+            /** Recorded Amount */
+            recorded_amount: string;
+            /** Recorded Fee */
+            recorded_fee: string | null;
+            /** Recorded Tax */
+            recorded_tax: string | null;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "UNVERIFIED_COMBINED_RECEIPT_HISTORY_ONLY";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "MANUAL" | "IMPORT";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ACTIVE" | "VOID";
+            /** Version */
+            version: string;
+            /** Voided At */
+            voided_at: string | null;
+        };
         /** CorporateAction */
         CorporateAction: {
             /**
@@ -3960,6 +4090,13 @@ export interface components {
         Page_CashTransfer_: {
             /** Items */
             items: components["schemas"]["CashTransfer"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[CombinedRecordedReceipt] */
+        Page_CombinedRecordedReceipt_: {
+            /** Items */
+            items: components["schemas"]["CombinedRecordedReceipt"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -12354,6 +12491,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordedReconciliation"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_combined_recorded_dividend_receipts: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                event_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CombinedRecordedReceipt_"];
                 };
             };
             /** @description Unauthorized */

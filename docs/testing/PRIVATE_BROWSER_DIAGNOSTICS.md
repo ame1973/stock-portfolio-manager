@@ -227,6 +227,9 @@ records a synthetic projection through the protected API. A guarded test-only se
 legacy receipt on the earlier revision and one direct receipt on the current revision in an
 exclusive temporary database. The seeder checks its environment, root, schema, named synthetic
 scope, projection and empty receipt stores; a repeated seed is rejected without changing data.
+The authenticated Chromium request context also reads two no-store combined-history pages over
+the real socket, checking distinct direct/legacy basis, exact values, original revisions and
+unverified labels without database changes. That check is not a mounted combined-history UI.
 
 The browser verifies no-store legacy-history failure rather than a partial page, and an
 independent comparison of 11 expected, 8 recorded and 3 difference, with unverified labels and

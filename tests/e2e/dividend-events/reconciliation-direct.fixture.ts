@@ -80,6 +80,21 @@ test("cross-store recorded comparison stays private and does not grant payment",
   } });
   expect(rejection.status()).toBe(409); expect((await rejection.json() as { code: string }).code).toBe("DIVIDEND_EVENT_PROJECTION_REQUIRED");
   expect(database()).toEqual(before);
+  stage("COMPARE");
+  const combinedResponse = await page.request.get(`${base}/recorded-receipts?limit=1`);
+  expect(combinedResponse.status()).toBe(200); expect(combinedResponse.headers()["cache-control"]).toBe("no-store");
+  const directPage = await combinedResponse.json() as Schemas["Page_CombinedRecordedReceipt_"];
+  expect(directPage.items).toHaveLength(1); expect(directPage.next_cursor).not.toBeNull();
+  expect(directPage.items[0]).toMatchObject({ event_id: event.id, account_id: account.id, receipt_basis: "DIRECT_EVENT_ACCOUNT",
+    entitlement_id: null, revision_id: event.current_revision_id, revision_no: 2, current_revision_no: 2,
+    recorded_amount: "2.000000", audit_scope: "RECORDED_AUDIT_MATCHED_ONLY", payment_scope: "OWNER_RECORDED_NOT_VERIFIED" });
+  const legacyResponse = await page.request.get(`${base}/recorded-receipts?${new URLSearchParams({ limit: "1", cursor: directPage.next_cursor! })}`);
+  expect(legacyResponse.status()).toBe(200); expect(legacyResponse.headers()["cache-control"]).toBe("no-store");
+  const legacyPage = await legacyResponse.json() as Schemas["Page_CombinedRecordedReceipt_"];
+  expect(legacyPage.items).toHaveLength(1); expect(legacyPage.next_cursor).toBeNull();
+  expect(legacyPage.items[0]).toMatchObject({ receipt_basis: "LEGACY_ENTITLEMENT", revision_id: first.current_revision_id,
+    revision_no: 1, current_revision_no: 2, recorded_amount: "6.000000", audit_scope: "RECEIPT_AUDIT_NOT_VERIFIED" });
+  expect(legacyPage.items[0]?.entitlement_id).not.toBeNull(); expect(database()).toEqual(before);
   stage("RESIZE");
   for (const width of [360, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 }); await page.goto("/dividends");
