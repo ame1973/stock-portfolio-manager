@@ -658,6 +658,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Receipt Inputs */
+        get: operations["get_direct_recorded_dividend_receipt_inputs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": {
         parameters: {
             query?: never;
@@ -2791,6 +2808,91 @@ export interface components {
             recorded_balance: string;
             /** Unvalued Entries */
             unvalued_entries: number;
+        };
+        /** DirectReceiptInputs */
+        DirectReceiptInputs: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Account Status
+             * @enum {string}
+             */
+            account_status: "ACTIVE" | "ARCHIVED";
+            /** Account Version */
+            account_version: string;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /** Broker Version */
+            broker_version: string;
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /**
+             * Payment Scope
+             * @constant
+             */
+            payment_scope: "OWNER_RECORDED_NOT_VERIFIED";
+            /** Portfolio Data Revision */
+            portfolio_data_revision: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Portfolio Version */
+            portfolio_version: string;
+            /**
+             * Receipt Basis
+             * @constant
+             */
+            receipt_basis: "DIRECT_EVENT_ACCOUNT";
+            /** Rejection Id */
+            rejection_id: string | null;
+            /**
+             * Rejection State
+             * @enum {string}
+             */
+            rejection_state: "NOT_REJECTED" | "REJECTED";
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "DIRECT_RECORDED_RECEIPT_INPUTS_ONLY";
+            /**
+             * Workflow Status
+             * @enum {string}
+             */
+            workflow_status: "PROVISIONAL" | "CORROBORATED" | "VERIFIED" | "CONFLICT" | "INCOMPLETE" | "WITHDRAWN";
         };
         /** DividendBasisCreate */
         DividendBasisCreate: {
@@ -12563,6 +12665,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_CombinedRecordedReceipt_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_direct_recorded_dividend_receipt_inputs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectReceiptInputs"];
                 };
             };
             /** @description Unauthorized */

@@ -122,6 +122,10 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "get",
         ): "list_combined_recorded_dividend_receipts",
         (
+            "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/inputs",
+            "get",
+        ): "get_direct_recorded_dividend_receipt_inputs",
+        (
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts",
             "get",
         ): "list_recorded_dividend_receipts",
@@ -270,6 +274,37 @@ def test_combined_receipt_history_contract_keeps_explicit_basis_and_exact_values
         assert {item["type"] for item in properties[name]["anyOf"]} == {"string", "null"}
     for name, value in (
         ("scope", "UNVERIFIED_COMBINED_RECEIPT_HISTORY_ONLY"),
+        ("history_completeness", "UNVERIFIED"),
+        ("current_use_scope", "REVALIDATION_REQUIRED"),
+        ("eligibility_scope", "NOT_ESTABLISHED"),
+        ("payment_scope", "OWNER_RECORDED_NOT_VERIFIED"),
+    ):
+        assert properties[name]["const"] == value
+
+
+def test_direct_receipt_inputs_contract_has_exact_pins_but_no_entitlement_or_cash() -> None:
+    spec = create_app().openapi()
+    path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/inputs"
+    operation = spec["paths"][path]["get"]
+    assert operation["operationId"] == "get_direct_recorded_dividend_receipt_inputs"
+    assert operation["security"] == [{"cookieAuth": []}]
+    assert {item["name"] for item in operation["parameters"]} == {"event_id", "account_id"}
+    schema = spec["components"]["schemas"]["DirectReceiptInputs"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+    properties = schema["properties"]
+    assert not {"entitlement_id", "entitlements", "received_amount", "currency"} & properties.keys()
+    for name in (
+        "account_version",
+        "portfolio_version",
+        "broker_version",
+        "portfolio_data_revision",
+    ):
+        assert properties[name]["type"] == "string"
+    assert {value["type"] for value in properties["rejection_id"]["anyOf"]} == {"string", "null"}
+    for name, value in (
+        ("receipt_basis", "DIRECT_EVENT_ACCOUNT"),
+        ("scope", "DIRECT_RECORDED_RECEIPT_INPUTS_ONLY"),
         ("history_completeness", "UNVERIFIED"),
         ("current_use_scope", "REVALIDATION_REQUIRED"),
         ("eligibility_scope", "NOT_ESTABLISHED"),

@@ -95,6 +95,18 @@ test("cross-store recorded comparison stays private and does not grant payment",
   expect(legacyPage.items[0]).toMatchObject({ receipt_basis: "LEGACY_ENTITLEMENT", revision_id: first.current_revision_id,
     revision_no: 1, current_revision_no: 2, recorded_amount: "6.000000", audit_scope: "RECEIPT_AUDIT_NOT_VERIFIED" });
   expect(legacyPage.items[0]?.entitlement_id).not.toBeNull(); expect(database()).toEqual(before);
+  const inputPinsResponse = await page.request.get(`${base}/recorded-receipts/inputs`);
+  expect(inputPinsResponse.status()).toBe(200); expect(inputPinsResponse.headers()["cache-control"]).toBe("no-store");
+  const pins = await inputPinsResponse.json() as Schemas["DirectReceiptInputs"];
+  expect(pins).toMatchObject({ event_id: event.id, revision_id: event.current_revision_id, revision_no: event.version,
+    workflow_status: event.workflow_status, account_id: account.id, portfolio_id: portfolio.id, broker_id: broker.id, account_status: "ACTIVE",
+    account_version: input.account_version, broker_version: input.broker_version, receipt_basis: "DIRECT_EVENT_ACCOUNT",
+    rejection_state: "NOT_REJECTED", rejection_id: null, scope: "DIRECT_RECORDED_RECEIPT_INPUTS_ONLY",
+    current_use_scope: "REVALIDATION_REQUIRED", history_completeness: "UNVERIFIED", eligibility_scope: "NOT_ESTABLISHED",
+    payment_scope: "OWNER_RECORDED_NOT_VERIFIED" });
+  expect(pins.portfolio_version).toMatch(/^[1-9][0-9]*$/); expect(pins.portfolio_data_revision).toMatch(/^(0|[1-9][0-9]*)$/);
+  expect(pins).not.toHaveProperty("entitlement_id"); expect(pins).not.toHaveProperty("entitlements"); expect(pins).not.toHaveProperty("received_amount");
+  expect(database()).toEqual(before);
   const fencedHistory = await page.request.get(`${base}/receipts`);
   expect(fencedHistory.status()).toBe(503); expect(fencedHistory.headers()["cache-control"]).toBe("no-store");
   const legacyVoidInputs = await page.request.get(`${base}/receipts/${legacyPage.items[0]!.id}/void-inputs`);

@@ -229,7 +229,10 @@ exclusive temporary database. The seeder checks its environment, root, schema, n
 scope, projection and empty receipt stores; a repeated seed is rejected without changing data.
 The authenticated Chromium request context also reads two no-store combined-history pages over
 the real socket, checking distinct direct/legacy basis, exact values, original revisions and
-unverified labels without database changes. Separately, the built SPA selects the account by
+unverified labels without database changes. Another authenticated request reads the direct
+receipt-input snapshot in the same mixed scope and checks exact version strings, explicit
+no-grant/rejection labels and absence of entitlement or default cash fields. That input check
+is an API request, not a direct cash-entry form. Separately, the built SPA selects the account by
 keyboard and displays both records with their distinct basis, original revisions and audit
 labels. Direct records never open a legacy void form, and visible mixed history disables legacy
 void selection. Real-socket requests still verify that legacy-only history and void inputs fail

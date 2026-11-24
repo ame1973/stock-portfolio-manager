@@ -1785,6 +1785,27 @@ does not replace the legacy-only receipt write/input/void workflows or remove th
 The browser uses this combined endpoint for receipt history. Legacy-only write/input/void
 workflows retain their separate authorization and scope checks.
 
+## Protected direct recorded-receipt input snapshot
+
+`GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/inputs`
+requires an active owner session and returns `Cache-Control: no-store`. One WAL read snapshot
+checks the owned event, current account/portfolio/broker, retained rejection chain and complete
+combined receipt history. It returns the current physical event revision and workflow status,
+account status, exact decimal-string version/data pins, and the current rejection ID or an
+explicit `NOT_REJECTED` state. Archived accounts, withdrawn events and exhausted data revisions
+remain readable; this does not permit a new cash record. New writes must independently recheck
+their scope and applicable fences in their own writer transaction.
+
+This is an explicit `DIRECT_EVENT_ACCOUNT` association, not a legacy entitlement selection.
+It requires neither a retained entitlement nor a projection, and does not return or infer a
+cash amount, currency, tax, fee, date or FX rate. The scope is
+`DIRECT_RECORDED_RECEIPT_INPUTS_ONLY`; history completeness stays `UNVERIFIED`, current use
+`REVALIDATION_REQUIRED`, eligibility `NOT_ESTABLISHED`, and payment
+`OWNER_RECORDED_NOT_VERIFIED`. Missing/foreign scopes return 404; an inconsistent or unsealed
+history returns a fixed private 503 instead of partial input pins. No facts, audits or caches
+are written and no provider is contacted. The endpoint is not a protected direct-create/void
+operation or a browser entry form; those workflows remain unavailable.
+
 ## Internal direct recorded-cash creation
 
 `dividend_direct_receipt_writer.save` is an internal building block, not an authenticated
