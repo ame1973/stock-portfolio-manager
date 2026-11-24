@@ -95,6 +95,10 @@ test("cross-store recorded comparison stays private and does not grant payment",
   expect(legacyPage.items[0]).toMatchObject({ receipt_basis: "LEGACY_ENTITLEMENT", revision_id: first.current_revision_id,
     revision_no: 1, current_revision_no: 2, recorded_amount: "6.000000", audit_scope: "RECEIPT_AUDIT_NOT_VERIFIED" });
   expect(legacyPage.items[0]?.entitlement_id).not.toBeNull(); expect(database()).toEqual(before);
+  const fencedHistory = await page.request.get(`${base}/receipts`);
+  expect(fencedHistory.status()).toBe(503); expect(fencedHistory.headers()["cache-control"]).toBe("no-store");
+  const legacyVoidInputs = await page.request.get(`${base}/receipts/${legacyPage.items[0]!.id}/void-inputs`);
+  expect(legacyVoidInputs.status()).toBe(503); expect(legacyVoidInputs.headers()["cache-control"]).toBe("no-store");
   stage("RESIZE");
   for (const width of [360, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 }); await page.goto("/dividends");
@@ -103,10 +107,22 @@ test("cross-store recorded comparison stays private and does not grant payment",
     else await article.getByRole("button", { name: "查看事件與拒絕狀態" }).click();
     await article.getByRole("button", { name: "查看帳戶收款紀錄" }).click();
     const receipts = article.getByRole("region", { name: "已記錄股息收款" });
-    const historyResponse = page.waitForResponse(response => new URL(response.url()).pathname === `${base}/receipts` && response.request().method() === "GET");
-    await receipts.getByRole("button", { name: "選擇收款紀錄帳戶 Synthetic cross reconciliation account" }).click();
-    const history = await historyResponse; expect(history.status()).toBe(503); expect(history.headers()["cache-control"]).toBe("no-store");
-    await expect(receipts.getByRole("region", { name: "帳戶收款紀錄歷史" }).getByRole("alert")).toBeVisible();
+    const historyResponse = page.waitForResponse(response => new URL(response.url()).pathname === `${base}/recorded-receipts` && response.request().method() === "GET");
+    const selectAccount = receipts.getByRole("button", { name: "選擇收款紀錄帳戶 Synthetic cross reconciliation account" });
+    await selectAccount.focus(); await page.keyboard.press("Enter");
+    const history = await historyResponse; expect(history.status()).toBe(200); expect(history.headers()["cache-control"]).toBe("no-store");
+    const recorded = receipts.getByRole("region", { name: "帳戶收款紀錄歷史" });
+    await expect(recorded.getByRole("listitem")).toHaveCount(2);
+    const directRecord = recorded.getByRole("listitem").filter({ hasText: directPage.items[0]!.id });
+    const legacyRecord = recorded.getByRole("listitem").filter({ hasText: legacyPage.items[0]!.id });
+    await expect(directRecord).toContainText("直接關聯事件與帳戶"); await expect(directRecord).toContainText("USD 2.000000");
+    await expect(directRecord).toContainText("原事件修訂 2"); await expect(directRecord).toContainText("保留稽核記錄相符，付款仍未驗證");
+    await expect(directRecord.getByRole("button", { name: /核對作廢收款/ })).toHaveCount(0);
+    await expect(legacyRecord).toContainText("原應收識別碼"); await expect(legacyRecord).toContainText("USD 6.000000");
+    await expect(legacyRecord).toContainText("原事件修訂 1"); await expect(legacyRecord).toContainText("歷史稽核及付款均未驗證");
+    await expect(legacyRecord.getByRole("button", { name: /核對作廢收款/ })).toBeDisabled();
+    await expect(recorded).toContainText("本頁包含直接收款"); await expect(recorded.getByRole("alert")).toHaveCount(0);
+    const historyBox = (await recorded.boundingBox())!; expect(historyBox.x).toBeGreaterThanOrEqual(0); expect(historyBox.x + historyBox.width).toBeLessThanOrEqual(width);
     const comparisonResponse = page.waitForResponse(response => new URL(response.url()).pathname === `${base}/reconciliation` && response.request().method() === "GET");
     const open = receipts.getByRole("button", { name: "比較已記錄金額" }); await open.focus(); await page.keyboard.press("Enter");
     const response = await comparisonResponse; expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");

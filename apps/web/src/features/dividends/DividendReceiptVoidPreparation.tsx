@@ -2,23 +2,27 @@ import { useCallback } from "react";
 import { api, type components } from "@spm/contracts";
 import { Button } from "../../components/ui/button";
 import { checked, failureMessage } from "../../lib/api";
-import { checkedReceiptVoidInputs, validReceiptVoidTarget, type ReceiptVoidTarget } from "./receipt-void-validation";
+import { checkedReceiptVoidInputs, validReceiptVoidTarget, type ReceiptVoidHistory, type ReceiptVoidTarget } from "./receipt-void-validation";
 import { sameId } from "./receipt-validation";
 import { usePrivatePage } from "./use-private-page";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
 type Account = Schemas["Account"];
-type Receipt = Schemas["RecordedReceipt"];
 
 export function DividendReceiptVoidPreparation({ event, account, receipt, onVoid, disabled = false }: {
-  event: Event; account: Account; receipt: Receipt; onVoid: (target: ReceiptVoidTarget) => void; disabled?: boolean;
+  event: Event; account: Account; receipt: ReceiptVoidHistory; onVoid: (target: ReceiptVoidTarget) => void; disabled?: boolean;
 }) {
-  const load = useCallback(async (_cursor: string | undefined, signal: AbortSignal) => checkedReceiptVoidInputs(checked(await api.GET(
-    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs", {
-      params: { path: { event_id: event.id, account_id: account.id, receipt_id: receipt.id } }, signal,
+  const load = useCallback(async (_cursor: string | undefined, signal: AbortSignal) => {
+    if (receipt.entitlement_id === null || (receipt.scope === "UNVERIFIED_COMBINED_RECEIPT_HISTORY_ONLY" && receipt.receipt_basis !== "LEGACY_ENTITLEMENT")) {
+      throw new Error("直接收款不能使用舊式作廢流程。");
     }
-  )), event, account, receipt), [event, account, receipt]);
+    return checkedReceiptVoidInputs(checked(await api.GET(
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs", {
+        params: { path: { event_id: event.id, account_id: account.id, receipt_id: receipt.id } }, signal,
+      }
+    )), event, account, receipt);
+  }, [event, account, receipt]);
   const result = usePrivatePage(`receipt-void:${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${receipt.id}:${receipt.version}`, undefined, load);
   const target = result.data ? { event, account, receipt, inputs: result.data } : null;
   const ready = !!target && !result.isFetching && !result.isPaused && !result.isError && !disabled && validReceiptVoidTarget(target);

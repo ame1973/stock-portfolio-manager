@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DividendEventsPage } from "./DividendEventsPage";
 import { account as receiptAccount } from "./projection-test-data";
 import { reconciliation } from "./reconciliation-test-data";
-import { inputs as voidInputs, receipt as recordedReceipt } from "./receipt-void-test-data";
+import { inputs as voidInputs, combinedReceipt as recordedReceipt } from "./receipt-void-test-data";
 
 type Schemas = components["schemas"];
 const event: Schemas["DividendEventRecord"] = {
@@ -58,7 +58,7 @@ async function openEvent() {
 
 describe("dividend event workspace", () => {
   it("opens receipt history only after an explicit account selection without writing", async () => {
-    const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts";
+    const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts";
     const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null }, [path]: empty });
     const post = vi.spyOn(api, "POST"); renderPage(); await openEvent();
     expect(screen.getByText(/這裡不確認應收或實收/)).toBeVisible();
@@ -72,9 +72,9 @@ describe("dividend event workspace", () => {
   });
 
   it("opens a reauthenticated void sheet outside a refreshed event card", async () => {
-    const history = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts";
+    const history = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts";
     const voidPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs";
-    const selected = { ...recordedReceipt, event_id: event.id, current_revision_id: event.current_revision_id };
+    const selected = { ...recordedReceipt, event_id: event.id, current_revision_id: event.current_revision_id, current_revision_no: event.version };
     const observed = { ...voidInputs, event_id: event.id, observed_revision_id: event.current_revision_id, observed_revision_no: event.version };
     const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null }, [history]: { items: [selected], next_cursor: null }, [voidPath]: observed });
     const post = vi.spyOn(api, "POST"); const cache = renderPage(); await openEvent();
@@ -138,7 +138,7 @@ describe("dividend event workspace", () => {
     const current = { ...scope, effective_on: "2026-11-03", head_no: "0", head_id: null, selected: null, selected_scope: "NO_SELECTED_SETTING", scope: "OWNER_ESTIMATE_ONLY", current_use_scope: "REVALIDATION_REQUIRED" };
     const comparisonPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/reconciliation";
     const get = reads({ "/api/v1/accounts": { items: [account], next_cursor: null },
-      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts": empty,
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts": empty,
       "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projections": empty,
       "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": { ...current, tax_status: "MISSING" },
       "/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings": { ...current, fee_status: "MISSING", revision_rejection: "NOT_REJECTED" },

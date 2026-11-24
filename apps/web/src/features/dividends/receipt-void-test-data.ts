@@ -13,6 +13,8 @@ export const receipt: Schemas["RecordedReceipt"] = {
   cash_scope: "MATCHING_CASH_RECORDED_UNVERIFIED", audit_scope: "RECEIPT_AUDIT_NOT_VERIFIED", history_completeness: "UNVERIFIED",
   scope: "UNVERIFIED_RECEIPT_HISTORY_ONLY", current_use_scope: "REVALIDATION_REQUIRED", eligibility_scope: "NOT_ESTABLISHED",
 };
+export const combinedReceipt: Schemas["CombinedRecordedReceipt"] = { ...receipt, receipt_basis: "LEGACY_ENTITLEMENT", current_revision_no: event.version,
+  scope: "UNVERIFIED_COMBINED_RECEIPT_HISTORY_ONLY", audit_scope: "RECORDED_AUDIT_MATCHED_ONLY", payment_scope: "OWNER_RECORDED_NOT_VERIFIED" };
 export const inputs: Schemas["ReceiptVoidInputs"] = {
   receipt_id: receipt.id, event_id: event.id, observed_revision_id: event.current_revision_id, observed_revision_no: event.version,
   account_id: account.id, portfolio_id: account.portfolio_id, broker_id: account.broker_id, account_status: "ACTIVE",

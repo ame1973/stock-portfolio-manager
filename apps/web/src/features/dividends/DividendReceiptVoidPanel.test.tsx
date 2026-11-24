@@ -4,9 +4,9 @@ import { api } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { DividendReceiptPanel } from "./DividendReceiptPanel";
 import { account, event } from "./projection-test-data";
-import { inputs, receipt, voided } from "./receipt-void-test-data";
+import { combinedReceipt as receipt, inputs, voided } from "./receipt-void-test-data";
 
-const historyPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts";
+const historyPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts";
 const inputPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs";
 const reply = <T,>(data: T) => ({ data, response: new Response() });
 function reads() {
@@ -58,7 +58,7 @@ describe("selecting a recorded receipt for void", () => {
     act(() => onlineManager.setOnline(false)); await waitFor(() => expect(open).toBeDisabled()); act(() => onlineManager.setOnline(true));
     await waitFor(() => expect(open).toBeEnabled());
     get.mockImplementation(async request => request === historyPath
-      ? reply({ items: [{ ...receipt, current_revision_id: "77777777-7777-4777-8777-777777777777" }], next_cursor: null })
+      ? reply({ items: [{ ...receipt, current_revision_id: "77777777-7777-4777-8777-777777777777", current_revision_no: event.version + 1 }], next_cursor: null })
       : request === inputPath ? reply(inputs) : reply({ items: [account], next_cursor: null }));
     fireEvent.click(screen.getByRole("button", { name: "重新載入收款紀錄" }));
     expect(await screen.findByText(/收款讀取與事件清單的目前版本不同/)).toBeVisible(); expect(open).toBeDisabled();

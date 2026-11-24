@@ -79,6 +79,7 @@ const messages: Record<string, string> = {
   DIVIDEND_FEE_HISTORY_UNAVAILABLE: "費用估算歷史無法安全核對；請重新載入或檢查有效備份。",
   DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE: "投影歷史無法安全核對；請保留輸入並檢查有效備份，不會假定先前未記錄。",
   DIVIDEND_RECONCILIATION_UNAVAILABLE: "對帳紀錄無法安全核對；請重新載入或檢查有效備份，不會自動修補紀錄。",
+  COMBINED_RECEIPT_HISTORY_UNAVAILABLE: "合併收款歷史無法安全核對；請重新載入或檢查有效備份，不會省略其中一種紀錄。",
   DIVIDEND_RECEIPT_HISTORY_UNAVAILABLE: "收款歷史無法安全核對；請重新載入或檢查有效備份，不會自動修補紀錄。",
   DIVIDEND_RECEIPT_INPUTS_UNAVAILABLE: "收款依據無法安全核對；請重新載入或檢查有效備份。",
   DIVIDEND_RECEIPT_VOID_INPUTS_UNAVAILABLE: "收款作廢輸入無法安全核對；請重新載入或檢查有效備份。",

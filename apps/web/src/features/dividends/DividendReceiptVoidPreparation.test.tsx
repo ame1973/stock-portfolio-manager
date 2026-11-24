@@ -4,7 +4,7 @@ import { api, type components } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { DividendReceiptVoidPreparation } from "./DividendReceiptVoidPreparation";
 import { account, event } from "./projection-test-data";
-import { inputs, receipt, voided } from "./receipt-void-test-data";
+import { combinedReceipt, inputs, receipt, voided } from "./receipt-void-test-data";
 
 type Schemas = components["schemas"];
 const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs";
@@ -17,6 +17,13 @@ function show(value: Schemas["RecordedReceipt"] = receipt, selected: Schemas["Ac
 }
 
 describe("recorded receipt void preparation", () => {
+  it("never requests legacy void inputs for a direct record", async () => {
+    const get = reads(); const onVoid = vi.fn();
+    const direct: Schemas["CombinedRecordedReceipt"] = { ...combinedReceipt, receipt_basis: "DIRECT_EVENT_ACCOUNT", entitlement_id: null };
+    render(<DividendReceiptVoidPreparation event={event} account={account} receipt={direct} onVoid={onVoid} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("直接收款不能使用舊式作廢流程");
+    expect(get).not.toHaveBeenCalled(); expect(onVoid).not.toHaveBeenCalled();
+  });
   it("reads the explicit selected receipt and opens only a matched fresh snapshot", async () => {
     const get = reads(); const post = vi.spyOn(api, "POST"); const { cache, onVoid } = show();
     const open = await screen.findByRole("button", { name: "繼續核對並作廢收款" }); await waitFor(() => expect(open).toBeEnabled());

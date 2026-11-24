@@ -3,16 +3,16 @@ import type { components } from "@spm/contracts";
 import { date, fx, money, signedMoney } from "../ledger/inputs";
 import { ordinal, positiveOrdinal, validEstimateEvent } from "./estimate-validation";
 import { reversibleMoney } from "./receipt-input-validation";
-import { checkedReceiptPage, sameId, timestamp, timestampMicros } from "./receipt-validation";
+import { checkedCombinedReceiptPage, checkedReceiptPage, sameId, timestamp, timestampMicros } from "./receipt-validation";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
 type Account = Schemas["Account"];
-type Receipt = Schemas["RecordedReceipt"];
+export type ReceiptVoidHistory = Schemas["RecordedReceipt"] | Schemas["CombinedRecordedReceipt"];
 type Inputs = Schemas["ReceiptVoidInputs"];
 type Write = Schemas["ReceiptVoidWrite"];
 type Voided = Schemas["ReceiptVoided"];
-export type ReceiptVoidTarget = { event: Event; account: Account; receipt: Receipt; inputs: Inputs };
+export type ReceiptVoidTarget = { event: Event; account: Account; receipt: ReceiptVoidHistory; inputs: Inputs };
 
 const id = z.uuid();
 const version = z.int().min(1).max(2_147_483_647);
@@ -45,11 +45,15 @@ function sameDecimal(left: string | null, right: string | null, places: number):
   return left === null || right === null ? left === right : scaled(left, places) === scaled(right, places);
 }
 
-export function checkedReceiptVoidInputs(value: Inputs, event: Event, account: Account, receipt: Receipt): Inputs {
+export function checkedReceiptVoidInputs(value: Inputs, event: Event, account: Account, receipt: ReceiptVoidHistory): Inputs {
   try {
     if (!validEstimateEvent(event) || !inputsShape.safeParse(value).success
       || !z.object({ id, portfolio_id: id, broker_id: id, status: z.enum(["ACTIVE", "ARCHIVED"]) }).safeParse(account).success) throw new Error();
-    checkedReceiptPage({ items: [receipt] }, event, account);
+    if (receipt.scope === "UNVERIFIED_COMBINED_RECEIPT_HISTORY_ONLY") {
+      checkedCombinedReceiptPage({ items: [receipt] }, event, account);
+      if (receipt.receipt_basis !== "LEGACY_ENTITLEMENT" || receipt.audit_scope !== value.audit_scope) throw new Error();
+    } else checkedReceiptPage({ items: [receipt] }, event, account);
+    if (receipt.entitlement_id === null) throw new Error();
     const matched = value.audit_scope === "RECORDED_AUDIT_MATCHED_ONLY";
     if (!sameId(value.receipt_id, receipt.id) || !sameId(value.event_id, event.id)
       || !sameId(value.observed_revision_id, event.current_revision_id) || value.observed_revision_no !== event.version

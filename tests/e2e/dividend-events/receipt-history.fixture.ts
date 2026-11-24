@@ -60,7 +60,7 @@ test("recorded receipt history stays private and preserves original event revisi
     const panel = article.getByRole("region", { name: "已記錄股息收款" });
     const choose = panel.getByRole("button", { name: "選擇收款紀錄帳戶 Synthetic receipt read account" }); await expect(choose).toBeEnabled();
     expect((await accountRead).headers()["cache-control"]).toBe("no-store");
-    const historyRead = page.waitForResponse(response => new URL(response.url()).pathname === base && response.request().method() === "GET");
+    const historyRead = page.waitForResponse(response => new URL(response.url()).pathname === base.replace(/\/receipts$/, "/recorded-receipts") && response.request().method() === "GET");
     await choose.click(); expect((await historyRead).headers()["cache-control"]).toBe("no-store");
     const history = panel.getByRole("region", { name: "帳戶收款紀錄歷史" });
     await expect(history).toContainText("原事件修訂 1"); await expect(history).toContainText("原事件修訂 2");

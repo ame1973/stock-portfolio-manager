@@ -229,10 +229,14 @@ exclusive temporary database. The seeder checks its environment, root, schema, n
 scope, projection and empty receipt stores; a repeated seed is rejected without changing data.
 The authenticated Chromium request context also reads two no-store combined-history pages over
 the real socket, checking distinct direct/legacy basis, exact values, original revisions and
-unverified labels without database changes. That check is not a mounted combined-history UI.
+unverified labels without database changes. Separately, the built SPA selects the account by
+keyboard and displays both records with their distinct basis, original revisions and audit
+labels. Direct records never open a legacy void form, and visible mixed history disables legacy
+void selection. Real-socket requests still verify that legacy-only history and void inputs fail
+closed for this mixed scope.
 
-The browser verifies no-store legacy-history failure rather than a partial page, and an
-independent comparison of 11 expected, 8 recorded and 3 difference, with unverified labels and
+The browser also verifies an independent comparison of 11 expected, 8 recorded and 3 difference,
+with unverified labels and
 the event-rejection fence intact. It covers keyboard access, 360/768/1440, unchanged synthetic
 tables and empty browser storage. This is not a direct receipt writer, a revision after financial
 history, proof of payment or eligibility, or deployment/provider acceptance. No screenshots,

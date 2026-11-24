@@ -6,15 +6,16 @@ import { DividendReceiptPanel } from "./DividendReceiptPanel";
 import { account, event } from "./projection-test-data";
 
 type Schemas = components["schemas"];
-const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts";
-const receipt: Schemas["RecordedReceipt"] = {
+const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts";
+const receipt: Schemas["CombinedRecordedReceipt"] = {
+  receipt_basis: "LEGACY_ENTITLEMENT", current_revision_no: event.version, payment_scope: "OWNER_RECORDED_NOT_VERIFIED",
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", event_id: event.id, account_id: account.id,
   entitlement_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", revision_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", revision_no: 2,
   current_revision_id: event.current_revision_id, received_date: "2026-11-05", recorded_amount: "6.000000", currency: "USD",
   recorded_tax: "0.000000", recorded_fee: "0.000000", fx_rate_hkd: "7.800000000000", received_hkd: "46.800000",
   source: "MANUAL", status: "ACTIVE", version: "9007199254740993", created_at: "2026-11-06T00:00:00Z", voided_at: null,
   cash_scope: "MATCHING_CASH_RECORDED_UNVERIFIED", audit_scope: "RECEIPT_AUDIT_NOT_VERIFIED", history_completeness: "UNVERIFIED",
-  scope: "UNVERIFIED_RECEIPT_HISTORY_ONLY", current_use_scope: "REVALIDATION_REQUIRED", eligibility_scope: "NOT_ESTABLISHED",
+  scope: "UNVERIFIED_COMBINED_RECEIPT_HISTORY_ONLY", current_use_scope: "REVALIDATION_REQUIRED", eligibility_scope: "NOT_ESTABLISHED",
 };
 const reply = <T,>(data: T) => ({ data, response: new Response() });
 function reads(value: unknown = { items: [receipt], next_cursor: null }) {
@@ -32,6 +33,30 @@ function renderPanel() {
 async function selectAccount() { fireEvent.click(await screen.findByRole("button", { name: `選擇收款紀錄帳戶 ${account.name}` })); }
 
 describe("recorded dividend receipt history", () => {
+  it("displays both bases and audit scopes without sending direct IDs to legacy void inputs", async () => {
+    const direct: Schemas["CombinedRecordedReceipt"] = { ...receipt, id: "ffffffff-ffff-4fff-8fff-ffffffffffff", receipt_basis: "DIRECT_EVENT_ACCOUNT",
+      entitlement_id: null, revision_id: event.current_revision_id, revision_no: event.version, version: "1", audit_scope: "RECORDED_AUDIT_MATCHED_ONLY",
+      recorded_amount: "9223372036854.775807", fx_rate_hkd: null, received_hkd: null, recorded_tax: null };
+    const get = reads({ items: [direct, receipt], next_cursor: null }); const post = vi.spyOn(api, "POST"); const onVoid = vi.fn();
+    render(<DividendReceiptPanel event={event} onVoid={onVoid} />); await selectAccount();
+    const panel = await screen.findByRole("region", { name: "帳戶收款紀錄歷史" });
+    expect(await within(panel).findByText(/直接關聯事件與帳戶/)).toBeVisible(); expect(panel).toHaveTextContent("9223372036854.775807");
+    expect(panel).toHaveTextContent("保留稽核記錄相符，付款仍未驗證"); expect(panel).toHaveTextContent("歷史稽核及付款均未驗證");
+    expect(panel).toHaveTextContent("本頁包含直接收款"); expect(within(panel).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(panel).getAllByText(/原應收識別碼/)).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: `核對作廢收款 ${direct.id}` })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `核對作廢收款 ${receipt.id}` })).toBeDisabled();
+    expect(get).not.toHaveBeenCalledWith("/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs", expect.anything());
+    expect(onVoid).not.toHaveBeenCalled(); expect(post).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to partial legacy history when the combined read fails", async () => {
+    const get = reads(); get.mockImplementation(async request => request === "/api/v1/accounts" ? reply({ items: [account] })
+      : { error: { code: "COMBINED_RECEIPT_HISTORY_UNAVAILABLE", message: "synthetic-private-diagnostic" }, response: new Response() });
+    renderPanel(); await selectAccount(); expect(await screen.findByRole("alert")).toHaveTextContent("不會省略其中一種紀錄");
+    expect(get).not.toHaveBeenCalledWith("/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts", expect.anything());
+    expect(screen.queryByText(/synthetic-private-diagnostic/)).not.toBeInTheDocument();
+  });
   it("requires an explicit account and shows original unverified receipt values without writes", async () => {
     const get = reads(); const post = vi.spyOn(api, "POST"); const cache = renderPanel();
     expect(get).not.toHaveBeenCalledWith(path, expect.anything());
@@ -82,7 +107,7 @@ describe("recorded dividend receipt history", () => {
   });
 
   it("visibly distinguishes an independently changed event head", async () => {
-    reads({ items: [{ ...receipt, current_revision_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }], next_cursor: null });
+    reads({ items: [{ ...receipt, current_revision_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", current_revision_no: event.version + 1 }], next_cursor: null });
     renderPanel(); await selectAccount();
     expect(await screen.findByText(/收款讀取與事件清單的目前版本不同/)).toBeVisible();
     expect(screen.getByText(/原事件修訂 2/)).toBeVisible();
@@ -111,7 +136,7 @@ describe("recorded dividend receipt history", () => {
   it.each([
     [receipt, { ...receipt, id: receipt.id.toUpperCase() }],
     [{ ...receipt, received_date: "2026-11-04" }, { ...receipt, id: "99999999-9999-4999-8999-999999999999" }],
-    [receipt, { ...receipt, id: "99999999-9999-4999-8999-999999999999", current_revision_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }],
+    [receipt, { ...receipt, id: "99999999-9999-4999-8999-999999999999", current_revision_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", current_revision_no: event.version + 1 }],
     [receipt, { ...receipt, id: "99999999-9999-4999-8999-999999999999", entitlement_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }],
   ])("rejects duplicate, unordered or mismatched page records", async (...items) => {
     reads({ items, next_cursor: null }); renderPanel(); await selectAccount();
@@ -155,7 +180,7 @@ describe("recorded dividend receipt history", () => {
     const get = reads({ items: [receipt], next_cursor: "next" }); renderPanel(); await selectAccount();
     expect(await screen.findByText(/原事件修訂 2/)).toBeVisible();
     get.mockImplementation(async request => request === path
-      ? { error: { code: "DIVIDEND_RECEIPT_HISTORY_UNAVAILABLE", message: "synthetic-private-diagnostic" }, response: new Response() }
+      ? { error: { code: "COMBINED_RECEIPT_HISTORY_UNAVAILABLE", message: "synthetic-private-diagnostic" }, response: new Response() }
       : reply({ items: [account], next_cursor: null }));
     fireEvent.click(screen.getByRole("button", { name: "重新載入收款紀錄" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("收款歷史無法安全核對");

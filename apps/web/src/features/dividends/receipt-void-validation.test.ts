@@ -1,13 +1,24 @@
 import { describe, expect, it } from "vitest";
 import type { components } from "@spm/contracts";
 import { account, event } from "./projection-test-data";
-import { body, inputs, receipt, target, voided } from "./receipt-void-test-data";
+import { body, combinedReceipt, inputs, receipt, target, voided } from "./receipt-void-test-data";
 import { checkedReceiptVoidInputs, checkedReceiptVoided, validReceiptVoidTarget } from "./receipt-void-validation";
 
 type Schemas = components["schemas"];
 const other = "77777777-7777-4777-8777-777777777777";
 
 describe("recorded receipt void input and response checks", () => {
+  it("accepts explicit combined legacy provenance without relabeling its audit scope", () => {
+    expect(checkedReceiptVoidInputs(inputs, event, account, combinedReceipt)).toBe(inputs);
+    expect(validReceiptVoidTarget({ ...target, receipt: combinedReceipt })).toBe(true);
+    expect(checkedReceiptVoided(voided, { ...target, receipt: combinedReceipt }, body)).toBe(voided);
+    expect(() => checkedReceiptVoidInputs(inputs, event, account, { ...combinedReceipt, audit_scope: "RECEIPT_AUDIT_NOT_VERIFIED" })).toThrow();
+  });
+  it("rejects a direct record even if supplied with existing legacy void inputs", () => {
+    const direct: Schemas["CombinedRecordedReceipt"] = { ...combinedReceipt, receipt_basis: "DIRECT_EVENT_ACCOUNT", entitlement_id: null };
+    expect(() => checkedReceiptVoidInputs(inputs, event, account, direct)).toThrow();
+    expect(validReceiptVoidTarget({ ...target, receipt: direct })).toBe(false);
+  });
   it("binds the selected receipt to exact current and retained scope without granting payment", () => {
     expect(checkedReceiptVoidInputs(inputs, event, account, receipt)).toBe(inputs);
     expect(validReceiptVoidTarget(target)).toBe(true);

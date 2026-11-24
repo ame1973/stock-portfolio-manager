@@ -7,7 +7,7 @@ import { account, event } from "./projection-test-data";
 import { reconciliation } from "./reconciliation-test-data";
 import { inputs as receiptInputs } from "./receipt-test-data";
 
-const historyPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts";
+const historyPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts";
 const comparisonPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/reconciliation";
 const other = { ...account, id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", name: "Synthetic other account" };
 const reply = <T,>(data: T) => ({ data, response: new Response() });

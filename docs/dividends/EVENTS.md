@@ -1782,8 +1782,8 @@ current use `REVALIDATION_REQUIRED`, eligibility `NOT_ESTABLISHED` and payment
 history fails the whole read with a fixed private 503 rather than silently omitting records.
 An empty page is not confirmed zero. The endpoint writes nothing, contacts no provider and
 does not replace the legacy-only receipt write/input/void workflows or remove their fences.
-The existing browser history still uses the legacy-only endpoint; combined history has no
-mounted browser view yet.
+The browser uses this combined endpoint for receipt history. Legacy-only write/input/void
+workflows retain their separate authorization and scope checks.
 
 ## Internal direct recorded-cash creation
 
@@ -2160,20 +2160,27 @@ separate protected operations; atomic reconciliation remains unfinished.
 ## Recorded receipt history in the browser
 
 From an event, explicitly open **account receipt records** and select an account to read
-its bounded history. The browser keeps the selected account and pages in component memory;
-it does not cache them in browser storage or a query cache. It displays each original
-receipt, its physical event revision, exact decimal strings, recorded tax/fee fields,
-optional stored FX/HKD values, lifecycle and unverified cash-link state separately. It
-never adds historical versions or different currencies. Legacy zero-valued tax/fee fields
-are recorded values, not proof of an actual charge.
+its bounded combined history. Direct event/account records and legacy entitlement-linked
+records have distinct basis labels; only legacy records display an entitlement ID. Matched
+retained audit fingerprints are distinguished from missing/unverified legacy origins, but
+neither establishes payment, ownership or eligibility. The browser keeps the selected account
+and pages in component memory; it does not cache them in browser storage or a query cache.
+It displays each original receipt, its physical event revision, exact decimal strings,
+recorded tax/fee fields, optional stored FX/HKD values, lifecycle and unverified cash-link state
+separately. It never adds historical versions or different currencies. Legacy zero-valued
+tax/fee fields are recorded values, not proof of an actual charge.
 
 Each page is checked for event/account identity, distinct receipt IDs, revision identity,
 ordering, lifecycle and explicit unverified labels. A changed current revision is marked as
 an independent-read mismatch; failed, paused or older pages are identified as stale and
 cannot be paged until reloaded. Empty pages do not prove zero payments or completeness.
 The history read alone cannot verify payment or original authorization, calculate financial
-reconciliation or relax the event fence. Separate protected forms record a new cash assertion or
-void a matched recorded receipt after an explicit review of fresh inputs.
+reconciliation or relax the event fence. A failed combined read never falls back to a partial
+legacy page. Direct receipts have no legacy void action. A page containing direct records
+also disables legacy void selection; the server still checks the entire scope even when a
+particular page has no direct records. Separate protected forms remain limited to legacy
+receipt creation or matched-origin legacy void after an explicit review of fresh inputs.
+No direct receipt creation or void form is available yet.
 
 ## Record a receipt in the browser
 

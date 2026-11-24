@@ -10,13 +10,13 @@ import { DividendReconciliationPanel } from "./DividendReconciliationPanel";
 import type { ReceiptTarget } from "./receipt-input-validation";
 import type { ReceiptVoidTarget } from "./receipt-void-validation";
 import { validEstimateEvent } from "./estimate-validation";
-import { checkedReceiptPage, sameId } from "./receipt-validation";
+import { checkedCombinedReceiptPage, sameId } from "./receipt-validation";
 import { usePrivatePage } from "./use-private-page";
 
 type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
 type Account = Schemas["Account"];
-type Receipt = Schemas["RecordedReceipt"];
+type Receipt = Schemas["CombinedRecordedReceipt"];
 const cashLabels: Record<Receipt["cash_scope"], string> = {
   CASH_NOT_RECORDED: "未記錄現金關聯；不是已確認沒有現金。",
   CASH_REVERSAL_NOT_RECORDED: "未記錄現金沖銷；請核對原始紀錄。",
@@ -26,14 +26,16 @@ const cashLabels: Record<Receipt["cash_scope"], string> = {
 
 function Record({ value, onSelect, disabled, selected }: { value: Receipt; onSelect?: (value: Receipt) => void; disabled: boolean; selected: boolean }) {
   return <li className="grid min-w-0 gap-2 rounded-md border border-border p-4 text-sm leading-7">
-    <h5 className="font-semibold">{value.status === "VOID" ? "已作廢" : "已記錄"}收款；歷史稽核及付款均未驗證。</h5>
+    <h5 className="font-semibold">{value.status === "VOID" ? "已作廢" : "已記錄"}收款；{value.audit_scope === "RECORDED_AUDIT_MATCHED_ONLY" ? "保留稽核記錄相符，付款仍未驗證。" : "歷史稽核及付款均未驗證。"}</h5>
+    <p>{value.receipt_basis === "DIRECT_EVENT_ACCOUNT" ? "直接關聯事件與帳戶；沒有舊式應收識別碼，不代表已確認應收。" : "依據：舊式應收紀錄；不是已驗證的股息資格。"}</p>
     <p>記錄收款日 {value.received_date}；原幣金額 {value.currency} {value.recorded_amount}；{value.received_hkd === null ? "港幣金額未知" : `記錄港幣金額 ${value.received_hkd}`}。</p>
     <p>{value.fx_rate_hkd === null ? "記錄匯率未提供" : `原紀錄港幣匯率 ${value.fx_rate_hkd}`}；來源與實際換匯尚未驗證。</p>
     <p>{value.recorded_tax === null ? "記錄稅額未知，不是零" : `記錄稅額 ${value.currency} ${value.recorded_tax}`}；{value.recorded_fee === null ? "記錄費用未知，不是零" : `記錄費用 ${value.currency} ${value.recorded_fee}`}；稅費欄位僅為已記錄數值，不代表已確認扣款。</p>
     <p>{cashLabels[value.cash_scope]}</p>
-    <p className="break-all">原事件修訂 {value.revision_no}／{value.revision_id}；原應收識別碼 {value.entitlement_id}；收款識別碼 {value.id}；版本 {value.version}。</p>
+    <p className="break-all">原事件修訂 {value.revision_no}／{value.revision_id}；{value.entitlement_id !== null && <>原應收識別碼 {value.entitlement_id}；</>}收款識別碼 {value.id}；版本 {value.version}。</p>
     <p>來源：{value.source === "MANUAL" ? "人工記錄" : "匯入紀錄"}；記錄時間 {value.created_at}；作廢時間 {value.voided_at ?? "未記錄"}。</p>
-    {onSelect && <div><Button type="button" variant="outline" aria-pressed={selected} disabled={disabled || value.status !== "ACTIVE"}
+    {value.receipt_basis === "DIRECT_EVENT_ACCOUNT" && <p className="text-secondary">直接收款尚未開放作廢操作；不能使用舊式收款流程。</p>}
+    {onSelect && value.receipt_basis === "LEGACY_ENTITLEMENT" && <div><Button type="button" variant="outline" aria-pressed={selected} disabled={disabled || value.status !== "ACTIVE"}
       onClick={() => onSelect(structuredClone(value))}>核對作廢收款 {value.id}</Button></div>}
   </li>;
 }
@@ -46,8 +48,8 @@ function sameReceipt(left: Receipt, right: Receipt): boolean {
 function History({ event, account, onVoid, disabled }: { event: Event; account: Account; onVoid?: (target: ReceiptVoidTarget) => void; disabled: boolean }) {
   const [selected, setSelected] = useState<Receipt | null>(null);
   const page = usePageState();
-  const load = useCallback(async (cursor: string | undefined, signal: AbortSignal) => checkedReceiptPage(checked(await api.GET(
-    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts", {
+  const load = useCallback(async (cursor: string | undefined, signal: AbortSignal) => checkedCombinedReceiptPage(checked(await api.GET(
+    "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts", {
       params: { path: { event_id: event.id, account_id: account.id }, query: { cursor, limit: 25 } }, signal,
     }
   )), event, account), [event, account]);
@@ -56,11 +58,14 @@ function History({ event, account, onVoid, disabled }: { event: Event; account: 
   const headChanged = result.data?.items.some(item => !sameId(item.current_revision_id, event.current_revision_id));
   const current = selected && result.data?.items.find(item => sameId(item.id, selected.id));
   const selectionMatches = !!selected && !!current && sameReceipt(selected, current);
-  const canSelect = ready && !headChanged && !disabled;
+  const hasDirect = result.data?.items.some(item => item.receipt_basis === "DIRECT_EVENT_ACCOUNT");
+  const canSelect = ready && !headChanged && !disabled && !hasDirect;
   return <section aria-label="帳戶收款紀錄歷史" className="grid min-w-0 gap-3 rounded-md border border-border p-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-semibold">帳戶收款紀錄歷史</h4>
       <Button type="button" variant="outline" disabled={result.isFetching} onClick={() => result.refetch()}>重新載入收款紀錄</Button></div>
-    <p className="text-sm leading-7 text-secondary">這是未驗證的歷史記錄，不會確認持倉、收入、付款或應收；不同幣別及歷史版本不在此相加。每頁獨立讀取，內容可能隨時間變更。</p>
+    <p className="text-sm leading-7 text-secondary">合併顯示直接收款與舊式應收關聯收款。這是未驗證的歷史記錄，不會確認持倉、收入、付款或應收；不同幣別及歷史版本不在此相加。每頁獨立讀取，內容可能隨時間變更。</p>
+    {onVoid && <p className="text-sm leading-7 text-secondary">作廢仍僅支援可核對來源的舊式收款；混合歷史的伺服器防護不會因本頁未顯示直接收款而解除。</p>}
+    {hasDirect && onVoid && <p role="status" className="text-sm text-secondary">本頁包含直接收款；目前不能從這份混合歷史開始舊式作廢。</p>}
     {result.isPaused ? <p role="status" className="text-sm text-secondary">連線已暫停；顯示的是上次讀取，並非目前狀態。</p>
       : result.isPending ? <p role="status" className="text-sm text-secondary">正在載入收款紀錄…</p>
         : result.isFetching ? <p role="status" className="text-sm text-secondary">正在重新核對收款紀錄。</p> : null}
