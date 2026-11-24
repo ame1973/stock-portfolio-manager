@@ -1914,6 +1914,33 @@ establish ownership or income, create an entitlement, void a receipt or reconcil
 the existing event fence remains in force. The browser form below can submit an explicitly
 selected existing entitlement.
 
+## Internal recorded-reconciliation comparison
+
+`dividend_reconciliation_history.read` is an internal, read-only comparison for an explicitly
+supplied owner, stable event and account within one database transaction. It reads the event,
+complete retained projection chain and linked receipt/audit history in the same WAL snapshot.
+It selects only the latest recorded projection, never adds older projection amounts, and follows
+receipts through their original entitlement revisions to the stable event and account. The
+original receipts, cash entries, FX snapshots and audit records are not changed. The projection's
+as-of date applies to that projection only; the receipt side includes all retained active receipts,
+not just receipts dated on or before the projection's as-of date.
+
+Only an `EXPECTED` projection matching the event head is compared. A missing or stale projection,
+missing cash link, unavailable history, absent active receipt or mixed active receipt currencies
+is reported explicitly rather than filled with zero or converted using an assumed FX rate. A
+recorded zero receipt is different from an empty history; a past pay date does not create one.
+Projection quality and, when a comparison was possible, comparison quality remain separate from
+the recorded receipt state; `MISSING_FX` and `NEEDS_REVIEW` are not suppressed. Matched origins
+and structural cash links are not proof of payment or original authorization.
+A sum or difference outside scaled INT64 fails the read rather than rounding or overflowing.
+
+The result is `UNVERIFIED_RECORDED_RECONCILIATION_ONLY`, with history completeness unverified,
+current use requiring revalidation, eligibility not established and payment owner-recorded but
+not verified. A matching event revision does not prove that a projection remains current after
+later account, ledger or setting changes. This internal reader is not an HTTP endpoint and does
+not authenticate callers, create an entitlement, establish income or provide atomic event
+reconciliation. The event-revision and missing-origin void fences remain unchanged.
+
 ## Protected recorded-receipt history read API
 
 `GET /api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts` requires an
@@ -1953,8 +1980,9 @@ Each page is checked for event/account identity, distinct receipt IDs, revision 
 ordering, lifecycle and explicit unverified labels. A changed current revision is marked as
 an independent-read mismatch; failed, paused or older pages are identified as stale and
 cannot be paged until reloaded. Empty pages do not prove zero payments or completeness.
-This history view cannot void receipts, verify their audits or payments, calculate financial
-reconciliation or relax the event fence. The separate form below can record a new cash assertion.
+The history read alone cannot verify payment or original authorization, calculate financial
+reconciliation or relax the event fence. Separate protected forms record a new cash assertion or
+void a matched recorded receipt after an explicit review of fresh inputs.
 
 ## Record a receipt in the browser
 
