@@ -1759,6 +1759,36 @@ eligibility or payment, post or reverse cash, or remove event fences. The existi
 public readers still fail closed when direct records are present; the combined history is not
 exposed by the receipt-history API. The separate recorded comparison uses both histories.
 
+## Internal direct recorded-cash creation
+
+`dividend_direct_receipt_writer.save` is an internal building block, not an authenticated
+endpoint or permission to invoke it on deployment data. It records an explicit event/current
+physical revision/account association without creating or adopting a legacy entitlement. The
+caller supplies stable receipt and request UUIDs, current account/portfolio/broker versions and
+portfolio data revision, a nonfuture cash date, exact cash components, reason and note. Tax, fee
+and FX must be explicitly known or unknown; HKD uses identity and a cross-currency actual-HKD
+override retains its historical rate, source and reason. Informational tax/fees are not deducted
+again from the recorded net cash.
+
+New cash requires an active owned account and a non-withdrawn event with clear retained rejection
+history. It also requires `RECORDED_CASH_ONLY` and a strict `confirm_revision_fence=true`:
+**any direct receipt, including a later void, currently blocks event revision and rejection**.
+This does not establish a position, confirm a source, make a projection computable or grant
+income. The full combined receipt history is checked; invalid or duplicate records fail closed.
+
+Receipt, primary cash, independently pinned origin, creation and intent audits, opening-cash
+rebase and portfolio invalidation share a safe savepoint in a real writer transaction. Final
+scope and retained records are rechecked before return. A caught failure leaves no partial cash.
+An unchanged stable-ID/request replay validates its original intent and writes nothing, including
+after account archive or a recorded void; it does not reopen or repost cash. Conflicting reuse,
+stale scope, malformed retained evidence and derived monetary overflow fail closed.
+
+There is still no protected direct-create/void API or direct-entry browser workflow. Existing
+legacy-only receipt readers and writers remain fenced when direct records would be omitted.
+New installations still cannot record receipts through the app. Session/Origin/CSRF,
+reauthentication, HTTP-intent/idempotency rechecks and direct void integration must be completed
+separately; neither this primitive nor an audit digest proves payment or eligibility.
+
 ## Internal retained-receipt link reader
 
 The internal `dividend_receipt_history.history` reader resolves all retained entitlement
