@@ -197,3 +197,20 @@ reversal and invalidation changes while preserving unrelated data.
 This is not payment or eligibility verification, nor a container, worker, live-provider, NAS
 or TLS acceptance claim. The application still cannot create the legacy entitlement prerequisite
 on a fresh installation.
+
+## Separate recorded-projection and comparison browser fixture
+
+```sh
+npm run build
+npm run test:e2e:projection-write
+```
+
+The isolated actual-app fixture records synthetic holdings, estimate settings and projections,
+then opens the receipt-account comparison in the built SPA. It checks an actual no-store API
+response, the exact recorded projected amount with no active receipt, unavailable amounts rather
+than zero, explicit no-grant copy, keyboard expansion and collapse, 360/768/1440 geometry and
+unchanged synthetic database tables during reads. At the desktop breakpoint the fixture reopens
+the event, account and comparison because the responsive table remounts the card. This scenario
+does not create a receipt or prove a cross-revision cash reconciliation; dedicated backend tests
+cover synthetic recorded receipts.
+No screenshots, deployment volumes, worker or provider traffic are used.

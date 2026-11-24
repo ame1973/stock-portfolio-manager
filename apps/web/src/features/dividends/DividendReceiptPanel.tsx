@@ -6,6 +6,7 @@ import { usePageState } from "../settings/data";
 import { DividendAccountPicker } from "./DividendEstimatePanel";
 import { DividendReceiptPreparation } from "./DividendReceiptPreparation";
 import { DividendReceiptVoidPreparation } from "./DividendReceiptVoidPreparation";
+import { DividendReconciliationPanel } from "./DividendReconciliationPanel";
 import type { ReceiptTarget } from "./receipt-input-validation";
 import type { ReceiptVoidTarget } from "./receipt-void-validation";
 import { validEstimateEvent } from "./estimate-validation";
@@ -79,19 +80,22 @@ function History({ event, account, onVoid, disabled }: { event: Event; account: 
   </section>;
 }
 
-export function DividendReceiptPanel({ event: observed, onWrite, onVoid, writeDisabled = false, refresh = 0 }: {
-  event: Event; onWrite?: (target: ReceiptTarget) => void; onVoid?: (target: ReceiptVoidTarget) => void; writeDisabled?: boolean; refresh?: number;
+export function DividendReceiptPanel({ event: observed, onWrite, onVoid, writeDisabled = false, refresh = 0, comparisonRefresh = 0 }: {
+  event: Event; onWrite?: (target: ReceiptTarget) => void; onVoid?: (target: ReceiptVoidTarget) => void; writeDisabled?: boolean; refresh?: number; comparisonRefresh?: number;
 }) {
   const [event] = useState(() => structuredClone(observed));
   const [account, setAccount] = useState<Account | null>(null); const [preparing, setPreparing] = useState(false);
+  const [comparing, setComparing] = useState(false);
   if (!validEstimateEvent(event)) return <p role="alert" className="text-sm text-danger">事件版本無法安全核對；請重新載入後再查閱收款紀錄。</p>;
   return <section aria-label="已記錄股息收款" className="grid min-w-0 gap-4 rounded-md border border-border p-4">
     <h3 className="font-semibold">已記錄股息收款</h3>
     <p className="break-all text-sm leading-7 text-secondary">固定事件 {event.id}；版本 {event.version}；實體修訂 {event.current_revision_id}。查閱不會建立或作廢任何紀錄。</p>
-    <DividendAccountPicker purpose="收款紀錄" selected={account} onSelect={setAccount} />
+    <DividendAccountPicker purpose="收款紀錄" selected={account} onSelect={value => { setAccount(value); setComparing(false); }} />
     {account && <><p className="break-all text-sm">所選帳戶：{account.name}；{account.id}。</p>
-      <History key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onVoid={onVoid} disabled={writeDisabled} />
+      <History key={`receipt-history:${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onVoid={onVoid} disabled={writeDisabled} />
+      <div><Button type="button" variant="outline" aria-expanded={comparing} onClick={() => setComparing(value => !value)}>{comparing ? "收合金額比較" : "比較已記錄金額"}</Button></div>
+      {comparing && <DividendReconciliationPanel key={`reconciliation:${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}:${comparisonRefresh}`} event={event} account={account} />}
       {onWrite && <div><Button type="button" variant="outline" aria-expanded={preparing} onClick={() => setPreparing(value => !value)}>{preparing ? "收合收款寫入準備" : "準備記錄收款"}</Button></div>}
-      {preparing && onWrite && <DividendReceiptPreparation key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onWrite={onWrite} disabled={writeDisabled} />}</>}
+      {preparing && onWrite && <DividendReceiptPreparation key={`receipt-preparation:${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onWrite={onWrite} disabled={writeDisabled} />}</>}
   </section>;
 }

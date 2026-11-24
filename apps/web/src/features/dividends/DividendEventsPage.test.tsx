@@ -5,6 +5,7 @@ import { api, type components } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { DividendEventsPage } from "./DividendEventsPage";
 import { account as receiptAccount } from "./projection-test-data";
+import { reconciliation } from "./reconciliation-test-data";
 import { inputs as voidInputs, receipt as recordedReceipt } from "./receipt-void-test-data";
 
 type Schemas = components["schemas"];
@@ -60,6 +61,7 @@ describe("dividend event workspace", () => {
     const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts";
     const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null }, [path]: empty });
     const post = vi.spyOn(api, "POST"); renderPage(); await openEvent();
+    expect(screen.getByText(/這裡不確認應收或實收/)).toBeVisible();
     expect(get).not.toHaveBeenCalledWith(path, expect.anything());
     fireEvent.click(screen.getByRole("button", { name: "查看帳戶收款紀錄" }));
     expect(get).not.toHaveBeenCalledWith(path, expect.anything());
@@ -126,6 +128,43 @@ describe("dividend event workspace", () => {
     await act(async () => cache.setQueriesData({ queryKey: ["dividends", "events"] }, { items: [{ ...event, version: 3, current_revision_id: "88888888-8888-4888-8888-888888888888" }], next_cursor: null }));
     expect(within(dialog).getByLabelText("投影依據")).toHaveValue("Synthetic pending projection reason.");
     expect(dialog).toHaveTextContent(event.current_revision_id); expect(post).not.toHaveBeenCalled();
+  });
+
+  it("refreshes an open comparison when the projection sheet closes", async () => {
+    const account = receiptAccount;
+    const scope = { event_id: event.id, revision_id: event.current_revision_id, revision_no: event.version, account_id: account.id,
+      portfolio_id: account.portfolio_id, broker_id: account.broker_id, account_version: "1", broker_version: "1" };
+    const selection = { effective_on: "2026-11-03", head_no: "0", head_id: null, selected_id: null, status: "MISSING", selected_scope: "NO_SELECTED_SETTING", scope: "OWNER_ESTIMATE_ONLY" };
+    const current = { ...scope, effective_on: "2026-11-03", head_no: "0", head_id: null, selected: null, selected_scope: "NO_SELECTED_SETTING", scope: "OWNER_ESTIMATE_ONLY", current_use_scope: "REVALIDATION_REQUIRED" };
+    const comparisonPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/reconciliation";
+    const get = reads({ "/api/v1/accounts": { items: [account], next_cursor: null },
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts": empty,
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projections": empty,
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/tax-settings": { ...current, tax_status: "MISSING" },
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/fee-settings": { ...current, fee_status: "MISSING", revision_rejection: "NOT_REJECTED" },
+      "/api/v1/dividends/events/{event_id}/accounts/{account_id}/projection-inputs": { ...scope, ex_date: event.ex_date, currency: event.currency,
+        portfolio_data_revision: "0", projection_head_no: "0", projection_head_id: null, as_of: "2026-11-02", eligibility_rule: "ORDINARY_PRE_EX_DATE", tax: selection, fee: selection,
+        rejection_state: "NOT_REJECTED", scope: "RECORDED_PROJECTION_INPUTS_ONLY", current_use_scope: "REVALIDATION_REQUIRED", source_scope: "CURRENT_SOURCE_NOT_REVALIDATED", eligibility_scope: "NOT_ESTABLISHED" },
+      [comparisonPath]: { ...reconciliation, event_id: event.id, revision_id: event.current_revision_id, revision_no: event.version, account_id: account.id } });
+    const comparisonCalls = () => (get.mock.calls as unknown as [string][]).filter(([path]) => path === comparisonPath);
+    const post = vi.spyOn(api, "POST"); renderPage(); await openEvent();
+    fireEvent.click(screen.getByRole("button", { name: "查看帳戶收款紀錄" }));
+    fireEvent.click(await screen.findByRole("button", { name: `選擇收款紀錄帳戶 ${account.name}` }));
+    fireEvent.click(screen.getByRole("button", { name: "比較已記錄金額" }));
+    expect(await screen.findByText(/已記錄收款金額少於/)).toBeVisible(); const before = comparisonCalls().length;
+    fireEvent.click(screen.getByRole("button", { name: "查看帳戶投影歷史" }));
+    fireEvent.click(await screen.findByRole("button", { name: `選擇投影帳戶 ${account.name}` }));
+    fireEvent.click(screen.getByRole("button", { name: "準備記錄投影" }));
+    fireEvent.change(screen.getByLabelText("投影查閱日"), { target: { value: "2026-11-02" } });
+    fireEvent.change(screen.getByLabelText("投影規則"), { target: { value: "ORDINARY_PRE_EX_DATE" } });
+    fireEvent.change(screen.getByLabelText("投影稅率估算生效日"), { target: { value: "2026-11-03" } });
+    fireEvent.change(screen.getByLabelText("投影費用估算生效日"), { target: { value: "2026-11-03" } });
+    fireEvent.click(screen.getByRole("button", { name: "核對投影輸入" }));
+    const open = await screen.findByRole("button", { name: "開啟記錄投影" }); await waitFor(() => expect(open).toBeEnabled()); fireEvent.click(open);
+    const dialog = await screen.findByRole("dialog", { name: "記錄股息投影" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "關閉編輯" }));
+    await waitFor(() => expect(comparisonCalls().length).toBeGreaterThan(before));
+    expect(await screen.findByText(/已記錄收款金額少於/)).toBeVisible(); expect(post).not.toHaveBeenCalled();
   });
 
   it("opens account-scoped estimate reads without posting or assuming eligibility", async () => {

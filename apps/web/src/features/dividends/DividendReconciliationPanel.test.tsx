@@ -27,6 +27,7 @@ describe("recorded dividend reconciliation", () => {
     expect(panel).toHaveTextContent("USD 11.000000"); expect(panel).toHaveTextContent("USD 6.000000");
     expect(panel).toHaveTextContent("USD 5.000000"); expect(panel).toHaveTextContent("9007199254740993");
     expect(panel).toHaveTextContent("收款不以投影日期篩選"); expect(panel).toHaveTextContent("付款、資格或收入已確認");
+    expect(panel).toHaveTextContent("差額為已記錄預計淨額減已記錄收款");
     expect(panel).toHaveTextContent("歷史完整性未驗證");
     expect(get).toHaveBeenCalledWith(path, expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(post).not.toHaveBeenCalled(); expect(cache.getQueryCache().getAll()).toHaveLength(0);

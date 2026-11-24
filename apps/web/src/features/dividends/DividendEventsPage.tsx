@@ -173,7 +173,7 @@ function EventCard({ record, disabled, associationDisabled, onOpen, estimateRefr
       {revisions && <RevisionHistory record={record} />}{rejections && <RejectionHistory record={record} />}
       {estimates && <DividendEstimatePanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={estimateRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "estimate", target })} />}
       {projections && <DividendProjectionPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={projectionRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "projection", target })} />}
-      {receipts && <DividendReceiptPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={receiptRefresh} writeDisabled={associationDisabled}
+      {receipts && <DividendReceiptPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={receiptRefresh} comparisonRefresh={projectionRefresh} writeDisabled={associationDisabled}
         onWrite={target => onOpen({ mode: "receipt", target })} onVoid={target => onOpen({ mode: "receipt-void", target })} />}
       <Link to={`/settings/securities/${record.security_id}`} className="inline-flex min-h-11 items-center text-sm text-primary underline">核對穩定證券身分</Link>
     </div>}
@@ -255,7 +255,7 @@ export function DividendEventsPage() {
     setEditor(null); void cache.invalidateQueries({ queryKey: ["dividends"] });
   }
   return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 className="text-2xl font-semibold">股息事件</h1>
-    <p className="mt-2 text-sm leading-7 text-secondary">查看已記錄的事件決定、來源與歷史；人工接受不是文件驗證或持倉資格，這裡不計算應收或實收。未知不會補零。</p>
+    <p className="mt-2 text-sm leading-7 text-secondary">查看已記錄的事件決定、來源與歷史；人工接受不是文件驗證或持倉資格，這裡不確認應收或實收。未知不會補零。</p>
     <div className="flex flex-wrap gap-x-5"><Link to="/dividends/candidates" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息候選資料</Link>
       <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div></div>
     <Button data-editor-create disabled={editing} onClick={() => { setNotice(null); setEditor({ mode: "create" }); }}>新增人工股息事件</Button></header>

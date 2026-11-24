@@ -60,10 +60,11 @@ export function DividendReconciliationPanel({ event, account }: { event: Event; 
       <dl className="grid min-w-0 gap-3 sm:grid-cols-3"><Amount label="已記錄預計淨額" amount={value.recorded_expected} currency={value.currency} />
         <Amount label="已記錄收款" amount={value.recorded_received} currency={value.currency} />
         <Amount label="已記錄差額" amount={value.recorded_outstanding} currency={value.currency} /></dl>
+      <p>可比較時，差額為已記錄預計淨額減已記錄收款；不是已確認應收。</p>
       <p>未作廢收款 {value.active_receipts} 筆；已作廢收款 {value.void_receipts} 筆；收款來源稽核未核對 {value.unverified_origins} 筆；缺少現金關聯 {value.unavailable_cash_links} 筆。</p>
       {value.projection_id === null ? <p>沒有已記錄投影識別碼。</p> : <p className="break-all">投影識別碼 {value.projection_id}；版本 {value.projection_no}；投影截至 {value.projection_as_of}；收款不以投影日期篩選。</p>}
-      <p>投影品質：{value.projection_quality === null ? "未提供，不是零。" : qualities[value.projection_quality]}</p>
-      <p>比較品質：{value.comparison_quality === null ? "未完成比較，不是零。" : qualities[value.comparison_quality]}</p>
+      <p>投影品質：{value.projection_quality === null ? "未提供。" : qualities[value.projection_quality]}</p>
+      <p>比較品質：{value.comparison_quality === null ? "未完成比較。" : qualities[value.comparison_quality]}</p>
     </div>}
   </section>;
 }

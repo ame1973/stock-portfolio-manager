@@ -167,6 +167,58 @@ test("recorded projection writes retain exact intent, fences and uncertain retri
   await form.getByRole("button", { name: "記錄投影" }).click(); await expect(sheet).toHaveCount(0); await page.unroute(routePath);
   expect(convertedAttempts).toBe(2); expect(replayKey).toBe(convertedKey); expect(database()).toEqual(beforeEqualReplay);
 
+  stage("COMPARE");
+  const article = page.getByRole("article", { name: `股息事件 ${event.id}` });
+  await article.getByRole("button", { name: "查看帳戶收款紀錄" }).click();
+  const receipts = article.getByRole("region", { name: "已記錄股息收款" });
+  let comparisonRequests = 0;
+  const comparisonPath = `${base}/reconciliation`;
+  const observe = (request: { url(): string }) => { if (new URL(request.url()).pathname === comparisonPath) comparisonRequests++; };
+  page.on("request", observe);
+  await receipts.getByRole("button", { name: "選擇收款紀錄帳戶 Synthetic projection write account" }).click();
+  expect(comparisonRequests).toBe(0);
+  const beforeComparison = database();
+  const toggle = receipts.getByRole("button", { name: "比較已記錄金額" });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false"); await toggle.focus();
+  const comparisonResponse = page.waitForResponse(response => new URL(response.url()).pathname === comparisonPath && response.request().method() === "GET");
+  await page.keyboard.press("Enter"); const comparison = await comparisonResponse;
+  expect(comparison.status()).toBe(200); expect(comparison.headers()["cache-control"]).toBe("no-store");
+  const comparisonResult = await comparison.json() as Schemas["RecordedReconciliation"];
+  expect(comparisonResult).toMatchObject({ event_id: event.id, revision_id: event.current_revision_id, account_id: account.id,
+    state: "NO_RECORDED_ACTIVE_RECEIPTS", recorded_expected: convertedRecord.estimated_amounts!.net_local,
+    recorded_received: null, recorded_outstanding: null, active_receipts: "0", payment_scope: "OWNER_RECORDED_NOT_VERIFIED" });
+  const comparisonPanel = receipts.getByRole("region", { name: "已記錄股息金額比較" });
+  await expect(comparisonPanel).toContainText(`USD ${convertedRecord.estimated_amounts!.net_local}`);
+  await expect(comparisonPanel).toContainText("沒有已記錄的未作廢收款"); await expect(comparisonPanel).toContainText("未提供，不是零");
+  await expect(comparisonPanel).toContainText("不代表付款、資格或收入已確認");
+  const closeComparison = receipts.getByRole("button", { name: "收合金額比較" });
+  await expect(closeComparison).toHaveAttribute("aria-expanded", "true");
+  for (const width of [360, 768, 1440]) {
+    stage(width === 360 ? "RESIZE_MOBILE" : width === 768 ? "RESIZE_TABLET" : "RESIZE_DESKTOP");
+    await page.setViewportSize({ width, height: 900 });
+    if (width === 1440) {
+      await expect(comparisonPanel).toHaveCount(0);
+      const row = page.locator(`tr[data-record-id="${event.id}"]`);
+      await row.getByRole("button", { name: "查看原值與操作" }).click();
+      await article.getByRole("button", { name: "查看帳戶收款紀錄" }).click();
+      await receipts.getByRole("button", { name: "選擇收款紀錄帳戶 Synthetic projection write account" }).click();
+      const desktopResponse = page.waitForResponse(response => new URL(response.url()).pathname === comparisonPath && response.request().method() === "GET");
+      await receipts.getByRole("button", { name: "比較已記錄金額" }).click();
+      const response = await desktopResponse; expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
+      await expect(comparisonPanel).toContainText(`USD ${convertedRecord.estimated_amounts!.net_local}`);
+    }
+    const box = (await comparisonPanel.boundingBox())!;
+    if (box.x < 0 || box.x + box.width > width) stage("RESIZE_DETAIL");
+    expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
+    const fits = await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+    if (!fits) stage("RESIZE_SCROLL");
+    expect(fits).toBe(true);
+  }
+  stage("RESIZE_SCROLL"); await page.emulateMedia({ colorScheme: "dark" }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  stage("COMPARE"); await page.emulateMedia({ colorScheme: "light" }); await closeComparison.focus(); await page.keyboard.press("Enter");
+  await expect(comparisonPanel).toHaveCount(0); await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(comparisonRequests).toBe(2); page.off("request", observe); expect(database()).toEqual(beforeComparison);
+
   stage("REVIEW_ACK"); const otherSecurity = await create("securities", { exchange_code: "NASDAQ", display_ticker: "PRJREJECT", name: "Synthetic projection rejection security", quote_currency: "USD" });
   const other = await makeEvent(otherSecurity.id); form = (await open(other)).form; await fill(form);
   const rejection = await page.request.post(`/api/v1/dividends/${other.id}/verify`, { headers: await headers(page, other.version), data: {

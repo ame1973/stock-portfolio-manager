@@ -1951,8 +1951,10 @@ private 503. No provider is contacted and no financial, audit, FX or invalidatio
 
 The response includes the observed event revision, selected projection ID, exact string version
 and projection as-of date; recorded receipt counts are exact decimal strings. Expected, received
-and outstanding amounts are decimal strings or `null`, never binary floats. A missing or stale
-projection, missing cash link, empty receipt history and mixed currencies have distinct states.
+and outstanding amounts are decimal strings or `null`, never binary floats. When comparable,
+the recorded difference is expected net minus recorded active receipts; it is not confirmed
+receivable. A missing or stale projection, missing cash link, empty receipt history and mixed
+currencies have distinct states.
 A recorded zero receipt is not the same as no receipt; reaching the pay date never creates one.
 Projection quality and comparison quality remain separate, including missing FX and review flags.
 The projection as-of date does not filter the receipt side, which includes all retained active
@@ -1964,6 +1966,25 @@ This endpoint exposes `UNVERIFIED_RECORDED_RECONCILIATION_ONLY`, with history co
 against later ledger, account or settings changes. The endpoint does not create an entitlement,
 authorize income or atomically reconcile event revisions; the existing event and missing-origin
 void fences remain in force.
+
+## Recorded-reconciliation comparison in the browser
+
+In the dividend workspace, open an event's account receipt records, explicitly select an account,
+then choose **Compare recorded amounts**. The comparison is not requested before that choice.
+It shows the recorded expected net, active-receipt total and difference when available, exact
+counts and distinct projection/comparison quality. Empty history, missing cash links, different
+currencies and unavailable or stale projections remain explicit rather than becoming zero.
+The projection as-of date does not filter receipt dates. These are unverified recorded values,
+not a confirmation of payment, holdings, eligibility, complete history or current income.
+
+The event card, receipt pages and comparison are independent reads. If the comparison reports a
+different event head from the card, the amounts are withheld and the event must be reloaded.
+Offline, pending-refresh and failed-refresh states are labeled; previously read values are not
+presented as current. Changing the account closes the comparison and aborts its pending request;
+closing a receipt or projection editor refreshes an open comparison. Switching between mobile
+cards and the desktop table also closes the event details; reopen and select the account again.
+The read stays in component memory rather than browser storage or a query cache and makes no
+financial changes. It does not remove the event-revision fence or provide atomic reconciliation.
 
 ## Protected recorded-receipt history read API
 
