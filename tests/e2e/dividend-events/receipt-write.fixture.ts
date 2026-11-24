@@ -272,6 +272,89 @@ test("protected receipt APIs and form preserve exact scope and uncertain retries
   stage("REPLAY"); const recoveredVoid = await page.request.post(lostVoidPath, { headers: lostVoidHeaders, data: lostVoidBody });
   expect(recoveredVoid.status()).toBe(200); expect(recoveredVoid.headers()["cache-control"]).toBe("no-store");
   expect(await recoveredVoid.json()).toEqual(lostVoidResult); expect(database()).toEqual(afterLostVoid);
+
+  stage("NAVIGATE"); const historyResponse = await page.request.get(base); expect(historyResponse.status()).toBe(200);
+  const history = await historyResponse.json() as Schemas["Page_RecordedReceipt_"];
+  const legacy = history.items.find(item => item.received_date === "2026-11-05" && item.status === "ACTIVE")!; expect(legacy).toBeTruthy();
+  let voidInputReads = 0; const voidInputRoute = `**${base}/*/void-inputs`;
+  await page.route(voidInputRoute, async route => {
+    voidInputReads++; const response = await route.fetch(); expect(response.status()).toBe(200);
+    expect(response.headers()["cache-control"]).toBe("no-store"); await route.fulfill({ response });
+  });
+  async function receiptPanel() {
+    await page.setViewportSize({ width: 360, height: 900 }); await page.goto("/dividends");
+    const article = page.getByRole("article", { name: `股息事件 ${event.id}` });
+    await article.getByRole("button", { name: "查看事件與拒絕狀態" }).click();
+    await article.getByRole("button", { name: "查看帳戶收款紀錄" }).click();
+    const panel = article.getByRole("region", { name: "已記錄股息收款" });
+    await panel.getByRole("button", { name: "選擇收款紀錄帳戶 Synthetic receipt read account" }).click();
+    return panel;
+  }
+  const beforeSelection = database(); const panel = await receiptPanel();
+  const legacyButton = panel.getByRole("button", { name: `核對作廢收款 ${legacy.id}` }); await expect(legacyButton).toBeEnabled();
+  expect(voidInputReads).toBe(0); await legacyButton.focus(); await page.keyboard.press("Enter");
+  const preparation = panel.getByRole("region", { name: "核對收款作廢輸入" });
+  await expect(preparation.getByText(/缺少可核對來源/)).toBeVisible();
+  await expect(preparation.getByRole("button", { name: "繼續核對並作廢收款" })).toBeDisabled(); expect(database()).toEqual(beforeSelection);
+  await panel.getByRole("button", { name: `核對作廢收款 ${hkdId}` }).click();
+  const proceed = panel.getByRole("button", { name: "繼續核對並作廢收款" }); await expect(proceed).toBeEnabled(); expect(voidInputReads).toBe(2);
+  await proceed.click(); let voidSheet = page.getByRole("dialog", { name: "作廢股息收款" }); let voidForm = voidSheet.getByRole("form", { name: "作廢股息收款" });
+  await expect(voidSheet.getByRole("button", { name: "關閉編輯" })).toBeFocused();
+  stage("RESIZE"); for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 }); const box = (await voidSheet.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  stage("PASSWORD"); const voidPassword = voidSheet.getByRole("form", { name: "重新驗證" });
+  await voidPassword.getByLabel("目前密碼").fill(password); await voidPassword.getByRole("button", { name: "確認目前密碼" }).click();
+  await expect(voidPassword.getByRole("status")).toContainText("已重新驗證");
+  await expect(voidForm).toContainText("6.125000"); await expect(voidForm).toContainText("1.000000000000");
+  await voidForm.getByLabel("作廢依據").fill("Synthetic UI receipt correction evidence.");
+  await voidForm.getByRole("checkbox", { name: /我已核對原收款/ }).check();
+  let releaseVoid!: () => void; let committedVoid!: () => void;
+  const heldVoid = new Promise<void>(resolve => { releaseVoid = resolve; }); const savedVoid = new Promise<void>(resolve => { committedVoid = resolve; });
+  let voidAttempts = 0; let originalVoidKey = ""; let replayVoidKey = ""; let uiVoidResult: Schemas["ReceiptVoided"] | null = null;
+  const uiVoidPath = voidPath(hkdId);
+  await page.route(`**${uiVoidPath}`, async route => {
+    if (route.request().method() !== "POST") { await route.continue(); return; }
+    voidAttempts++; const sent = JSON.parse(route.request().postData()!) as Schemas["ReceiptVoidWrite"];
+    expect(sent.confirmation).toBe("VOID_RECORDED_CASH"); expect(route.request().headers()["if-match"]).toBe('"1"');
+    const response = await route.fetch(); expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
+    if (voidAttempts === 1) {
+      originalVoidKey = route.request().headers()["idempotency-key"]!; uiVoidResult = await response.json() as Schemas["ReceiptVoided"];
+      committedVoid(); await heldVoid; await route.abort("failed");
+    } else { replayVoidKey = route.request().headers()["idempotency-key"]!; expect(await response.json()).toEqual(uiVoidResult); await route.fulfill({ response }); }
+  });
+  stage("COMMIT_HELD"); const beforeUiVoid = database();
+  try {
+    await voidForm.getByRole("button", { name: "作廢收款並沖銷現金" }).click(); await savedVoid;
+    await page.keyboard.press("Escape"); await voidSheet.getByRole("button", { name: "關閉編輯" }).click(); await expect(voidSheet).toBeVisible();
+  } finally { releaseVoid(); }
+  stage("LOST"); await expect(voidForm.getByRole("alert")).toContainText("網絡連線中斷"); const afterUiVoid = database();
+  expect(afterUiVoid.cash_ledger_entries).toHaveLength(beforeUiVoid.cash_ledger_entries!.length + 1);
+  expect(afterUiVoid.audit_events).toHaveLength(beforeUiVoid.audit_events!.length + 3);
+  expect(afterUiVoid.idempotency_keys).toHaveLength(beforeUiVoid.idempotency_keys!.length + 1);
+  expect(afterUiVoid.projection_invalidations).toHaveLength(beforeUiVoid.projection_invalidations!.length + 1);
+  for (const table of Object.keys(beforeUiVoid)) if (!voidChanged.has(table)) expect(afterUiVoid[table]).toEqual(beforeUiVoid[table]);
+  const uiJournal = afterUiVoid.cash_ledger_entries!.map(row => JSON.parse(row) as unknown[]);
+  const uiPrimary = uiJournal.find(row => row[0] === (uiVoidResult as Schemas["ReceiptVoided"] | null)?.cash_entry_id)!;
+  const uiReversal = uiJournal.find(row => row[0] === (uiVoidResult as Schemas["ReceiptVoided"] | null)?.reversal_entry_id)!;
+  expect([uiPrimary[4], uiPrimary[5], uiPrimary[9], uiPrimary[14]]).toEqual([6125000, 1000000000000, "PRIMARY", 6125000]);
+  expect([uiReversal[4], uiReversal[5], uiReversal[9], uiReversal[14], uiReversal[15]]).toEqual([-6125000, 1000000000000, "REVERSAL", -6125000, uiPrimary[0]]);
+  stage("REPLAY"); await voidForm.getByRole("button", { name: "作廢收款並沖銷現金" }).click(); await expect(voidSheet).toHaveCount(0);
+  await page.unroute(`**${uiVoidPath}`); expect(voidAttempts).toBe(2); expect(replayVoidKey).toBe(originalVoidKey); expect(database()).toEqual(afterUiVoid);
+  await expect(page.getByRole("status").filter({ hasText: "伺服器已回覆收款作廢記錄" })).toBeVisible();
+
+  stage("SECOND"); const secondPanel = await receiptPanel(); await secondPanel.getByRole("button", { name: `核對作廢收款 ${uiId}` }).click();
+  const secondProceed = secondPanel.getByRole("button", { name: "繼續核對並作廢收款" }); await expect(secondProceed).toBeEnabled(); await secondProceed.click();
+  voidSheet = page.getByRole("dialog", { name: "作廢股息收款" }); voidForm = voidSheet.getByRole("form", { name: "作廢股息收款" });
+  await voidForm.getByLabel("作廢依據").fill("Synthetic stale account correction evidence."); await voidForm.getByRole("checkbox", { name: /我已核對原收款/ }).check();
+  const changedAccount = await page.request.patch(`/api/v1/accounts/${account.id}`, { headers: await headers(page, 1), data: { name: "Synthetic renamed receipt account" } });
+  expect(changedAccount.status()).toBe(200); const beforeScopeRace = database();
+  stage("COMPARE"); await voidForm.getByRole("button", { name: "作廢收款並沖銷現金" }).click();
+  await expect(voidForm.getByRole("alert")).toContainText("相關組合已變更");
+  await expect(voidForm.getByLabel("作廢依據")).toHaveValue("Synthetic stale account correction evidence."); expect(database()).toEqual(beforeScopeRace);
+  await voidSheet.getByRole("button", { name: "關閉編輯" }).click(); await page.unroute(voidInputRoute);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0); expect(await page.evaluate(() => caches.keys())).toEqual([]);
   stage("FINAL");
 });

@@ -184,10 +184,13 @@ contents remain private under the same reporter and cleanup rules; no screenshot
 The fixture also obtains current void inputs and calls the protected void API over the real
 socket. Concurrent identical requests create one reversal with unchanged original amount and
 locked FX; another committed void response is deliberately dropped and replayed without further
-writes. Synthetic database-table comparisons verify the expected audit, idempotency and
-invalidation changes while preserving unrelated data. This is an API/socket test for void, not
-a receipt-void browser form.
+writes. The browser then explicitly selects a legacy receipt and confirms its missing origin
+blocks void, selects a matched receipt, checks responsive layout and keyboard focus, reauthenticates
+and records a void through the real form. A held, committed response is dropped; the unchanged
+key replays without another write. A separate account-version race rejects a stale form without
+additional writes. Synthetic database-table comparisons verify the expected audit, idempotency,
+reversal and invalidation changes while preserving unrelated data.
 
 This is not payment or eligibility verification, nor a container, worker, live-provider, NAS
 or TLS acceptance claim. The application still cannot create the legacy entitlement prerequisite
-on a fresh installation, and the receipt-void browser workflow is not yet available.
+on a fresh installation.

@@ -1,11 +1,11 @@
 # Dividend event integrity foundation
 
 > **Current receipt capability:** the application has protected receipt-create and receipt-void
-> APIs, plus a browser creation form for an explicitly selected existing legacy entitlement.
-> They record or reverse owner-supplied cash without verifying payment or eligibility. New
-> installations cannot yet create that entitlement; the receipt-void browser workflow and atomic
-> event reconciliation remain unfinished. The migration and internal-component descriptions
-> below do not themselves install those operations.
+> APIs and browser workflows for explicitly selected existing entitlements and receipts. They
+> record or reverse owner-supplied cash without verifying payment or eligibility. New installations
+> cannot yet create the required legacy entitlement, and atomic event reconciliation remains
+> unfinished. The migration and internal-component descriptions below do not themselves install
+> those operations.
 
 Migration `0016_dividend_event_controls` added database safeguards for an
 owner-controlled dividend workflow. It added two initially empty provenance tables
@@ -1836,7 +1836,7 @@ The response is `RECORDED_RECEIPT_VOID_INPUTS_ONLY` and `REVALIDATION_REQUIRED`:
 verify payment, historical ownership or eligibility, and a matching audit is not proof of the
 original actor. It never changes the receipt, cash, FX, audit or invalidations. Missing or foreign
 scope returns 404; inconsistent history returns a fixed private 503. The separate protected HTTP
-void below revalidates these pins; the reauthenticated browser void workflow is not yet installed.
+void below revalidates these pins; the browser workflow also checks the separately read history.
 
 ## Protected recorded-receipt void
 
@@ -1862,7 +1862,28 @@ cached response has expired or is missing, an already-voided receipt conflicts r
 receiving another reversal or a new HTTP-intent claim. Read receipt and cash history before
 starting a separate operation. Neither the response nor matching audit verifies payment,
 historical ownership, original actor or eligible income. This endpoint does not reconcile
-revisions or relax the existing event fence; the browser void workflow remains unfinished.
+revisions or relax the existing event fence.
+
+## Void a recorded receipt in the browser
+
+In the dividend workspace, explicitly select an event and account, then select an active receipt
+from its recorded history for void review. Selection does not write anything. The application
+privately reads the selected receipt's void inputs and compares the event, account, receipt,
+amounts, locked FX and original cash scope with the separate history read. A failed, paused,
+stale or inconsistent read cannot open the form. A missing-origin legacy receipt remains visible
+but cannot be voided through this workflow; a matched archived-account receipt can be corrected.
+If an account has moved, the review identifies both the current and original portfolios.
+
+The page-level sheet retains the observed receipt/version and exact scope while it is open. It
+shows the original cash values and requires a reason and explicit confirmation that a reversal
+will be added without changing the original values or FX. The sheet provides password
+reauthentication; the server independently requires a recent authenticated session and rechecks
+all pins before committing. After an uncertain response, keep the sheet open and retry unchanged
+with the original in-memory key. Changing the intent uses a new key, and an already-voided
+receipt conflicts rather than being reversed again. After closing, check the recorded receipt and
+cash histories before starting another operation. Inputs and keys are not stored in browser
+storage or query caches. None of these checks proves payment, ownership, eligibility or current
+income, and the event-revision fence remains unchanged.
 
 ## Protected recorded-receipt creation
 
@@ -1914,9 +1935,9 @@ all records carry `UNVERIFIED`, `UNVERIFIED_RECEIPT_HISTORY_ONLY`,
 matching cash link proves payment, authenticated historical intent or eligible income.
 
 Inconsistent retained history returns a fixed private 503; no partial page is returned.
-The endpoint does not create, confirm or void receipts, change cash or locked FX, calculate
-reconciliation, contact providers or relax the event-revision fence. Those workflows remain
-unfinished.
+The endpoint does not itself create, confirm or void receipts, change cash or locked FX, calculate
+reconciliation, contact providers or relax the event-revision fence. Receipt creation and void are
+separate protected operations; atomic reconciliation remains unfinished.
 
 ## Recorded receipt history in the browser
 

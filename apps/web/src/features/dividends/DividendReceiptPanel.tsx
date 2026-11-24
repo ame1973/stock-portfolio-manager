@@ -5,9 +5,11 @@ import { checked, failureMessage } from "../../lib/api";
 import { usePageState } from "../settings/data";
 import { DividendAccountPicker } from "./DividendEstimatePanel";
 import { DividendReceiptPreparation } from "./DividendReceiptPreparation";
+import { DividendReceiptVoidPreparation } from "./DividendReceiptVoidPreparation";
 import type { ReceiptTarget } from "./receipt-input-validation";
+import type { ReceiptVoidTarget } from "./receipt-void-validation";
 import { validEstimateEvent } from "./estimate-validation";
-import { checkedReceiptPage } from "./receipt-validation";
+import { checkedReceiptPage, sameId } from "./receipt-validation";
 import { usePrivatePage } from "./use-private-page";
 
 type Schemas = components["schemas"];
@@ -21,7 +23,7 @@ const cashLabels: Record<Receipt["cash_scope"], string> = {
   MATCHING_CASH_REVERSAL_RECORDED_UNVERIFIED: "已記錄現金沖銷關聯，尚未驗證；不代表沖銷已確認。",
 };
 
-function Record({ value }: { value: Receipt }) {
+function Record({ value, onSelect, disabled, selected }: { value: Receipt; onSelect?: (value: Receipt) => void; disabled: boolean; selected: boolean }) {
   return <li className="grid min-w-0 gap-2 rounded-md border border-border p-4 text-sm leading-7">
     <h5 className="font-semibold">{value.status === "VOID" ? "已作廢" : "已記錄"}收款；歷史稽核及付款均未驗證。</h5>
     <p>記錄收款日 {value.received_date}；原幣金額 {value.currency} {value.recorded_amount}；{value.received_hkd === null ? "港幣金額未知" : `記錄港幣金額 ${value.received_hkd}`}。</p>
@@ -30,10 +32,18 @@ function Record({ value }: { value: Receipt }) {
     <p>{cashLabels[value.cash_scope]}</p>
     <p className="break-all">原事件修訂 {value.revision_no}／{value.revision_id}；原應收識別碼 {value.entitlement_id}；收款識別碼 {value.id}；版本 {value.version}。</p>
     <p>來源：{value.source === "MANUAL" ? "人工記錄" : "匯入紀錄"}；記錄時間 {value.created_at}；作廢時間 {value.voided_at ?? "未記錄"}。</p>
+    {onSelect && <div><Button type="button" variant="outline" aria-pressed={selected} disabled={disabled || value.status !== "ACTIVE"}
+      onClick={() => onSelect(structuredClone(value))}>核對作廢收款 {value.id}</Button></div>}
   </li>;
 }
 
-function History({ event, account }: { event: Event; account: Account }) {
+function sameReceipt(left: Receipt, right: Receipt): boolean {
+  const keys = Object.keys(left) as (keyof Receipt)[];
+  return keys.length === Object.keys(right).length && keys.every(key => left[key] === right[key]);
+}
+
+function History({ event, account, onVoid, disabled }: { event: Event; account: Account; onVoid?: (target: ReceiptVoidTarget) => void; disabled: boolean }) {
+  const [selected, setSelected] = useState<Receipt | null>(null);
   const page = usePageState();
   const load = useCallback(async (cursor: string | undefined, signal: AbortSignal) => checkedReceiptPage(checked(await api.GET(
     "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts", {
@@ -42,7 +52,10 @@ function History({ event, account }: { event: Event; account: Account }) {
   )), event, account), [event, account]);
   const result = usePrivatePage(`receipt-history:${event.id}:${event.current_revision_id}:${event.version}:${account.id}`, page.cursor, load);
   const ready = !!result.data && !result.isFetching && !result.isPaused && !result.isError;
-  const headChanged = result.data?.items.some(item => item.current_revision_id.toLowerCase() !== event.current_revision_id.toLowerCase());
+  const headChanged = result.data?.items.some(item => !sameId(item.current_revision_id, event.current_revision_id));
+  const current = selected && result.data?.items.find(item => sameId(item.id, selected.id));
+  const selectionMatches = !!selected && !!current && sameReceipt(selected, current);
+  const canSelect = ready && !headChanged && !disabled;
   return <section aria-label="帳戶收款紀錄歷史" className="grid min-w-0 gap-3 rounded-md border border-border p-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-semibold">帳戶收款紀錄歷史</h4>
       <Button type="button" variant="outline" disabled={result.isFetching} onClick={() => result.refetch()}>重新載入收款紀錄</Button></div>
@@ -55,15 +68,19 @@ function History({ event, account }: { event: Event; account: Account }) {
       <Button type="button" variant="outline" onClick={() => result.refetch()}>重試載入收款紀錄</Button></div>}
     {headChanged && <p role="status" className="break-all text-sm leading-7 text-danger">收款讀取與事件清單的目前版本不同；收款讀取所見修訂 {result.data?.items[0]?.current_revision_id}。兩者不是同一快照，請重新載入事件後核對。</p>}
     {result.data && <>{result.data.items.length === 0 ? <p className="text-sm text-secondary">此頁沒有已記錄的收款；不代表實收為零或歷史完整。</p>
-      : <ul className="grid gap-3">{result.data.items.map(value => <Record key={value.id} value={value} />)}</ul>}
-      <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" disabled={!ready || page.number === 1} onClick={page.previous}>上一頁收款紀錄</Button>
+      : <ul className="grid gap-3">{result.data.items.map(value => <Record key={value.id} value={value} onSelect={onVoid ? setSelected : undefined}
+        disabled={!canSelect} selected={!!selected && sameId(selected.id, value.id) && selectionMatches} />)}</ul>}
+      {selected && !result.isFetching && !result.isError && !selectionMatches && <p role="status" className="text-sm text-danger">所選收款與目前歷史不同；請重新選擇並核對，不會假定先前操作是否完成。</p>}
+      {selected && onVoid && <DividendReceiptVoidPreparation key={`${selected.id}:${selected.version}`} event={event} account={account} receipt={selected}
+        onVoid={onVoid} disabled={!canSelect || !selectionMatches} />}
+      <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" disabled={!ready || page.number === 1} onClick={() => { setSelected(null); page.previous(); }}>上一頁收款紀錄</Button>
         <p className="text-sm text-secondary">第 {page.number} 頁；本頁 {result.data.items.length} 筆，非全部歷史。</p>
-        <Button type="button" variant="outline" disabled={!ready || !result.data.next_cursor} onClick={() => { if (result.data?.next_cursor) page.next(result.data.next_cursor); }}>下一頁收款紀錄</Button></div></>}
+        <Button type="button" variant="outline" disabled={!ready || !result.data.next_cursor} onClick={() => { if (result.data?.next_cursor) { setSelected(null); page.next(result.data.next_cursor); } }}>下一頁收款紀錄</Button></div></>}
   </section>;
 }
 
-export function DividendReceiptPanel({ event: observed, onWrite, writeDisabled = false, refresh = 0 }: {
-  event: Event; onWrite?: (target: ReceiptTarget) => void; writeDisabled?: boolean; refresh?: number;
+export function DividendReceiptPanel({ event: observed, onWrite, onVoid, writeDisabled = false, refresh = 0 }: {
+  event: Event; onWrite?: (target: ReceiptTarget) => void; onVoid?: (target: ReceiptVoidTarget) => void; writeDisabled?: boolean; refresh?: number;
 }) {
   const [event] = useState(() => structuredClone(observed));
   const [account, setAccount] = useState<Account | null>(null); const [preparing, setPreparing] = useState(false);
@@ -73,7 +90,7 @@ export function DividendReceiptPanel({ event: observed, onWrite, writeDisabled =
     <p className="break-all text-sm leading-7 text-secondary">固定事件 {event.id}；版本 {event.version}；實體修訂 {event.current_revision_id}。查閱不會建立或作廢任何紀錄。</p>
     <DividendAccountPicker purpose="收款紀錄" selected={account} onSelect={setAccount} />
     {account && <><p className="break-all text-sm">所選帳戶：{account.name}；{account.id}。</p>
-      <History key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} />
+      <History key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onVoid={onVoid} disabled={writeDisabled} />
       {onWrite && <div><Button type="button" variant="outline" aria-expanded={preparing} onClick={() => setPreparing(value => !value)}>{preparing ? "收合收款寫入準備" : "準備記錄收款"}</Button></div>}
       {preparing && onWrite && <DividendReceiptPreparation key={`${event.id}:${event.current_revision_id}:${event.version}:${account.id}:${refresh}`} event={event} account={account} onWrite={onWrite} disabled={writeDisabled} />}</>}
   </section>;

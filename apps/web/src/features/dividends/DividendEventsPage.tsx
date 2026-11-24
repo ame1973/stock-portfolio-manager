@@ -22,8 +22,10 @@ import { DividendProjectionPanel } from "./DividendProjectionPanel";
 import { DividendReceiptPanel } from "./DividendReceiptPanel";
 import { ProjectionWriteForm } from "./ProjectionWriteForm";
 import { ReceiptWriteForm } from "./ReceiptWriteForm";
+import { ReceiptVoidForm } from "./ReceiptVoidForm";
 import type { ProjectionTarget } from "./projection-input-validation";
 import type { ReceiptTarget } from "./receipt-input-validation";
+import type { ReceiptVoidTarget } from "./receipt-void-validation";
 import { EstimateWriteForm, type EstimateTarget } from "./EstimateWriteForm";
 import { AcceptEventForm, WithdrawEventForm } from "./CitedEventDecisionForm";
 import { ManualEventCreateForm, ManualEventOverrideForm, ManualEventRevisionForm } from "./ManualEventForm";
@@ -37,7 +39,8 @@ type Revision = Schemas["DividendEventRevisionRecord"];
 type Terms = Event | Revision;
 type Rejection = Schemas["RejectionDecision"];
 type EventEditorTarget = { mode: "create" } | { mode: "revise" | "accept" | "withdraw" | "override" | "match"; target: RevisionTarget } | { mode: "reject"; target: Event };
-type Editor = EventEditorTarget | { mode: "estimate"; target: EstimateTarget } | { mode: "projection"; target: ProjectionTarget } | { mode: "receipt"; target: ReceiptTarget };
+type Editor = EventEditorTarget | { mode: "estimate"; target: EstimateTarget } | { mode: "projection"; target: ProjectionTarget }
+  | { mode: "receipt"; target: ReceiptTarget } | { mode: "receipt-void"; target: ReceiptVoidTarget };
 
 const decisions: Record<Event["decision_kind"], string> = {
   CANDIDATE: "明確關聯候選資料", MANUAL: "人工條款", VERIFY: "人工接受", WITHDRAW: "人工撤回",
@@ -170,7 +173,8 @@ function EventCard({ record, disabled, associationDisabled, onOpen, estimateRefr
       {revisions && <RevisionHistory record={record} />}{rejections && <RejectionHistory record={record} />}
       {estimates && <DividendEstimatePanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={estimateRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "estimate", target })} />}
       {projections && <DividendProjectionPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={projectionRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "projection", target })} />}
-      {receipts && <DividendReceiptPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={receiptRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "receipt", target })} />}
+      {receipts && <DividendReceiptPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={receiptRefresh} writeDisabled={associationDisabled}
+        onWrite={target => onOpen({ mode: "receipt", target })} onVoid={target => onOpen({ mode: "receipt-void", target })} />}
       <Link to={`/settings/securities/${record.security_id}`} className="inline-flex min-h-11 items-center text-sm text-primary underline">核對穩定證券身分</Link>
     </div>}
   </article>;
@@ -217,6 +221,14 @@ function ReceiptEditor({ target, onCancel, onSaved }: { target: ReceiptTarget; o
   </EditorSheet>;
 }
 
+function ReceiptVoidEditor({ target, onCancel, onSaved }: { target: ReceiptVoidTarget; onCancel: () => void; onSaved: (id: string) => void }) {
+  const [passwordBusy, setPasswordBusy] = useState(false); const [decisionBusy, setDecisionBusy] = useState(false);
+  return <EditorSheet title="作廢股息收款" onClose={onCancel}>
+    <div className="mb-6"><PasswordForm disabled={decisionBusy} onPendingChange={setPasswordBusy} /></div>
+    <ReceiptVoidForm target={target} onCancel={onCancel} onSaved={record => onSaved(record.id)} disabled={passwordBusy} onPendingChange={setDecisionBusy} />
+  </EditorSheet>;
+}
+
 const initialFilters = { security_id: "", workflow_status: "" as "" | Event["workflow_status"], from_date: "", to_date: "" };
 export function DividendEventsPage() {
   const cache = useQueryClient();
@@ -239,7 +251,7 @@ export function DividendEventsPage() {
   function closeEditor() {
     if (editor?.mode === "estimate") setEstimateRefresh(value => value + 1);
     if (editor?.mode === "projection") setProjectionRefresh(value => value + 1);
-    if (editor?.mode === "receipt") setReceiptRefresh(value => value + 1);
+    if (editor?.mode === "receipt" || editor?.mode === "receipt-void") setReceiptRefresh(value => value + 1);
     setEditor(null); void cache.invalidateQueries({ queryKey: ["dividends"] });
   }
   return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 className="text-2xl font-semibold">股息事件</h1>
@@ -247,8 +259,9 @@ export function DividendEventsPage() {
     <div className="flex flex-wrap gap-x-5"><Link to="/dividends/candidates" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息候選資料</Link>
       <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div></div>
     <Button data-editor-create disabled={editing} onClick={() => { setNotice(null); setEditor({ mode: "create" }); }}>新增人工股息事件</Button></header>
-    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.mode === "receipt" ? "收款記錄" : notice.mode === "projection" ? "帳戶投影" : notice.mode === "estimate" ? "帳戶估算" : notice.mode === "reject" ? "拒絕決定" : notice.mode === "accept" ? "人工接受決定" : notice.mode === "withdraw" ? "撤回決定" : notice.mode === "override" ? "人工覆寫決定" : notice.mode === "match" ? "候選關聯決定" : "事件決定"} {notice.id}；可能是原鍵回覆，請重新載入核對{notice.mode === "receipt" ? "收款及現金歷史；這不是已確認付款、持倉資格或收入。" : notice.mode === "projection" ? "投影歷史及目前事件；這不是已確認持倉資格、應收或實收。" : notice.mode === "estimate" ? "估算歷史、事件版本及拒絕狀態；這不是已確認扣稅、扣費、持倉資格或實收。" : "目前版本及拒絕狀態；這不是文件驗證、持倉資格或實收。"}</p>}
-    {editor && (editor.mode === "receipt" ? <ReceiptEditor target={editor.target} onCancel={closeEditor} onSaved={id => { setNotice({ id, mode: "receipt" }); void refreshLedger(cache); closeEditor(); }} />
+    {notice && <p role="status" className="panel break-all text-sm leading-7">伺服器已回覆{notice.mode === "receipt-void" ? "收款作廢記錄" : notice.mode === "receipt" ? "收款記錄" : notice.mode === "projection" ? "帳戶投影" : notice.mode === "estimate" ? "帳戶估算" : notice.mode === "reject" ? "拒絕決定" : notice.mode === "accept" ? "人工接受決定" : notice.mode === "withdraw" ? "撤回決定" : notice.mode === "override" ? "人工覆寫決定" : notice.mode === "match" ? "候選關聯決定" : "事件決定"} {notice.id}；可能是原鍵回覆，請重新載入核對{notice.mode === "receipt" || notice.mode === "receipt-void" ? "收款及現金歷史；這不是已確認付款、持倉資格或收入。" : notice.mode === "projection" ? "投影歷史及目前事件；這不是已確認持倉資格、應收或實收。" : notice.mode === "estimate" ? "估算歷史、事件版本及拒絕狀態；這不是已確認扣稅、扣費、持倉資格或實收。" : "目前版本及拒絕狀態；這不是文件驗證、持倉資格或實收。"}</p>}
+    {editor && (editor.mode === "receipt-void" ? <ReceiptVoidEditor target={editor.target} onCancel={closeEditor} onSaved={id => { setNotice({ id, mode: "receipt-void" }); void refreshLedger(cache); closeEditor(); }} />
+      : editor.mode === "receipt" ? <ReceiptEditor target={editor.target} onCancel={closeEditor} onSaved={id => { setNotice({ id, mode: "receipt" }); void refreshLedger(cache); closeEditor(); }} />
       : editor.mode === "projection" ? <ProjectionEditor target={editor.target} onCancel={closeEditor} onSaved={id => { setNotice({ id, mode: "projection" }); closeEditor(); }} />
       : editor.mode === "estimate" ? <EstimateEditor target={editor.target} onCancel={closeEditor} onSaved={id => { setNotice({ id, mode: "estimate" }); closeEditor(); }} />
         : <EventEditor editor={editor} onCancel={closeEditor} onSaved={record => { setNotice({ id: record.id, mode: editor.mode }); closeEditor(); }} />)}

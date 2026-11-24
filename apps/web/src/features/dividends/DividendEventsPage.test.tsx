@@ -5,6 +5,7 @@ import { api, type components } from "@spm/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { DividendEventsPage } from "./DividendEventsPage";
 import { account as receiptAccount } from "./projection-test-data";
+import { inputs as voidInputs, receipt as recordedReceipt } from "./receipt-void-test-data";
 
 type Schemas = components["schemas"];
 const event: Schemas["DividendEventRecord"] = {
@@ -66,6 +67,29 @@ describe("dividend event workspace", () => {
     fireEvent.click(await within(panel).findByRole("button", { name: `選擇收款紀錄帳戶 ${receiptAccount.name}` }));
     expect(await within(panel).findByText(/此頁沒有已記錄的收款/)).toBeVisible();
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("opens a reauthenticated void sheet outside a refreshed event card", async () => {
+    const history = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts";
+    const voidPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs";
+    const selected = { ...recordedReceipt, event_id: event.id, current_revision_id: event.current_revision_id };
+    const observed = { ...voidInputs, event_id: event.id, observed_revision_id: event.current_revision_id, observed_revision_no: event.version };
+    const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null }, [history]: { items: [selected], next_cursor: null }, [voidPath]: observed });
+    const post = vi.spyOn(api, "POST"); const cache = renderPage(); await openEvent();
+    fireEvent.click(screen.getByRole("button", { name: "查看帳戶收款紀錄" }));
+    fireEvent.click(await screen.findByRole("button", { name: `選擇收款紀錄帳戶 ${receiptAccount.name}` }));
+    expect(get).not.toHaveBeenCalledWith(voidPath, expect.anything());
+    const select = await screen.findByRole("button", { name: `核對作廢收款 ${selected.id}` }); await waitFor(() => expect(select).toBeEnabled()); fireEvent.click(select);
+    const open = await screen.findByRole("button", { name: "繼續核對並作廢收款" }); await waitFor(() => expect(open).toBeEnabled()); fireEvent.click(open);
+    const dialog = await screen.findByRole("dialog", { name: "作廢股息收款" });
+    expect(within(dialog).getByRole("form", { name: "重新驗證" })).toBeVisible();
+    expect(within(dialog).getByRole("form", { name: "作廢股息收款" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "關閉編輯" })).toHaveFocus();
+    fireEvent.change(within(dialog).getByLabelText("作廢依據"), { target: { value: "Synthetic pending receipt correction." } });
+    await act(async () => cache.setQueriesData({ queryKey: ["dividends", "events"] }, { items: [{ ...event, version: 3,
+      current_revision_id: "88888888-8888-4888-8888-888888888888" }], next_cursor: null }));
+    expect(within(dialog).getByLabelText("作廢依據")).toHaveValue("Synthetic pending receipt correction.");
+    expect(dialog).toHaveTextContent(event.current_revision_id); expect(post).not.toHaveBeenCalled();
   });
 
   it("opens recorded projection history without creating a projection", async () => {
