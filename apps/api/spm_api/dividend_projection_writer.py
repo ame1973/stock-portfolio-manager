@@ -678,5 +678,19 @@ def _save(
         ):
             raise ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE")
         _verify_intent(con, owner, intent, request_id, updated[-1])
+        # The current-use reader reconstructs the intent, so import it after this module loads.
+        from spm_api.dividend_projection_current import require_current
+
+        checked = require_current(
+            con,
+            owner,
+            intent.event_id,
+            intent.account_id,
+            projection_id=intent.id,
+            projection_no=intent.expected_projection_no + 1,
+            as_of=date.fromisoformat(intent.as_of),
+        )
+        if checked != updated[-1]:
+            raise ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE")
         # Derived snapshots do not change their own ledger input revision or schedule a rebuild.
-        return updated[-1]
+        return checked

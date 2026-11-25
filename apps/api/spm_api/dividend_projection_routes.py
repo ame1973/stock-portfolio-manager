@@ -1,6 +1,7 @@
 """Private recorded projections without current-use or receipt authority."""
 
 import re
+from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -11,6 +12,7 @@ from sqlalchemy import Connection, text
 from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.dividend_event_service as events
+import spm_api.dividend_projection_current as current
 import spm_api.dividend_projection_history as history
 import spm_api.dividend_projection_models as models
 import spm_api.dividend_projection_write_models as write_models
@@ -340,6 +342,25 @@ def create_projection(
             raise writer.ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE")
         _check_intent(con, auth, request, headers, payload, verified)
 
+    def commit(con: Connection, auth: Auth, result: models.ProjectionRecord) -> None:
+        record = current.require_current(
+            con,
+            auth.owner.id,
+            event_id,
+            account_id,
+            projection_id=result.id,
+            projection_no=int(result.projection_no),
+            as_of=date.fromisoformat(body.as_of),
+        )
+        request_id = UUID(request.state.request_id)
+        if record.request_id != request_id:
+            raise writer.ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE")
+        intent = _intent(event_id, account_id, version, record.version.id, body)
+        writer._verify_intent(con, auth.owner.id, intent, request_id, record)
+        _check_intent(con, auth, request, headers, payload, record)
+        if _public(con, auth.owner.id, record) != result:
+            raise writer.ProjectionWriteError("DIVIDEND_PROJECTION_HISTORY_UNAVAILABLE")
+
     try:
         return mutate(
             request,
@@ -350,6 +371,7 @@ def create_projection(
             status=201,
             reauth=True,
             validate_replay=replay,
+            validate_commit=commit,
         )
     except writer.ProjectionWriteError as error:
         raise _failure(error) from None

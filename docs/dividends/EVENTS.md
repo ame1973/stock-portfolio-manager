@@ -1672,13 +1672,17 @@ without the owner's knowledge. Atomic event-revision reconciliation is needed to
 safe changes later.
 
 For a new request the internal writer revalidates current event/source, rejection, ledger,
-account, settings and projection history in the same transaction. The snapshot, its
-canonical audits, a separate route/key/normalized-intent binding audit and the serialized
-idempotency response commit together or roll back together. Changed pins are rejected;
-unavailable or inconsistent history returns a private fixed 503. An unchanged retry
-validates the complete retained chain and both the original intent and HTTP binding, and
-returns the original historical projection with no durable writes, even after account or
-setting changes. A matching replay is not current-use authority.
+account, settings and projection history in the same transaction. After inserting its intent
+audit, it recomputes the current projection again inside its savepoint; a caught failure rolls
+back the snapshot and both internal audits. After inserting the HTTP idempotency record, the
+route rechecks session, CSRF, reauthentication, current recorded inputs, original intent,
+HTTP binding and returned projection before committing. The snapshot, its canonical audits,
+the separate route/key/normalized-intent binding audit and the serialized idempotency response
+commit together or roll back together. Changed pins are rejected; unavailable or inconsistent
+history returns a private fixed 503. An unchanged retry validates the complete retained chain
+and both the original intent and HTTP binding, and returns the original historical projection
+with no durable writes, even after account or setting changes. A matching replay is not
+current-use authority.
 
 Every returned snapshot retains the history read's unverified/no-grant labels. Before
 ex-date it is only recorded holdings, not accrued income; arithmetic `OK` does not verify

@@ -586,7 +586,7 @@ async def test_forged_request_cache_cannot_bypass_http_key_binding(
     first_scope = await scope(client, book)
     first_headers = version_headers(client, 1, key="synthetic-projection-first-key")
     first = await client.post(path(book), json=body(first_scope), headers=first_headers)
-    assert first.status_code == 201
+    assert first.status_code == 201, first.json().get("code")
     second_scope = await scope(client, book)
     second_body = body(second_scope, reason="A second synthetic projection decision.")
     second_headers = version_headers(client, 1, key="synthetic-projection-second-key")
