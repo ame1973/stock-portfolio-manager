@@ -2347,10 +2347,32 @@ unverified origins, and separately lists portfolio identities actually present i
 projection or receipt origins. Missing legacy origins do not acquire an invented historical
 portfolio. The potential invalidation set includes current portfolios requiring work, known
 retained portfolios and every currently owned portfolio linked to the security by trades,
-transfers or positions; the two security-scope queries must agree. This is a read-only planning
-view, not a stored manifest, authenticated decision, source validation, reconciliation task or
-financial grant. Any eventual writer must recheck the scope after all same-transaction changes
-and preserve all event, rejection and missing-origin fences until its atomic path is complete.
+transfers or positions; the two security-scope queries must agree. This view itself is a read-only
+plan, not an authenticated decision, source validation, reconciliation task or financial grant.
+Any eventual writer must recheck the scope after all same-transaction changes and preserve all
+event, rejection and missing-origin fences until its atomic path is complete.
+
+## Inert revision-rebuild manifest storage
+
+Migration `0031_dividend_rebuild` adds four initially empty append-only tables for a prospective
+operation, its current-account and affected-portfolio pins, and a completion marker. This brings
+the schema to 70 business tables without backfilling or changing existing financial histories.
+The operation's successor and completion references are deferred: an incomplete operation cannot
+commit even after an inner savepoint is released. Completion checks the declared accounts,
+portfolio revisions and uniquely scoped invalidation markers, the latest replacement projection,
+successor and audit shapes, and required reconciliation-review links. It rechecks all retained
+account links and rejects a linked account missing from the declared owner scope. A claimed
+`NO_RECORDED_IMPACT` cannot have a retained event entitlement, projection, receipt or origin,
+including void receipts.
+
+These checks are defensive storage constraints, **not** an authenticated rebuild or proof of a
+complete account history, valid source, correct calculation, ownership, payment or eligibility.
+A caller can falsely declare an account's recorded shares to be zero, and a later change in the
+same transaction can occur after the completion check. The future application writer must
+independently verify the complete recorded scope, source and calculations and perform final
+security, financial and scope rechecks immediately before commit. No supported writer or API
+creates these manifests today. Existing event, rejection and missing-origin fences remain in
+force; do not insert manifest rows or invoke internal financial operations on deployment data.
 
 ## Protected hypothetical revision preview
 

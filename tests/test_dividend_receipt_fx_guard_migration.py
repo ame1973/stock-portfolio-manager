@@ -55,7 +55,7 @@ def add_old_origin(
 
 
 def test_current_schema_has_origin_fx_guard_and_no_additional_table(engine: Engine) -> None:
-    assert schema_head() == "0030_direct_receipts"
+    assert schema_head() == "0031_dividend_rebuild"
     with unit_of_work(engine) as con:
         assert (
             con.exec_driver_sql(

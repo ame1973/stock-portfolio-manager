@@ -55,7 +55,7 @@ def populated(engine: Engine) -> tuple[Any, str, dict[str, Any], dict[str, Any]]
 
 
 def test_schema_head_allows_unknown_tax_and_fee_without_defaulting_to_zero(engine: Engine) -> None:
-    assert schema_head() == "0030_direct_receipts"
+    assert schema_head() == "0031_dividend_rebuild"
     with unit_of_work(engine) as con:
         columns = {
             row.name: (row.notnull, row.dflt_value)

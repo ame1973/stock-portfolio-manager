@@ -136,7 +136,7 @@ def test_upgrade_adds_empty_tables_without_adopting_existing_receipts(old_engine
     before = database_snapshot(old_engine)
     upgrade_to(old_engine, HEAD)
     after = database_snapshot(old_engine)
-    assert schema_head() == HEAD
+    assert schema_head() == "0031_dividend_rebuild"
     assert after[TABLE] == [] and after[ORIGINS] == []
     for name, rows in before.items():
         if name not in {"alembic_version", "audit_events"}:
@@ -189,7 +189,9 @@ def test_cli_keeps_a_private_pre_upgrade_backup(old_engine: Engine, settings: Se
             assert con.execute(f'SELECT * FROM "{escaped}" ORDER BY rowid').fetchall() == rows
         assert con.execute("SELECT version_num FROM alembic_version").fetchone() == (PREVIOUS,)
     with unit_of_work(old_engine) as con:
-        assert con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == HEAD
+        assert con.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == (
+            "0031_dividend_rebuild"
+        )
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql(f"SELECT count(*) FROM {ORIGINS}").scalar_one() == 0
 

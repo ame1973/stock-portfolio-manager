@@ -101,7 +101,7 @@ def rejection_values(con: Connection, event: Any, **changes: Any) -> dict[str, A
 
 
 def test_head_adds_empty_rejection_storage_without_inference(engine: Engine) -> None:
-    assert schema_head() == "0030_direct_receipts"
+    assert schema_head() == "0031_dividend_rebuild"
     with unit_of_work(engine) as con:
         assert con.exec_driver_sql(f"SELECT count(*) FROM {TABLE}").scalar_one() == 0
         assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
