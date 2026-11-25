@@ -375,17 +375,10 @@ def _accounts(con: Connection, owner: str, portfolio: str) -> list[str]:
     return result
 
 
-def _fact_scope(
-    con: Connection,
-    owner: str,
-    portfolio: str,
-    security: str,
-    accounts: set[str],
-    observed: list[datetime],
-) -> tuple[bool, bool, bool]:
-    # ponytail: scan relevant retained roots; add indexed checkpoints if measured histories grow.
-    params = {"portfolio": portfolio, "security": security}
-    trades = (
+def _trade_rows(con: Connection, portfolio: str, security: str) -> Sequence[RowMapping]:
+    """Select the recorded trade roots consumed by eligibility validation."""
+    # ponytail: scan retained roots; add indexed checkpoints if measured histories grow.
+    return (
         con.execute(
             text("""
         SELECT t.*,p.owner_id AS portfolio_owner,a.portfolio_id AS account_portfolio,
@@ -400,11 +393,49 @@ def _fact_scope(
         ) OR (t.security_id=:security
               AND (t.portfolio_id=:portfolio OR a.portfolio_id=:portfolio))
     """),
-            params,
+            {"portfolio": portfolio, "security": security},
         )
         .mappings()
         .all()
     )
+
+
+def _transfer_rows(con: Connection, portfolio: str, security: str) -> Sequence[RowMapping]:
+    """Select the recorded transfer roots consumed by eligibility validation."""
+    return (
+        con.execute(
+            text("""
+        SELECT t.*,p.owner_id AS portfolio_owner,a.portfolio_id AS source_portfolio,
+               b.portfolio_id AS target_portfolio,q.kind AS sequence_kind,q.fact_id AS sequence_root
+        FROM security_transfers t LEFT JOIN portfolios p ON p.id=t.portfolio_id
+        LEFT JOIN accounts a ON a.id=t.source_account_id
+        LEFT JOIN accounts b ON b.id=t.target_account_id
+        LEFT JOIN ledger_sequences q ON q.sequence=t.created_sequence
+        WHERE t.root_id IN (
+            SELECT s.root_id FROM security_transfers s
+            LEFT JOIN accounts sa ON sa.id=s.source_account_id
+            LEFT JOIN accounts sb ON sb.id=s.target_account_id
+            WHERE s.security_id=:security AND (s.portfolio_id=:portfolio
+                  OR sa.portfolio_id=:portfolio OR sb.portfolio_id=:portfolio)
+        ) OR (t.security_id=:security AND (t.portfolio_id=:portfolio
+              OR a.portfolio_id=:portfolio OR b.portfolio_id=:portfolio))
+    """),
+            {"portfolio": portfolio, "security": security},
+        )
+        .mappings()
+        .all()
+    )
+
+
+def _fact_scope(
+    con: Connection,
+    owner: str,
+    portfolio: str,
+    security: str,
+    accounts: set[str],
+    observed: list[datetime],
+) -> tuple[bool, bool, bool]:
+    trades = _trade_rows(con, portfolio, security)
     for row in trades:
         _canonical_uuid(row["portfolio_id"])
         _canonical_uuid(row["account_id"])
@@ -432,29 +463,7 @@ def _fact_scope(
         if any(review.gap == "MISSING_CREATION_AUDIT" for review in reviews):
             reviewed_creation_gap = True
 
-    transfers = (
-        con.execute(
-            text("""
-        SELECT t.*,p.owner_id AS portfolio_owner,a.portfolio_id AS source_portfolio,
-               b.portfolio_id AS target_portfolio,q.kind AS sequence_kind,q.fact_id AS sequence_root
-        FROM security_transfers t LEFT JOIN portfolios p ON p.id=t.portfolio_id
-        LEFT JOIN accounts a ON a.id=t.source_account_id
-        LEFT JOIN accounts b ON b.id=t.target_account_id
-        LEFT JOIN ledger_sequences q ON q.sequence=t.created_sequence
-        WHERE t.root_id IN (
-            SELECT s.root_id FROM security_transfers s
-            LEFT JOIN accounts sa ON sa.id=s.source_account_id
-            LEFT JOIN accounts sb ON sb.id=s.target_account_id
-            WHERE s.security_id=:security AND (s.portfolio_id=:portfolio
-                  OR sa.portfolio_id=:portfolio OR sb.portfolio_id=:portfolio)
-        ) OR (t.security_id=:security AND (t.portfolio_id=:portfolio
-              OR a.portfolio_id=:portfolio OR b.portfolio_id=:portfolio))
-    """),
-            params,
-        )
-        .mappings()
-        .all()
-    )
+    transfers = _transfer_rows(con, portfolio, security)
     for row in transfers:
         _canonical_uuid(row["portfolio_id"])
         _canonical_uuid(row["source_account_id"])
@@ -483,8 +492,9 @@ def _fact_scope(
     )
 
 
-def _actions(con: Connection, security: str, observed: list[datetime]) -> None:
-    rows = (
+def _action_rows(con: Connection, security: str) -> Sequence[RowMapping]:
+    """Select the complete recorded action roots consumed by eligibility validation."""
+    return (
         con.execute(
             text("""
         SELECT c.*,q.kind AS sequence_kind,q.fact_id AS sequence_root
@@ -497,6 +507,10 @@ def _actions(con: Connection, security: str, observed: list[datetime]) -> None:
         .mappings()
         .all()
     )
+
+
+def _actions(con: Connection, security: str, observed: list[datetime]) -> None:
+    rows = _action_rows(con, security)
     for row in rows:
         if row["security_id"] != security:
             raise ValueError("Inconsistent action identity")

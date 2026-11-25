@@ -2348,6 +2348,15 @@ comparison are unchanged. These private rows remain in the internal observation 
 returned by the hypothetical-preview API. Matching them does not validate their contents or audits,
 prove complete action-review history, or establish that any review was authorized or resolved.
 
+The observation separately retains private, type-exact raw trade, security-transfer and action
+roots consumed by eligibility, their ledger-sequence links, trade-origin and trade-review rows, and
+related audit rows. It covers each current owned portfolio and the security's recorded action roots,
+using the same root selectors as the eligibility reader. A new linked audit can therefore stale the
+observation even when the aggregate shares and latest input timestamp do not change. The raw
+ledger scope can be reread independently of the event head, but no installed atomic writer yet
+performs a post-head or post-idempotency check. Retaining these rows does not authenticate or verify
+additional audit contents, establish complete history or permit a financial write.
+
 `dividend_revision_rebuild_current.require_current` is a separate read-only fence for a
 **new** prospective operation in a true writer transaction. It checks the owner, decision and
 proposal against the frozen observation, rereads the recorded scope and returns the fresh result

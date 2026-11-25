@@ -16,6 +16,7 @@ import spm_api.dividend_event_writer as event_writer
 import spm_api.dividend_evidence_review_history as reviews
 import spm_api.dividend_evidence_review_integrity as review_integrity
 import spm_api.dividend_rejection_service as rejection_service
+import spm_api.dividend_revision_ledger_scope as ledger_scope
 import spm_api.dividend_revision_preview as revision_preview
 import spm_api.dividend_revision_scope as revision_scope
 from spm_api.dividend_account_scope import positive_version
@@ -66,6 +67,7 @@ class RebuildObservation:
     evidence_reviews: reviews.EvidenceReviewHistory = field(repr=False)
     action_reviews: ActionReviewScope = field(repr=False)
     security: SecurityScope = field(repr=False)
+    ledger: ledger_scope.RecordedLedgerScope = field(repr=False)
     scope: Literal["RECORDED_REBUILD_OBSERVATION_ONLY"] = "RECORDED_REBUILD_OBSERVATION_ONLY"
     history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
     current_use_scope: Literal["REVALIDATION_REQUIRED"] = "REVALIDATION_REQUIRED"
@@ -378,6 +380,12 @@ def observe(
             evidence,
             _action_review_scope(con, current.record.terms.security_id),
             _security_scope(con, current.record.terms.security_id),
+            ledger_scope.read(
+                con,
+                owner,
+                current.record.terms.security_id,
+                tuple(item.portfolio.id for item in proposed.snapshot.portfolios),
+            ),
         )
     except RebuildError:
         raise
