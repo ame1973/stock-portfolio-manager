@@ -10,6 +10,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // Keep jsdom runs bounded on shared CI and NAS development hosts.
+    maxWorkers: 4,
     restoreMocks: true,
     clearMocks: true,
   },

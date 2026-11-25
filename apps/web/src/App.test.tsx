@@ -82,6 +82,12 @@ describe("financial workspace navigation", () => {
   });
 
   it("keeps dividends and corporate actions reachable through five mobile destinations", async () => {
+    // Load the real lazy routes before measuring navigation, not Vite's cold transform time.
+    await Promise.all([
+      import("./features/ledger/TradesPage"),
+      import("./features/ledger/ActionPage"),
+      import("./features/dividends/DividendEventsPage"),
+    ]);
     reads();
     renderApp("/transactions");
     await screen.findByRole("heading", { name: "交易紀錄" });
