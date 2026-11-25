@@ -346,6 +346,7 @@ describe("hypothetical revision preview", () => {
     expect(close).toHaveBeenCalledOnce(); view.unmount(); expect(signal?.aborted).toBe(true);
   });
 
+  // This paging case enters 104 explicit choices before checking three responses.
   it("keeps the same token across pages and rejects a changed first page", async () => {
     const many = Array.from({ length: 26 }, (_, index) => ({ ...account,
       id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`, name: `Synthetic account ${index + 1}` }));
@@ -353,10 +354,14 @@ describe("hypothetical revision preview", () => {
     await screen.findByRole("group", { name: "估算 Synthetic account 26" });
     fireEvent.change(screen.getByLabelText("查閱日"), { target: { value: "2026-11-03" } });
     fireEvent.change(screen.getByLabelText("持股規則"), { target: { value: "ORDINARY_PRE_EX_DATE" } });
-    for (const item of many) {
-      const group = within(screen.getByRole("group", { name: `估算 ${item.name}` }));
-      for (const name of ["稅率估算", "費用估算", "費用幣別", "港幣估值匯率"]) fireEvent.change(group.getByLabelText(name), { target: { value: "UNKNOWN" } });
-    }
+    const groups = screen.getAllByRole("group", { name: /^估算 Synthetic account \d+$/ });
+    expect(groups).toHaveLength(many.length);
+    act(() => {
+      for (const element of groups) {
+        const group = within(element);
+        for (const name of ["稅率估算", "費用估算", "費用幣別", "港幣估值匯率"]) fireEvent.change(group.getByLabelText(name), { target: { value: "UNKNOWN" } });
+      }
+    });
     const items = many.map(value => ({ ...result.items[1]!, account_id: value.id, portfolio_id: value.portfolio_id, broker_id: value.broker_id,
       account_status: value.status, estimate: estimate(value.id) }));
     const first = { ...result, items: items.slice(0, 25), next_after_account_id: many[24]!.id };
@@ -371,5 +376,5 @@ describe("hypothetical revision preview", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("預覽已變更");
     expect(calls[2]![1].body.after_account_id).toBeNull(); expect(calls[2]![1].body.snapshot_token).toBeNull();
     expect(screen.queryByRole("region", { name: "擬議修訂比較結果" })).not.toBeInTheDocument();
-  });
+  }, 15_000);
 });
