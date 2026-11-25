@@ -292,6 +292,13 @@ labels. Direct records never open a legacy void form, and visible mixed history 
 void selection. Real-socket requests still verify that legacy-only history and void inputs fail
 closed for this mixed scope.
 
+Before the financial scenario, the fixture separately creates an incomplete synthetic event,
+resolves that review through a successor, and creates another incomplete successor. Authenticated
+real-socket reads check both bounded no-store evidence-review pages, original and immediate
+successor identities, unverified/no-grant labels and an empty filtered result; an anonymous request
+returns 401. The reads leave the full synthetic table snapshot unchanged. This is an API proof,
+not a mounted review UI, verified acknowledgment or proof of complete review history.
+
 The authenticated Chromium request context also requests the hypothetical revision preview over
 the real socket. It supplies both current accounts and explicit estimates, reads two no-store pages
 with the same session-bound token, and checks the hypothetical USD 12 against the retained USD 11

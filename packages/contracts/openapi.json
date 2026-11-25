@@ -5290,6 +5290,236 @@
         "title": "EventReference",
         "type": "object"
       },
+      "EvidenceReviewPage": {
+        "additionalProperties": false,
+        "description": "A bounded retained history page; absence is not completeness or a grant.",
+        "properties": {
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "document_verification": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Document Verification",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceReviewRecord"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "maxLength": 1500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "RETAINED_EVIDENCE_REVIEWS_ONLY",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "revision_id",
+          "revision_no",
+          "items",
+          "next_cursor",
+          "scope",
+          "history_completeness",
+          "current_use_scope",
+          "eligibility_scope",
+          "document_verification"
+        ],
+        "title": "EvidenceReviewPage",
+        "type": "object"
+      },
+      "EvidenceReviewRecord": {
+        "additionalProperties": false,
+        "description": "A retained review, not a verified acknowledgment or financial authorization.",
+        "properties": {
+          "acknowledgement_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Acknowledgement Scope",
+            "type": "string"
+          },
+          "conflicting_fields": {
+            "items": {
+              "enum": [
+                "ex_date",
+                "announce_date",
+                "record_date",
+                "pay_date",
+                "event_type",
+                "currency",
+                "dps",
+                "adjustment_basis"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Conflicting Fields",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incomplete_reasons": {
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Incomplete Reasons",
+            "type": "array"
+          },
+          "portfolio_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Id"
+          },
+          "reason_code": {
+            "enum": [
+              "DIVIDEND_SOURCE_CONFLICT",
+              "DIVIDEND_INCOMPLETE"
+            ],
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By Revision Id"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "RETAINED_EVIDENCE_REVIEW_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "severity": {
+            "const": "WARNING",
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "OPEN",
+              "ACKNOWLEDGED",
+              "RESOLVED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "revision_id",
+          "revision_no",
+          "portfolio_id",
+          "status",
+          "severity",
+          "reason_code",
+          "conflicting_fields",
+          "incomplete_reasons",
+          "created_at",
+          "resolved_at",
+          "resolved_by_revision_id",
+          "acknowledgement_scope",
+          "scope"
+        ],
+        "title": "EvidenceReviewRecord",
+        "type": "object"
+      },
       "Exchange": {
         "additionalProperties": false,
         "properties": {
@@ -25159,6 +25389,134 @@
         "summary": "Estimate History",
         "tags": [
           "Dividend tax estimates"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/evidence-reviews": {
+      "get": {
+        "operationId": "list_dividend_evidence_reviews",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceReviewPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Evidence Reviews",
+        "tags": [
+          "Dividend evidence reviews"
         ]
       }
     },

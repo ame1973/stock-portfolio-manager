@@ -26,6 +26,18 @@ describe("private session state", () => {
     cache.clear();
   });
 
+  it("uses a fixed private error for unavailable dividend evidence reviews", () => {
+    const error = { code: "DIVIDEND_EVIDENCE_REVIEW_UNAVAILABLE", message: "private detail" };
+    try {
+      checked({ error }, false);
+      throw new Error("Expected an API error");
+    } catch (cause) {
+      expect(cause).toBeInstanceOf(ApiRequestError);
+      expect((cause as Error).message).toContain("股息證據審核歷史無法安全核對");
+      expect((cause as Error).message).not.toContain("private detail");
+    }
+  });
+
   it("rejects missing data and preserves the server error code", () => {
     expect(() => checked({}, false)).toThrow(ApiRequestError);
     try { checked({ error: { code: "PRECONDITION_FAILED" } }, false); }

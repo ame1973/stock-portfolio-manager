@@ -692,11 +692,30 @@ rows, foreign portfolios and inconsistent audits fail closed without repairing d
 resolved rows retain their original revision; repeated incomplete revisions remain separate.
 
 `ACKNOWLEDGED` is reported only as a stored value: its actor and acknowledgment are not verified.
-The result is `RETAINED_EVIDENCE_REVIEWS_ONLY` with `history_completeness=UNVERIFIED` and no
-eligibility grant. An empty result does not prove that no review ever existed or that all evidence
-is complete. This internal reader does not authenticate an HTTP caller, expose an endpoint, change
-review status, create a receipt-reconciliation task, accept an event revision or alter any financial
-fence.
+The internal reader itself does not authenticate an HTTP caller or expose an endpoint. Neither it
+nor the separate protected read below changes review status, creates a receipt-reconciliation task,
+accepts an event revision or alters any financial fence.
+
+## Protected evidence-review history read API
+
+`GET /api/v1/dividends/events/{event_id}/evidence-reviews` requires an owner session and returns
+private `Cache-Control: no-store` responses. It verifies the complete retained evidence-review
+scope before filtering or paging, in the same WAL read snapshot as the event head. Missing or
+foreign events return 404; inconsistent retained history returns a fixed
+`DIVIDEND_EVIDENCE_REVIEW_UNAVAILABLE` 503 without repairing it or returning its private detail.
+The bounded `limit` is 1–100 (default 25); `q` is a literal search over review ID and reason code,
+and `cursor` continues in descending creation-time/ID order. Each page is a new snapshot, not a
+cross-page consistency guarantee. Re-read from the beginning after changes rather than assuming a
+multi-page response describes one instant.
+
+Each record identifies its original event revision and, when resolved, the immediate successor.
+`ACKNOWLEDGED` remains only a stored state with `acknowledgement_scope=NOT_ESTABLISHED`; a resolved
+record is not independent document verification or a financial reconciliation. The page explicitly
+marks history completeness unverified, current use subject to revalidation, and document verification
+and eligibility not established. No returned or empty page proves all reviews are present, all
+problems are resolved, or an owner holds eligible shares. This read does not create or update tasks,
+change event/receipt/cash/FX/audit history, or contact providers. An ordinary idle-session heartbeat
+may still update session activity. There is no evidence-review browser UI yet.
 
 ## Current event-source fence
 

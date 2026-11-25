@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { expect } from "@playwright/test";
+import { expect, request } from "@playwright/test";
 import { checkedRevisionPreview } from "../../../apps/web/src/features/dividends/revision-preview-validation";
 import type { components } from "../../../packages/contracts/src/schema";
 import { test } from "../private-test";
@@ -27,6 +27,63 @@ test("cross-store recorded comparison stays private and does not grant payment",
   const security = await create("securities", { exchange_code: "NASDAQ", display_ticker: "CROSSREC", name: "Synthetic cross reconciliation security", quote_currency: "USD" });
   await create("trades", { portfolio_id: portfolio.id, account_id: account.id, security_id: security.id, side: "BUY", trade_date: "2026-11-02",
     quantity: "10", price: "10", currency: "USD", fee: "0", tax: "0", fx_rate_hkd: "7.8" });
+  stage("EVIDENCE_REVIEW_API");
+  const evidenceCreated = await page.request.post("/api/v1/dividends/events", { headers: await headers(page), data: {
+    security_id: security.id, event_type: "INTERIM", ex_date: "2026-11-04", dps: "1", currency: "USD", adjustment_basis: "UNKNOWN",
+    citation: "Synthetic incomplete evidence", source_url: "https://example.test/evidence?secret=synthetic#part",
+    reason: "Synthetic incomplete event is not an eligibility decision.",
+  } });
+  expect(evidenceCreated.status()).toBe(201); const evidenceFirst = await evidenceCreated.json() as Event;
+  const reviseEvidence = async (previous: Event, basis: "UNKNOWN" | "AS_DECLARED") => {
+    const response = await page.request.patch(`/api/v1/dividends/events/${previous.id}`, { headers: await headers(page, previous.version), data: {
+      security_id: security.id, revision_id: previous.current_revision_id, resolve_rejection_id: null,
+      event_type: "INTERIM", ex_date: "2026-11-04", announce_date: null, record_date: null, pay_date: null,
+      dps: "1", currency: "USD", adjustment_basis: basis, citation: "Synthetic evidence revision", source_url: null,
+      reason: "Synthetic revision retains separate evidence review history.", confirm_unlock: false, confirm_reopen: false,
+    } });
+    expect(response.status()).toBe(200); return await response.json() as Event;
+  };
+  stage("EVIDENCE_RESOLVE");
+  const evidenceResolution = await reviseEvidence(evidenceFirst, "AS_DECLARED");
+  stage("EVIDENCE_REVISE");
+  const evidenceCurrent = await reviseEvidence(evidenceResolution, "UNKNOWN");
+  const reviewPath = `/api/v1/dividends/events/${evidenceCurrent.id}/evidence-reviews`;
+  const beforeReviews = database();
+  stage("EVIDENCE_PAGE_ONE");
+  const reviewResponse = await page.request.get(`${reviewPath}?limit=1`);
+  expect(reviewResponse.status()).toBe(200); expect(reviewResponse.headers()["cache-control"]).toBe("no-store");
+  expect(reviewResponse.headers().etag).toBeUndefined();
+  stage("EVIDENCE_PAGE_SCOPE");
+  const reviewPage = await reviewResponse.json() as Schemas["EvidenceReviewPage"];
+  expect(reviewPage).toMatchObject({ event_id: evidenceCurrent.id, revision_id: evidenceCurrent.current_revision_id, revision_no: 3,
+    scope: "RETAINED_EVIDENCE_REVIEWS_ONLY", history_completeness: "UNVERIFIED", current_use_scope: "REVALIDATION_REQUIRED",
+    eligibility_scope: "NOT_ESTABLISHED", document_verification: "NOT_ESTABLISHED" });
+  expect(reviewPage.items).toHaveLength(1); expect(reviewPage.next_cursor).not.toBeNull();
+  stage("EVIDENCE_PAGE_ITEM");
+  expect(reviewPage.items[0]).toMatchObject({ event_id: evidenceCurrent.id, revision_id: evidenceCurrent.current_revision_id,
+    revision_no: 3, portfolio_id: portfolio.id, status: "OPEN", reason_code: "DIVIDEND_INCOMPLETE",
+    incomplete_reasons: ["UNRESOLVED_ADJUSTMENT"], acknowledgement_scope: "NOT_ESTABLISHED" });
+  stage("EVIDENCE_PAGE_TWO");
+  const olderResponse = await page.request.get(`${reviewPath}?${new URLSearchParams({ limit: "1", cursor: reviewPage.next_cursor! })}`);
+  expect(olderResponse.status()).toBe(200); expect(olderResponse.headers()["cache-control"]).toBe("no-store");
+  const older = await olderResponse.json() as Schemas["EvidenceReviewPage"];
+  expect(older.items).toHaveLength(1); expect(older.next_cursor).toBeNull();
+  expect(older.items[0]).toMatchObject({ revision_id: evidenceFirst.current_revision_id, revision_no: 1,
+    status: "RESOLVED", resolved_by_revision_id: evidenceResolution.current_revision_id, acknowledgement_scope: "NOT_ESTABLISHED" });
+  stage("EVIDENCE_EMPTY");
+  const emptyResponse = await page.request.get(`${reviewPath}?q=does-not-match`);
+  expect(emptyResponse.status()).toBe(200); const empty = await emptyResponse.json() as Schemas["EvidenceReviewPage"];
+  expect(empty.items).toEqual([]); expect(empty.history_completeness).toBe("UNVERIFIED");
+  stage("EVIDENCE_ANONYMOUS");
+  const anonymous = await request.newContext({ baseURL: process.env.SPM_E2E_BASE_URL });
+  try {
+    const denied = await anonymous.get(reviewPath); expect(denied.status()).toBe(401);
+    expect(denied.headers()["cache-control"]).toBe("no-store");
+    expect(await denied.text()).not.toContain(evidenceCurrent.id);
+  } finally { await anonymous.dispose(); }
+  stage("EVIDENCE_UNCHANGED");
+  expect(JSON.stringify([reviewPage, older, empty])).not.toContain("secret=synthetic");
+  expect(database()).toEqual(beforeReviews);
   const created = await page.request.post("/api/v1/dividends/events", { headers: await headers(page), data: {
     security_id: security.id, event_type: "SPECIAL", ex_date: "2026-11-03", dps: "1", currency: "USD", adjustment_basis: "AS_DECLARED",
     citation: "Synthetic cross-store event reference", source_url: null, reason: "Synthetic original event for comparison review.",

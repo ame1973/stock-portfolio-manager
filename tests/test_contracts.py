@@ -70,6 +70,10 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "get",
         ): "list_dividend_event_revisions",
         (
+            "/api/v1/dividends/events/{event_id}/evidence-reviews",
+            "get",
+        ): "list_dividend_evidence_reviews",
+        (
             "/api/v1/dividends/events/{event_id}/rejection",
             "get",
         ): "get_dividend_rejection_state",
@@ -231,6 +235,39 @@ def test_authentication_and_write_security_are_declared_in_the_contract() -> Non
             }
             for name in ("X-CSRF-Token", "Idempotency-Key"):
                 assert headers[name]["required"] is True
+
+
+def test_evidence_review_contract_is_private_bounded_and_unverified() -> None:
+    spec = create_app().openapi()
+    path = "/api/v1/dividends/events/{event_id}/evidence-reviews"
+    operation = spec["paths"][path]["get"]
+    assert operation["operationId"] == "list_dividend_evidence_reviews"
+    assert operation["security"] == [{"cookieAuth": []}]
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/EvidenceReviewPage"
+    )
+    params = {item["name"]: item for item in operation["parameters"]}
+    assert params["event_id"]["required"] is True
+    assert params["limit"]["schema"]["maximum"] == 100
+    assert params["q"]["schema"]["maxLength"] == 100
+    page, record = (
+        spec["components"]["schemas"][name]
+        for name in ("EvidenceReviewPage", "EvidenceReviewRecord")
+    )
+    assert page["additionalProperties"] is record["additionalProperties"] is False
+    assert page["properties"]["items"]["maxItems"] == 100
+    assert record["properties"]["conflicting_fields"]["maxItems"] == 8
+    assert record["properties"]["incomplete_reasons"]["maxItems"] == 32
+    for name, expected in (
+        ("scope", "RETAINED_EVIDENCE_REVIEWS_ONLY"),
+        ("history_completeness", "UNVERIFIED"),
+        ("current_use_scope", "REVALIDATION_REQUIRED"),
+        ("eligibility_scope", "NOT_ESTABLISHED"),
+        ("document_verification", "NOT_ESTABLISHED"),
+    ):
+        assert page["properties"][name]["const"] == expected
+    assert record["properties"]["acknowledgement_scope"]["const"] == "NOT_ESTABLISHED"
+    assert {"revision_id", "revision_no", "resolved_by_revision_id"} <= set(record["required"])
 
 
 def test_revision_preview_contract_is_private_bounded_and_unverified() -> None:

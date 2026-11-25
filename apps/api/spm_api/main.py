@@ -34,6 +34,7 @@ from spm_api.dividend_direct_receipt_write_routes import (
 )
 from spm_api.dividend_event_routes import router as dividend_event_router
 from spm_api.dividend_event_routes import verification_router as dividend_verification_router
+from spm_api.dividend_evidence_review_routes import router as dividend_evidence_review_router
 from spm_api.dividend_fee_routes import router as dividend_fee_router
 from spm_api.dividend_projection_input_routes import router as dividend_projection_input_router
 from spm_api.dividend_projection_routes import router as dividend_projection_router
@@ -257,6 +258,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(basis_router)
     app.include_router(candidate_router)
     app.include_router(dividend_event_router)
+    app.include_router(dividend_evidence_review_router)
     app.include_router(dividend_verification_router)
     app.include_router(dividend_rejection_router)
     app.include_router(dividend_fee_router)
