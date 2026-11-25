@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { expect } from "@playwright/test";
+import { checkedRevisionPreview } from "../../../apps/web/src/features/dividends/revision-preview-validation";
 import type { components } from "../../../packages/contracts/src/schema";
 import { test } from "../private-test";
 import { database, headers, stage, type Event } from "./helpers";
@@ -95,6 +96,13 @@ test("cross-store recorded comparison stays private and does not grant payment",
   const firstPreview = await page.request.post(previewUrl, { headers: previewHeaders, data: previewBody });
   expect(firstPreview.status()).toBe(200); expect(firstPreview.headers()["cache-control"]).toBe("no-store");
   const firstPreviewPage = await firstPreview.json() as Schemas["PreviewPage"];
+  const ownedAccounts: Schemas["Account"][] = [];
+  for (const accountId of [account.id, otherAccount.id]) {
+    const detail = await page.request.get(`/api/v1/accounts/${accountId}`);
+    expect(detail.status()).toBe(200); expect(detail.headers()["cache-control"]).toBe("no-store");
+    ownedAccounts.push(await detail.json() as Schemas["Account"]);
+  }
+  expect(checkedRevisionPreview(firstPreviewPage, event, ownedAccounts, previewBody)).toBe(firstPreviewPage);
   expect(firstPreviewPage.items).toHaveLength(1); expect(firstPreviewPage.next_after_account_id).not.toBeNull();
   expect(firstPreviewPage).toMatchObject({ event_id: event.id, revision_id: event.current_revision_id,
     scope: "HYPOTHETICAL_RECORDED_COMPARISON_ONLY", history_completeness: "UNVERIFIED",
@@ -103,6 +111,8 @@ test("cross-store recorded comparison stays private and does not grant payment",
   const secondPreview = await page.request.post(previewUrl, { headers: previewHeaders, data: continued });
   expect(secondPreview.status()).toBe(200); expect(secondPreview.headers()["cache-control"]).toBe("no-store");
   const secondPreviewPage = await secondPreview.json() as Schemas["PreviewPage"];
+  expect(checkedRevisionPreview(secondPreviewPage, event, ownedAccounts, continued)).toBe(secondPreviewPage);
+  expect(() => checkedRevisionPreview({ ...secondPreviewPage, snapshot_token: "b".repeat(64) }, event, ownedAccounts, continued)).toThrow();
   expect(secondPreviewPage.next_after_account_id).toBeNull(); expect(secondPreviewPage.snapshot_token).toBe(firstPreviewPage.snapshot_token);
   const allPreviewItems = [...firstPreviewPage.items, ...secondPreviewPage.items];
   expect(allPreviewItems).toHaveLength(2);

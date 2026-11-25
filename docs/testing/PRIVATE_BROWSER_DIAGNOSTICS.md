@@ -296,9 +296,10 @@ The authenticated Chromium request context also requests the hypothetical revisi
 the real socket. It supplies both current accounts and explicit estimates, reads two no-store pages
 with the same session-bound token, and checks the hypothetical USD 12 against the retained USD 11
 projection and USD 8 receipts: delta USD 1 and recorded difference USD 4. Missing HKD FX stays
-explicit; the empty account is not called confirmed zero. Changing the proposed DPS while continuing
-the page returns 409 without database changes. This tests the API, not a preview form or accepted
-revision.
+explicit; the empty account is not called confirmed zero. Both real responses are passed through
+the separate frontend exact-string/BigInt scope validator, which also rejects a substituted page
+token. Changing the proposed DPS while continuing the page returns 409 without database changes.
+This checks the API and validator, not a mounted preview form or accepted revision.
 
 The browser also verifies an independent comparison of 11 expected, 8 recorded and 3 difference,
 with unverified labels and
