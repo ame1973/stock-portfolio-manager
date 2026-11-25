@@ -2199,6 +2199,27 @@ holdings, payment or eligibility. Current versions and data revisions require re
 actual writer. The existing event-revision, rejection and missing-origin void fences remain in
 force; no atomic event revision, projection rebuild or reconciliation task is created here.
 
+## Internal recorded revision-scope preview
+
+`dividend_revision_scope.read` combines the retained-history inventory above with recorded
+eligibility books for **every currently owned portfolio and account**, including accounts with
+no linked event history. The caller supplies a proposed ex-date, as-of date and explicit
+eligibility rule. Once the ex-date has been reached, recorded trades, transfers and actions are
+replayed strictly before it; ordinary trades on the ex-date do not change eligibility.
+The result includes current account, broker, portfolio and data-version pins, archived states,
+retained receipt and projection history, and each portfolio's recorded ledger/audit scope in the
+same WAL snapshot. Inconsistent retained links, ownership or ledger histories fail the whole read
+rather than returning a partial scope. A moved account whose retained ledger no longer matches
+its current portfolio requires investigation rather than being silently omitted.
+
+Recorded zero is not confirmed zero historical ownership. Before the proposed ex-date, results
+are explicitly upcoming recorded holdings; an unresolved rule or action keeps quantities
+unavailable for review. The scope does not prove historical completeness, validate the proposed
+event's source or tax/fee/FX selections, authorize a revision, establish a payment or eligibility,
+or change any event/rejection/missing-origin fence. It is internal only: there is no API, UI,
+reconciliation task, event change or projection rebuild. Any eventual writer must revalidate the
+entire scope and its financial/security pins within its serialized transaction.
+
 ## Internal recorded-reconciliation comparison
 
 `dividend_reconciliation_history.read` is an internal, read-only comparison for an explicitly
