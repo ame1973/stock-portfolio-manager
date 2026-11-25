@@ -8,6 +8,8 @@ import { DividendDirectReceiptPreparation } from "./DividendDirectReceiptPrepara
 import type { DirectReceiptTarget } from "./direct-receipt-input-validation";
 import { DividendReceiptPreparation } from "./DividendReceiptPreparation";
 import { DividendReceiptVoidPreparation } from "./DividendReceiptVoidPreparation";
+import { DividendDirectReceiptVoidPreparation } from "./DividendDirectReceiptVoidPreparation";
+import type { DirectReceiptVoidTarget } from "./direct-receipt-void-validation";
 import { DividendReconciliationPanel } from "./DividendReconciliationPanel";
 import type { ReceiptTarget } from "./receipt-input-validation";
 import type { ReceiptVoidTarget } from "./receipt-void-validation";
@@ -36,9 +38,9 @@ function Record({ value, onSelect, disabled, selected }: { value: Receipt; onSel
     <p>{cashLabels[value.cash_scope]}</p>
     <p className="break-all">原事件修訂 {value.revision_no}／{value.revision_id}；{value.entitlement_id !== null && <>原應收識別碼 {value.entitlement_id}；</>}收款識別碼 {value.id}；版本 {value.version}。</p>
     <p>來源：{value.source === "MANUAL" ? "人工記錄" : "匯入紀錄"}；記錄時間 {value.created_at}；作廢時間 {value.voided_at ?? "未記錄"}。</p>
-    {value.receipt_basis === "DIRECT_EVENT_ACCOUNT" && <p className="text-secondary">直接收款尚未開放瀏覽器作廢操作；不能使用舊式收款流程。</p>}
-    {onSelect && value.receipt_basis === "LEGACY_ENTITLEMENT" && <div><Button type="button" variant="outline" aria-pressed={selected} disabled={disabled || value.status !== "ACTIVE"}
-      onClick={() => onSelect(structuredClone(value))}>核對作廢收款 {value.id}</Button></div>}
+    {value.receipt_basis === "DIRECT_EVENT_ACCOUNT" && <p className="text-secondary">直接收款作廢仍保留事件限制；不能使用舊式收款流程。</p>}
+    {onSelect && <div><Button type="button" variant="outline" aria-pressed={selected} disabled={disabled || value.status !== "ACTIVE"}
+      onClick={() => onSelect(structuredClone(value))}>{value.receipt_basis === "DIRECT_EVENT_ACCOUNT" ? "核對作廢直接收款" : "核對作廢收款"} {value.id}</Button></div>}
   </li>;
 }
 
@@ -47,7 +49,7 @@ function sameReceipt(left: Receipt, right: Receipt): boolean {
   return keys.length === Object.keys(right).length && keys.every(key => left[key] === right[key]);
 }
 
-function History({ event, account, onVoid, disabled }: { event: Event; account: Account; onVoid?: (target: ReceiptVoidTarget) => void; disabled: boolean }) {
+function History({ event, account, onVoid, disabled }: { event: Event; account: Account; onVoid?: (target: ReceiptVoidTarget | DirectReceiptVoidTarget) => void; disabled: boolean }) {
   const [selected, setSelected] = useState<Receipt | null>(null);
   const page = usePageState();
   const load = useCallback(async (cursor: string | undefined, signal: AbortSignal) => checkedCombinedReceiptPage(checked(await api.GET(
@@ -61,12 +63,12 @@ function History({ event, account, onVoid, disabled }: { event: Event; account: 
   const current = selected && result.data?.items.find(item => sameId(item.id, selected.id));
   const selectionMatches = !!selected && !!current && sameReceipt(selected, current);
   const hasDirect = result.data?.items.some(item => item.receipt_basis === "DIRECT_EVENT_ACCOUNT");
-  const canSelect = ready && !headChanged && !disabled && !hasDirect;
+  const canSelect = ready && !headChanged && !disabled;
   return <section aria-label="帳戶收款紀錄歷史" className="grid min-w-0 gap-3 rounded-md border border-border p-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-semibold">帳戶收款紀錄歷史</h4>
       <Button type="button" variant="outline" disabled={result.isFetching} onClick={() => result.refetch()}>重新載入收款紀錄</Button></div>
     <p className="text-sm leading-7 text-secondary">合併顯示直接收款與舊式應收關聯收款。這是未驗證的歷史記錄，不會確認持倉、收入、付款或應收；不同幣別及歷史版本不在此相加。每頁獨立讀取，內容可能隨時間變更。</p>
-    {onVoid && <p className="text-sm leading-7 text-secondary">作廢仍僅支援可核對來源的舊式收款；混合歷史的伺服器防護不會因本頁未顯示直接收款而解除。</p>}
+    {onVoid && <p className="text-sm leading-7 text-secondary">作廢須先核對所選收款的原現金與最新輸入；直接與舊式收款使用不同流程。混合歷史的舊式作廢防護不會因本頁未顯示直接收款而解除。</p>}
     {hasDirect && onVoid && <p role="status" className="text-sm text-secondary">本頁包含直接收款；目前不能從這份混合歷史開始舊式作廢。</p>}
     {result.isPaused ? <p role="status" className="text-sm text-secondary">連線已暫停；顯示的是上次讀取，並非目前狀態。</p>
       : result.isPending ? <p role="status" className="text-sm text-secondary">正在載入收款紀錄…</p>
@@ -77,10 +79,13 @@ function History({ event, account, onVoid, disabled }: { event: Event; account: 
     {headChanged && <p role="status" className="break-all text-sm leading-7 text-danger">收款讀取與事件清單的目前版本不同；收款讀取所見修訂 {result.data?.items[0]?.current_revision_id}。兩者不是同一快照，請重新載入事件後核對。</p>}
     {result.data && <>{result.data.items.length === 0 ? <p className="text-sm text-secondary">此頁沒有已記錄的收款；不代表實收為零或歷史完整。</p>
       : <ul className="grid gap-3">{result.data.items.map(value => <Record key={value.id} value={value} onSelect={onVoid ? setSelected : undefined}
-        disabled={!canSelect} selected={!!selected && sameId(selected.id, value.id) && selectionMatches} />)}</ul>}
+        disabled={!canSelect || (value.receipt_basis === "LEGACY_ENTITLEMENT" && !!hasDirect)} selected={!!selected && sameId(selected.id, value.id) && selectionMatches} />)}</ul>}
       {selected && !result.isFetching && !result.isError && !selectionMatches && <p role="status" className="text-sm text-danger">所選收款與目前歷史不同；請重新選擇並核對，不會假定先前操作是否完成。</p>}
-      {selected && onVoid && <DividendReceiptVoidPreparation key={`${selected.id}:${selected.version}`} event={event} account={account} receipt={selected}
-        onVoid={onVoid} disabled={!canSelect || !selectionMatches} />}
+      {selected && onVoid && (selected.receipt_basis === "DIRECT_EVENT_ACCOUNT"
+        ? <DividendDirectReceiptVoidPreparation key={`direct:${selected.id}:${selected.version}`} event={event} account={account} receipt={selected}
+          onVoid={onVoid} disabled={!canSelect || !selectionMatches} />
+        : <DividendReceiptVoidPreparation key={`legacy:${selected.id}:${selected.version}`} event={event} account={account} receipt={selected}
+          onVoid={onVoid} disabled={!canSelect || !selectionMatches || !!hasDirect} />)}
       <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" disabled={!ready || page.number === 1} onClick={() => { setSelected(null); page.previous(); }}>上一頁收款紀錄</Button>
         <p className="text-sm text-secondary">第 {page.number} 頁；本頁 {result.data.items.length} 筆，非全部歷史。</p>
         <Button type="button" variant="outline" disabled={!ready || !result.data.next_cursor} onClick={() => { if (result.data?.next_cursor) { setSelected(null); page.next(result.data.next_cursor); } }}>下一頁收款紀錄</Button></div></>}
@@ -88,7 +93,7 @@ function History({ event, account, onVoid, disabled }: { event: Event; account: 
 }
 
 export function DividendReceiptPanel({ event: observed, onWrite, onVoid, writeDisabled = false, refresh = 0, comparisonRefresh = 0 }: {
-  event: Event; onWrite?: (target: ReceiptTarget | DirectReceiptTarget) => void; onVoid?: (target: ReceiptVoidTarget) => void; writeDisabled?: boolean; refresh?: number; comparisonRefresh?: number;
+  event: Event; onWrite?: (target: ReceiptTarget | DirectReceiptTarget) => void; onVoid?: (target: ReceiptVoidTarget | DirectReceiptVoidTarget) => void; writeDisabled?: boolean; refresh?: number; comparisonRefresh?: number;
 }) {
   const [event] = useState(() => structuredClone(observed));
   const [account, setAccount] = useState<Account | null>(null); const [preparing, setPreparing] = useState<"legacy" | "direct" | null>(null);

@@ -236,9 +236,19 @@ returns the original response and leaves every table unchanged. A second form fr
 inputs before a protected account edit; its stale submission is rejected with retained input
 and no additional writes. Browser storage stays empty.
 
-This exercises direct creation through a real form, direct create/void over the real socket,
-history UI and read-only void inputs, not a direct-void form, external payment, eligibility,
-deployment, NAS or TLS. The pinned private reporter, exclusive temporary root,
+The actual direct-void form then reads a separately selected receipt's fresh no-store original
+cash and current pins, checks empty reason/unselected acknowledgment, keyboard/focus and all
+three widths, and uses its real password form. A protected account edit makes that frozen
+submission stale: the 409 preserves its reason and changes no tables. After explicit reopening
+with fresh pins, the response is held to verify busy-close, committed and dropped, then replayed
+with an identical body, receipt version and key. The browser verifies one reversal/three audits,
+unchanged retained origins and unrelated tables, and zero-write replay. A guarded read-only
+SQLite check verifies exact original/opposite HKD identity integers and `VOID`/version 2; the
+history then disables correction of that receipt. No filled form is captured.
+
+This exercises direct entry/void forms, protected create/void APIs, history UI and private input
+reads, not external payment, eligibility, deployment, NAS or TLS. The pinned private reporter,
+exclusive temporary root,
 no-debug/no-recording rules and fixed safe output remain mandatory. CI defines this fixture;
 that definition is not evidence of a hosted CI run.
 

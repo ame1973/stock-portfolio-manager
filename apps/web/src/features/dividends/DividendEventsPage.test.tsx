@@ -7,6 +7,7 @@ import { DividendEventsPage } from "./DividendEventsPage";
 import { account as receiptAccount } from "./projection-test-data";
 import { reconciliation } from "./reconciliation-test-data";
 import { inputs as voidInputs, combinedReceipt as recordedReceipt } from "./receipt-void-test-data";
+import { inputs as directVoidInputs, receipt as directReceipt } from "./direct-receipt-void-test-data";
 
 type Schemas = components["schemas"];
 const event: Schemas["DividendEventRecord"] = {
@@ -99,6 +100,31 @@ describe("dividend event workspace", () => {
     expect(within(dialog).getByLabelText("收款依據")).toHaveValue("Synthetic pending direct cash reason.");
     expect(dialog).toHaveTextContent(inputs.revision_id); expect(dialog).toHaveTextContent(inputs.account_version); expect(post).not.toHaveBeenCalled();
     expect(cache.getQueryCache().getAll().some(query => JSON.stringify(query.queryKey).includes("direct-receipt-inputs"))).toBe(false);
+  });
+
+  it("opens direct void only after selected private inputs and retains its reauthenticated sheet across refresh", async () => {
+    const history = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts";
+    const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/{receipt_id}/void-inputs";
+    const selected = { ...directReceipt, event_id: event.id, current_revision_id: event.current_revision_id, current_revision_no: event.version };
+    const observed = { ...directVoidInputs, receipt: selected, current: { ...directVoidInputs.current, event_id: event.id,
+      revision_id: event.current_revision_id, revision_no: event.version, workflow_status: event.workflow_status } };
+    const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null }, [history]: { items: [selected], next_cursor: null }, [path]: observed });
+    const post = vi.spyOn(api, "POST"); const cache = renderPage(); await openEvent();
+    fireEvent.click(screen.getByRole("button", { name: "查看帳戶收款紀錄" }));
+    fireEvent.click(await screen.findByRole("button", { name: `選擇收款紀錄帳戶 ${receiptAccount.name}` }));
+    const select = await screen.findByRole("button", { name: `核對作廢直接收款 ${selected.id}` }); await waitFor(() => expect(select).toBeEnabled());
+    expect(get).not.toHaveBeenCalledWith(path, expect.anything()); fireEvent.click(select);
+    const open = await screen.findByRole("button", { name: "繼續核對並作廢直接收款" }); await waitFor(() => expect(open).toBeEnabled()); fireEvent.click(open);
+    const dialog = await screen.findByRole("dialog", { name: "作廢直接股息收款" });
+    expect(within(dialog).getByRole("form", { name: "重新驗證" })).toBeVisible(); expect(within(dialog).getByRole("form", { name: "作廢直接股息收款" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "關閉編輯" })).toHaveFocus();
+    expect(within(dialog).getByRole("checkbox", { name: /我已核對原收款/ })).not.toBeChecked();
+    fireEvent.change(within(dialog).getByLabelText("作廢依據"), { target: { value: "Synthetic pending direct correction." } });
+    await act(async () => cache.setQueriesData({ queryKey: ["dividends", "events"] }, { items: [{ ...event, version: 3,
+      current_revision_id: "88888888-8888-4888-8888-888888888888" }], next_cursor: null }));
+    expect(within(dialog).getByLabelText("作廢依據")).toHaveValue("Synthetic pending direct correction."); expect(dialog).toHaveTextContent(event.current_revision_id);
+    expect(get).not.toHaveBeenCalledWith("/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs", expect.anything());
+    expect(post).not.toHaveBeenCalled(); expect(cache.getQueryCache().getAll().some(query => JSON.stringify(query.queryKey).includes("direct-receipt-void"))).toBe(false);
   });
 
   it("opens a reauthenticated void sheet outside a refreshed event card", async () => {

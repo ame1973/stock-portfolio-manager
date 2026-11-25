@@ -27,6 +27,7 @@ import type { ProjectionTarget } from "./projection-input-validation";
 import type { ReceiptTarget } from "./receipt-input-validation";
 import type { DirectReceiptTarget } from "./direct-receipt-input-validation";
 import type { ReceiptVoidTarget } from "./receipt-void-validation";
+import type { DirectReceiptVoidTarget } from "./direct-receipt-void-validation";
 import { EstimateWriteForm, type EstimateTarget } from "./EstimateWriteForm";
 import { AcceptEventForm, WithdrawEventForm } from "./CitedEventDecisionForm";
 import { ManualEventCreateForm, ManualEventOverrideForm, ManualEventRevisionForm } from "./ManualEventForm";
@@ -41,7 +42,7 @@ type Terms = Event | Revision;
 type Rejection = Schemas["RejectionDecision"];
 type EventEditorTarget = { mode: "create" } | { mode: "revise" | "accept" | "withdraw" | "override" | "match"; target: RevisionTarget } | { mode: "reject"; target: Event };
 type Editor = EventEditorTarget | { mode: "estimate"; target: EstimateTarget } | { mode: "projection"; target: ProjectionTarget }
-  | { mode: "receipt"; target: ReceiptTarget | DirectReceiptTarget } | { mode: "receipt-void"; target: ReceiptVoidTarget };
+  | { mode: "receipt"; target: ReceiptTarget | DirectReceiptTarget } | { mode: "receipt-void"; target: ReceiptVoidTarget | DirectReceiptVoidTarget };
 
 const decisions: Record<Event["decision_kind"], string> = {
   CANDIDATE: "明確關聯候選資料", MANUAL: "人工條款", VERIFY: "人工接受", WITHDRAW: "人工撤回",
@@ -222,9 +223,9 @@ function ReceiptEditor({ target, onCancel, onSaved }: { target: ReceiptTarget | 
   </EditorSheet>;
 }
 
-function ReceiptVoidEditor({ target, onCancel, onSaved }: { target: ReceiptVoidTarget; onCancel: () => void; onSaved: (id: string) => void }) {
+function ReceiptVoidEditor({ target, onCancel, onSaved }: { target: ReceiptVoidTarget | DirectReceiptVoidTarget; onCancel: () => void; onSaved: (id: string) => void }) {
   const [passwordBusy, setPasswordBusy] = useState(false); const [decisionBusy, setDecisionBusy] = useState(false);
-  return <EditorSheet title="作廢股息收款" onClose={onCancel}>
+  return <EditorSheet title={"current" in target.inputs ? "作廢直接股息收款" : "作廢股息收款"} onClose={onCancel}>
     <div className="mb-6"><PasswordForm disabled={decisionBusy} onPendingChange={setPasswordBusy} /></div>
     <ReceiptVoidForm target={target} onCancel={onCancel} onSaved={record => onSaved(record.id)} disabled={passwordBusy} onPendingChange={setDecisionBusy} />
   </EditorSheet>;

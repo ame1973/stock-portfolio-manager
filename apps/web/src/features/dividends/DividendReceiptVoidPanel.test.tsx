@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DividendReceiptPanel } from "./DividendReceiptPanel";
 import { account, event } from "./projection-test-data";
 import { combinedReceipt as receipt, inputs, voided } from "./receipt-void-test-data";
+import { receipt as direct, inputs as directInputs } from "./direct-receipt-void-test-data";
 
 const historyPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts";
 const inputPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/receipts/{receipt_id}/void-inputs";
@@ -28,6 +29,50 @@ async function chooseReceipt() {
 }
 
 describe("selecting a recorded receipt for void", () => {
+  const directPath = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts/{receipt_id}/void-inputs";
+  it("allows only the direct correction path on mixed history without relaxing the legacy fence", async () => {
+    const selected = { ...direct, id: "ffffffff-ffff-4fff-8fff-ffffffffffff" }; const observed = { ...directInputs, receipt: selected };
+    const get = vi.spyOn(api, "GET").mockImplementation(async request => request === "/api/v1/accounts" ? reply({ items: [account], next_cursor: null })
+      : request === historyPath ? reply({ items: [selected, receipt], next_cursor: null }) : request === directPath ? reply(observed) : Promise.reject(new Error("Unexpected read")));
+    const { onVoid, cache } = show(); await chooseAccount();
+    const select = await screen.findByRole("button", { name: `核對作廢直接收款 ${selected.id}` }); await waitFor(() => expect(select).toBeEnabled());
+    expect(screen.getByRole("button", { name: `核對作廢收款 ${receipt.id}` })).toBeDisabled(); expect(get).not.toHaveBeenCalledWith(directPath, expect.anything());
+    fireEvent.click(select); const open = await screen.findByRole("button", { name: "繼續核對並作廢直接收款" }); await waitFor(() => expect(open).toBeEnabled()); fireEvent.click(open);
+    expect(onVoid).toHaveBeenCalledWith({ event, account, receipt: selected, inputs: observed }); expect(get).not.toHaveBeenCalledWith(inputPath, expect.anything());
+    expect(cache.getQueryCache().getAll()).toHaveLength(0);
+  });
+  it.each(["changed", "offline", "head", "error"])("disables direct preparation when its history becomes %s", async state => {
+    const get = vi.spyOn(api, "GET").mockImplementation(async request => request === "/api/v1/accounts" ? reply({ items: [account], next_cursor: null })
+      : request === historyPath ? reply({ items: [direct], next_cursor: null }) : reply(directInputs));
+    const { onVoid } = show(); await chooseAccount(); fireEvent.click(await screen.findByRole("button", { name: `核對作廢直接收款 ${direct.id}` }));
+    const open = await screen.findByRole("button", { name: "繼續核對並作廢直接收款" }); await waitFor(() => expect(open).toBeEnabled());
+    if (state === "offline") {
+      try { act(() => onlineManager.setOnline(false)); expect(open).toBeDisabled(); }
+      finally { act(() => onlineManager.setOnline(true)); }
+    } else {
+      get.mockImplementation(async request => request === historyPath ? state === "error"
+        ? { error: { code: "COMBINED_RECEIPT_HISTORY_UNAVAILABLE" }, response: new Response() }
+        : reply({ items: [{ ...direct, ...(state === "changed" ? { recorded_amount: "6.126000" }
+          : { current_revision_id: "77777777-7777-4777-8777-777777777777", current_revision_no: event.version + 1 }) }], next_cursor: null })
+        : request === directPath ? reply(directInputs) : reply({ items: [account], next_cursor: null }));
+      fireEvent.click(screen.getByRole("button", { name: "重新載入收款紀錄" })); await waitFor(() => expect(open).toBeDisabled());
+    }
+    expect(onVoid).not.toHaveBeenCalled();
+  });
+  it("aborts a pending selected direct-void input when the account changes", async () => {
+    const other = { ...account, id: "77777777-7777-4777-8777-777777777777", name: "Synthetic other void account" };
+    let signal!: AbortSignal; let deliver!: () => void;
+    vi.spyOn(api, "GET").mockImplementation(async (request, options) => {
+      if (request === "/api/v1/accounts") return reply({ items: [account, other], next_cursor: null });
+      if (request === directPath) return new Promise(resolve => { signal = (options as { signal: AbortSignal }).signal; deliver = () => resolve(reply(directInputs)); });
+      const selected = (options as { params: { path: { account_id: string } } }).params.path.account_id;
+      return reply({ items: selected === account.id ? [direct] : [], next_cursor: null });
+    });
+    const { onVoid } = show(); await chooseAccount(); fireEvent.click(await screen.findByRole("button", { name: `核對作廢直接收款 ${direct.id}` }));
+    await waitFor(() => expect(deliver).toBeTypeOf("function")); fireEvent.click(screen.getByRole("button", { name: `選擇收款紀錄帳戶 ${other.name}` }));
+    expect(signal.aborted).toBe(true); await act(async () => deliver());
+    expect(screen.queryByRole("region", { name: "核對直接收款作廢輸入" })).not.toBeInTheDocument(); expect(onVoid).not.toHaveBeenCalled();
+  });
   it("requires explicit account and receipt selection before reading void inputs", async () => {
     const get = reads(); const post = vi.spyOn(api, "POST"); const { cache, onVoid } = show();
     expect(get).not.toHaveBeenCalledWith(historyPath, expect.anything()); expect(get).not.toHaveBeenCalledWith(inputPath, expect.anything());

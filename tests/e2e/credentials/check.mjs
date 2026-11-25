@@ -70,7 +70,7 @@ try {
                           : estimateWrites ? "PASS isolated estimate-write browser fixture: protected settings, historical replay and rejection race"
                             : projectionHistory ? "PASS isolated projection-history browser fixture: exact recorded values, missing inputs and no writes"
                               : receiptHistory ? "PASS isolated receipt-history browser fixture: original revisions, unverified cash links and no writes"
-                                : directReceiptWrite ? "PASS isolated direct receipt browser fixture: entry form, protected create/void APIs, exact cash, lost-response replay and stale scope"
+                                : directReceiptWrite ? "PASS isolated direct receipt browser fixture: entry/void forms, protected APIs, exact reversal, lost-response replay and stale scope"
                                 : receiptWrite ? "PASS isolated receipt browser fixture: creation/void forms, protected APIs, lost-response replay and stale scope"
                                 : projectionWrite ? "PASS isolated projection-write browser fixture: explicit pins, fence, historical replay and input races"
                                   : reconciliationDirect ? "PASS isolated cross-store comparison browser fixture: original revisions, exact recorded amounts and no writes"
