@@ -2309,6 +2309,30 @@ delta, receipt arithmetic, status, quality and unknown-value consistency. Versio
 use bounded decimal strings. Model instances are revalidated before use. The models themselves do
 not authenticate requests or authorize a revision or financial write.
 
+## Internal revision observation and serialized recheck
+
+`dividend_revision_rebuild.observe` binds an explicit proposed event decision to the current
+recorded event, candidate, rejection and evidence-review histories and the hypothetical
+per-account comparison in one caller-owned WAL snapshot. It checks retained rows against the
+readers and independently recalculates the displayed account comparisons. An observation includes
+all currently owned accounts, including archived and ledger-only accounts; historical ownership
+and completeness remain unverified. It is not an authenticated API, an accepted revision or a
+persistent snapshot token.
+
+`dividend_revision_rebuild_current.require_current` is a separate read-only fence for a
+**new** prospective operation in a true writer transaction. It checks the owner, decision and
+proposal against the frozen observation, rereads the recorded scope and returns the fresh result
+only if its nested values and types match. Floating-point values cannot impersonate integer pins or
+exact financial values. Any same-transaction change requires another check. Historical replay
+must be handled separately before this current-scope check; it cannot adopt an unrelated operation.
+
+Neither helper authenticates a session, verifies current candidate/source use or establishes
+payment or eligibility. They do not prove the complete raw ledger is unchanged merely because a
+captured comparison matches. The eventual writer must independently validate current sources,
+security, all affected financial histories and final scope, and commit revision, replacement
+projections, reconciliation tasks, audits, invalidations and idempotency together. No event or
+missing-origin fence is relaxed, and neither helper may be used as authorization to write.
+
 ## Protected hypothetical revision preview
 
 `POST /api/v1/dividends/events/{event_id}/revision-preview` is a private **read**, not an event
