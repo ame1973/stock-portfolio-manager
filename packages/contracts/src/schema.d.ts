@@ -812,6 +812,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/events/{event_id}/revision-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revision Preview
+         * @description Recompute every page; the cursor only detects changes to the displayed snapshot.
+         */
+        post: operations["preview_dividend_revision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/events/{event_id}/revisions": {
         parameters: {
             query?: never;
@@ -1812,6 +1832,31 @@ export interface components {
              * Format: uuid
              */
             portfolio_id: string;
+        };
+        /**
+         * AccountEstimate
+         * @description Explicit hypothetical values, not persisted or confirmed tax, fees, or FX.
+         */
+        AccountEstimate: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Fee */
+            fee: string | null;
+            /** Fee Currency */
+            fee_currency: ("HKD" | "USD") | null;
+            /** Fee Rate Event */
+            fee_rate_event: string | null;
+            /** Fee Rate Source */
+            fee_rate_source: string | null;
+            /** Fx Rate Hkd */
+            fx_rate_hkd: string | null;
+            /** Fx Source */
+            fx_source: string | null;
+            /** Tax Rate */
+            tax_rate: string | null;
         };
         /** AccountUpdate */
         AccountUpdate: {
@@ -4893,6 +4938,202 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** PreviewAccount */
+        PreviewAccount: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Account Status
+             * @enum {string}
+             */
+            account_status: "ACTIVE" | "ARCHIVED";
+            /** Account Version */
+            account_version: string;
+            /** Active Receipts */
+            active_receipts: string;
+            /**
+             * Broker Id
+             * Format: uuid
+             */
+            broker_id: string;
+            /**
+             * Broker Status
+             * @enum {string}
+             */
+            broker_status: "ACTIVE" | "ARCHIVED";
+            /** Broker Version */
+            broker_version: string;
+            /** Comparison Quality */
+            comparison_quality: ("OK" | "MISSING_QUOTE" | "MISSING_FX" | "NOT_COMPUTABLE" | "NEEDS_REVIEW") | null;
+            /**
+             * Creation Audit Scope
+             * @enum {string}
+             */
+            creation_audit_scope: "NO_RECORDED_CREATION_GAP_REVIEW" | "CREATION_GAP_REVIEWED_UNVERIFIED";
+            /** Eligibility Reasons */
+            eligibility_reasons: ("ELIGIBILITY_RULE_REQUIRES_REVIEW" | "UNALLOCATED_ACTION" | "SPLIT_FRACTIONAL_RESIDUE")[];
+            /**
+             * Eligibility State
+             * @enum {string}
+             */
+            eligibility_state: "RECORDED_PRE_EX_DATE" | "UPCOMING_RECORDED_HOLDINGS" | "NEEDS_REVIEW";
+            estimate: components["schemas"]["AccountEstimate"];
+            /** Expected Delta */
+            expected_delta: string | null;
+            /** Pending Action Ids */
+            pending_action_ids: string[];
+            /** Portfolio Data Revision */
+            portfolio_data_revision: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Portfolio Version */
+            portfolio_version: string;
+            /** Previous As Of */
+            previous_as_of: string | null;
+            /** Previous Currency */
+            previous_currency: ("HKD" | "USD") | null;
+            /** Previous Expected */
+            previous_expected: string | null;
+            /** Previous Projection Id */
+            previous_projection_id: string | null;
+            /** Previous Revision Id */
+            previous_revision_id: string | null;
+            proposed_amounts: components["schemas"]["ProjectionAmounts"] | null;
+            /** Recorded Outstanding */
+            recorded_outstanding: string | null;
+            /** Recorded Quantity */
+            recorded_quantity: string | null;
+            /** Recorded Received */
+            recorded_received: string | null;
+            /**
+             * Retired Trade Scope
+             * @enum {string}
+             */
+            retired_trade_scope: "NO_RETIRED_TRADES" | "RETIRED_TRADE_HISTORY_UNVERIFIED" | "RETIRED_TRADE_HASHES_MATCHED";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "EVENT_BASIS_REVIEW" | "LEDGER_AUDIT_REVIEW" | "ELIGIBILITY_REVIEW" | "NO_RECORDED_POSITION" | "NO_RECORDED_POSITION_CASH_REVIEW" | "ESTIMATES_UNAVAILABLE" | "FEE_FX_UNAVAILABLE" | "CASH_LINK_UNAVAILABLE" | "NO_RECORDED_ACTIVE_RECEIPTS" | "CURRENCY_REVIEW" | "RECORDED_PARTIAL" | "RECORDED_RECEIVED" | "RECORDED_OVER_RECEIVED" | "RECORDED_NEEDS_REVIEW";
+            /** Unavailable Cash Links */
+            unavailable_cash_links: string;
+            /** Unverified Origins */
+            unverified_origins: string;
+            /** Void Receipts */
+            void_receipts: string;
+        };
+        /**
+         * PreviewPage
+         * @description A bounded display of one snapshot, never a source decision or a payment grant.
+         */
+        PreviewPage: {
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /** Items */
+            items: components["schemas"]["PreviewAccount"][];
+            /** Next After Account Id */
+            next_after_account_id: string | null;
+            /**
+             * Payment Scope
+             * @constant
+             */
+            payment_scope: "OWNER_RECORDED_NOT_VERIFIED";
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "HYPOTHETICAL_RECORDED_COMPARISON_ONLY";
+            /**
+             * Security Id
+             * Format: uuid
+             */
+            security_id: string;
+            /** Snapshot Token */
+            snapshot_token: string;
+            terms: components["schemas"]["PreviewTerms"];
+        };
+        /**
+         * PreviewRequest
+         * @description A cursor compares snapshots; it does not authorize a revision or a financial write.
+         */
+        PreviewRequest: {
+            /** After Account Id */
+            after_account_id: string | null;
+            /**
+             * Limit
+             * @default 25
+             */
+            limit: number;
+            proposal: components["schemas"]["RevisionProposal"];
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Snapshot Token */
+            snapshot_token: string | null;
+        };
+        /** PreviewTerms */
+        PreviewTerms: {
+            /**
+             * Adjustment Basis
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /** Dps */
+            dps: string;
+            /**
+             * Eligibility Rule
+             * @enum {string}
+             */
+            eligibility_rule: "ORDINARY_PRE_EX_DATE" | "REQUIRES_REVIEW";
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
+        };
         /** ProjectionAmounts */
         ProjectionAmounts: {
             /**
@@ -6562,6 +6803,41 @@ export interface components {
              * @enum {string}
              */
             state: "NOT_REJECTED" | "REJECTED";
+        };
+        /**
+         * RevisionProposal
+         * @description Explicit proposed terms and estimates, not a source decision or grant.
+         */
+        RevisionProposal: {
+            /** Accounts */
+            accounts: components["schemas"]["AccountEstimate"][];
+            /**
+             * Adjustment Basis
+             * @enum {string}
+             */
+            adjustment_basis: "AS_DECLARED" | "SPLIT_ADJUSTED" | "UNKNOWN";
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "HKD" | "USD";
+            /** Dps */
+            dps: string;
+            /**
+             * Eligibility Rule
+             * @enum {string}
+             */
+            eligibility_rule: "ORDINARY_PRE_EX_DATE" | "REQUIRES_REVIEW";
+            /**
+             * Ex Date
+             * Format: date
+             */
+            ex_date: string;
         };
         /** Security */
         Security: {
@@ -13978,6 +14254,99 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    preview_dividend_revision: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewPage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
                 headers: {
                     [name: string]: unknown;
                 };

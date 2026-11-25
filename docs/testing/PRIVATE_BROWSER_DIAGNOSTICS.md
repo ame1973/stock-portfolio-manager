@@ -292,6 +292,14 @@ labels. Direct records never open a legacy void form, and visible mixed history 
 void selection. Real-socket requests still verify that legacy-only history and void inputs fail
 closed for this mixed scope.
 
+The authenticated Chromium request context also requests the hypothetical revision preview over
+the real socket. It supplies both current accounts and explicit estimates, reads two no-store pages
+with the same session-bound token, and checks the hypothetical USD 12 against the retained USD 11
+projection and USD 8 receipts: delta USD 1 and recorded difference USD 4. Missing HKD FX stays
+explicit; the empty account is not called confirmed zero. Changing the proposed DPS while continuing
+the page returns 409 without database changes. This tests the API, not a preview form or accepted
+revision.
+
 The browser also verifies an independent comparison of 11 expected, 8 recorded and 3 difference,
 with unverified labels and
 the event-rejection fence intact. It covers keyboard access, 360/768/1440, unchanged synthetic

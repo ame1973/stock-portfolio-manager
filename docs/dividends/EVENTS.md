@@ -2248,15 +2248,45 @@ revision, reconciliation task, confirmed receipt or grant of eligibility. It doe
 existing fence; the eventual atomic writer must revalidate all scope, financial, authorization and
 idempotency inputs in its own transaction.
 
-`dividend_revision_preview_models` defines unregistered request and paged response models for a
-future private preview. Each displayed account retains its current portfolio, broker and version
+`dividend_revision_preview_models` defines the request and bounded response contracts used by the
+private preview below. Each displayed account retains its current portfolio, broker and version
 pins, recorded-eligibility state, explicit estimates, historical projection and receipt counts.
 The response model recalculates the hypothetical accrual from its explicit inputs and checks exact
 delta, receipt arithmetic, status, quality and unknown-value consistency. Versions and counts
-use bounded decimal strings. Model instances are revalidated before use; a page cursor and
-snapshot token are paired and cannot serve as an authorization. These models do not implement a
-route, authenticate a request, generate or verify a snapshot token, or preserve a database snapshot
-across pages. A future route must enforce those properties and no-store handling independently.
+use bounded decimal strings. Model instances are revalidated before use. The models themselves do
+not authenticate requests or authorize a revision or financial write.
+
+## Protected hypothetical revision preview
+
+`POST /api/v1/dividends/events/{event_id}/revision-preview` is a private **read**, not an event
+revision or financial mutation. It requires an active owner session, matching `Origin`, CSRF token,
+`Idempotency-Key` and bounded event `If-Match`; the body independently pins the current physical
+`revision_id`. The session and CSRF are checked again inside the WAL read transaction. Every
+currently owned account, including archived accounts and accounts without recorded holdings or
+receipts, needs exactly one explicit account estimate in `proposal.accounts`. Each tax, fee and
+FX value is required but may explicitly be `null` when unknown. No tax, fee or FX is inherited from
+another account or supplied from a provider. Missing required account estimates produce 409;
+a stale event version or physical revision produces 412. Foreign or missing events produce 404,
+invalid inputs 422, and unsafe retained histories a fixed private 503.
+
+Each response is `Cache-Control: no-store`. All fields and estimates are private: clients must not
+put them in URLs, logs or browser persistent storage. Items are ordered by account UUID and limited
+to 1–100 per page. Start with `after_account_id` and `snapshot_token` both `null`. When a response
+contains `next_after_account_id`, repeat the same explicit proposal and send that ID together with
+the returned `snapshot_token` in the request body. The token is a session-keyed digest of the
+normalized proposal, event pins and entire displayed all-account preview; each request recomputes
+its own database snapshot. A changed displayed preview or input returns
+`DIVIDEND_PREVIEW_SNAPSHOT_CHANGED` (409) instead of mixing pages. A token is not a grant, a
+server-side saved snapshot, proof that undisplayed history is unchanged, or authorization to revise
+an event. A new session must start over.
+
+The required `Idempotency-Key` follows the shared POST header contract; **no idempotency record is
+created for this read**. Repeating a request with the same key recomputes fresh data rather than
+replaying a historical response. The calculation itself changes no event, projection, receipt,
+cash, FX, audit, task or portfolio data; standard authentication may update an idle session's
+last-seen timestamp. It does not establish payment, historical ownership, completeness or
+eligibility, accept proposed terms, remove the existing revision/rejection fences, or produce a
+reconciliation task. The mounted dividend workspace does not yet offer a revision-preview form.
 
 ## Internal recorded-reconciliation comparison
 

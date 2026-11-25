@@ -43,6 +43,7 @@ from spm_api.dividend_receipt_void_write_routes import router as dividend_receip
 from spm_api.dividend_receipt_write_routes import router as dividend_receipt_write_router
 from spm_api.dividend_reconciliation_routes import router as dividend_reconciliation_router
 from spm_api.dividend_rejection_routes import router as dividend_rejection_router
+from spm_api.dividend_revision_preview_routes import router as dividend_revision_preview_router
 from spm_api.dividend_tax_routes import router as dividend_tax_router
 from spm_api.errors import ApiError, Error, Status, error_response
 from spm_api.finance import FinanceError
@@ -270,6 +271,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(dividend_receipt_void_write_router)
     app.include_router(dividend_receipt_write_router)
     app.include_router(dividend_reconciliation_router)
+    app.include_router(dividend_revision_preview_router)
     app.include_router(dividend_tax_router)
     app.include_router(schedule_router)
     return app

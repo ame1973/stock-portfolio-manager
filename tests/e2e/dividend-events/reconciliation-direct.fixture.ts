@@ -22,6 +22,7 @@ test("cross-store recorded comparison stays private and does not grant payment",
   const portfolio = await create("portfolios", { name: "Synthetic cross reconciliation portfolio" });
   const broker = await create("brokers", { name: "Synthetic cross reconciliation broker" });
   const account = await create("accounts", { portfolio_id: portfolio.id, broker_id: broker.id, name: "Synthetic cross reconciliation account", default_currency: "USD" });
+  const otherAccount = await create("accounts", { portfolio_id: portfolio.id, broker_id: broker.id, name: "Synthetic comparison empty account", default_currency: "USD" });
   const security = await create("securities", { exchange_code: "NASDAQ", display_ticker: "CROSSREC", name: "Synthetic cross reconciliation security", quote_currency: "USD" });
   await create("trades", { portfolio_id: portfolio.id, account_id: account.id, security_id: security.id, side: "BUY", trade_date: "2026-11-02",
     quantity: "10", price: "10", currency: "USD", fee: "0", tax: "0", fx_rate_hkd: "7.8" });
@@ -79,6 +80,43 @@ test("cross-store recorded comparison stays private and does not grant payment",
     reason: "Synthetic rejection after recorded financial history.",
   } });
   expect(rejection.status()).toBe(409); expect((await rejection.json() as { code: string }).code).toBe("DIVIDEND_EVENT_PROJECTION_REQUIRED");
+  expect(database()).toEqual(before);
+  stage("COMPARE");
+  const previewUrl = `/api/v1/dividends/events/${event.id}/revision-preview`;
+  const previewBody: Schemas["PreviewRequest"] = {
+    revision_id: event.current_revision_id, limit: 1, after_account_id: null, snapshot_token: null,
+    proposal: { ex_date: "2026-11-03", as_of: "2026-11-03", eligibility_rule: "ORDINARY_PRE_EX_DATE",
+      dps: "1.2", currency: "USD", adjustment_basis: "AS_DECLARED",
+      accounts: [account.id, otherAccount.id].map(accountId => ({ account_id: accountId,
+        tax_rate: "0", fee: "0", fee_currency: "USD", fee_rate_event: null, fee_rate_source: null,
+        fx_rate_hkd: null, fx_source: null })) },
+  };
+  const previewHeaders = await headers(page, event.version);
+  const firstPreview = await page.request.post(previewUrl, { headers: previewHeaders, data: previewBody });
+  expect(firstPreview.status()).toBe(200); expect(firstPreview.headers()["cache-control"]).toBe("no-store");
+  const firstPreviewPage = await firstPreview.json() as Schemas["PreviewPage"];
+  expect(firstPreviewPage.items).toHaveLength(1); expect(firstPreviewPage.next_after_account_id).not.toBeNull();
+  expect(firstPreviewPage).toMatchObject({ event_id: event.id, revision_id: event.current_revision_id,
+    scope: "HYPOTHETICAL_RECORDED_COMPARISON_ONLY", history_completeness: "UNVERIFIED",
+    current_use_scope: "REVALIDATION_REQUIRED", eligibility_scope: "NOT_ESTABLISHED", payment_scope: "OWNER_RECORDED_NOT_VERIFIED" });
+  const continued = { ...previewBody, after_account_id: firstPreviewPage.next_after_account_id, snapshot_token: firstPreviewPage.snapshot_token };
+  const secondPreview = await page.request.post(previewUrl, { headers: previewHeaders, data: continued });
+  expect(secondPreview.status()).toBe(200); expect(secondPreview.headers()["cache-control"]).toBe("no-store");
+  const secondPreviewPage = await secondPreview.json() as Schemas["PreviewPage"];
+  expect(secondPreviewPage.next_after_account_id).toBeNull(); expect(secondPreviewPage.snapshot_token).toBe(firstPreviewPage.snapshot_token);
+  const allPreviewItems = [...firstPreviewPage.items, ...secondPreviewPage.items];
+  expect(allPreviewItems).toHaveLength(2);
+  const heldPreview = allPreviewItems.find(value => value.account_id === account.id)!;
+  const emptyPreview = allPreviewItems.find(value => value.account_id === otherAccount.id)!;
+  expect(heldPreview).toMatchObject({ previous_expected: "11.000000", expected_delta: "1.000000",
+    recorded_received: "8.000000", recorded_outstanding: "4.000000", active_receipts: "2", unverified_origins: "1",
+    comparison_quality: "MISSING_FX", state: "RECORDED_PARTIAL" });
+  expect(heldPreview.proposed_amounts).toMatchObject({ net_local: "12.000000", estimated_hkd: null, quality: "MISSING_FX" });
+  expect(emptyPreview).toMatchObject({ state: "NO_RECORDED_POSITION", proposed_amounts: null, recorded_received: null });
+  const stalePreview = await page.request.post(previewUrl, { headers: previewHeaders,
+    data: { ...continued, proposal: { ...continued.proposal, dps: "1.3" } } });
+  expect(stalePreview.status()).toBe(409); expect(stalePreview.headers()["cache-control"]).toBe("no-store");
+  expect((await stalePreview.json() as { code: string }).code).toBe("DIVIDEND_PREVIEW_SNAPSHOT_CHANGED");
   expect(database()).toEqual(before);
   stage("COMPARE");
   const combinedResponse = await page.request.get(`${base}/recorded-receipts?limit=1`);

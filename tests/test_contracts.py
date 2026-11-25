@@ -114,6 +114,10 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
             "post",
         ): "create_recorded_dividend_projection",
         (
+            "/api/v1/dividends/events/{event_id}/revision-preview",
+            "post",
+        ): "preview_dividend_revision",
+        (
             "/api/v1/dividends/events/{event_id}/accounts/{account_id}/reconciliation",
             "get",
         ): "get_recorded_dividend_reconciliation",
@@ -227,6 +231,61 @@ def test_authentication_and_write_security_are_declared_in_the_contract() -> Non
             }
             for name in ("X-CSRF-Token", "Idempotency-Key"):
                 assert headers[name]["required"] is True
+
+
+def test_revision_preview_contract_is_private_bounded_and_unverified() -> None:
+    spec = create_app().openapi()
+    path = "/api/v1/dividends/events/{event_id}/revision-preview"
+    operation = spec["paths"][path]["post"]
+    assert operation["operationId"] == "preview_dividend_revision"
+    assert operation["security"] == [{"cookieAuth": []}]
+    headers = {value["name"]: value for value in operation["parameters"] if value["in"] == "header"}
+    assert all(
+        headers[name]["required"] for name in ("X-CSRF-Token", "Idempotency-Key", "If-Match")
+    )
+    assert operation["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/PreviewRequest"
+    )
+    schemas = spec["components"]["schemas"]
+    request, page, account = (
+        schemas[name] for name in ("PreviewRequest", "PreviewPage", "PreviewAccount")
+    )
+    assert request["additionalProperties"] is page["additionalProperties"] is False
+    assert account["additionalProperties"] is False
+    assert {"revision_id", "proposal", "after_account_id", "snapshot_token"} <= set(
+        request["required"]
+    )
+    assert request["properties"]["limit"]["maximum"] == 100
+    assert page["properties"]["items"]["maxItems"] == 100
+    for name, expected in (
+        ("scope", "HYPOTHETICAL_RECORDED_COMPARISON_ONLY"),
+        ("history_completeness", "UNVERIFIED"),
+        ("current_use_scope", "REVALIDATION_REQUIRED"),
+        ("eligibility_scope", "NOT_ESTABLISHED"),
+        ("payment_scope", "OWNER_RECORDED_NOT_VERIFIED"),
+    ):
+        assert page["properties"][name]["const"] == expected
+    for name in (
+        "account_version",
+        "broker_version",
+        "portfolio_version",
+        "portfolio_data_revision",
+        "active_receipts",
+        "void_receipts",
+        "unverified_origins",
+        "unavailable_cash_links",
+    ):
+        assert account["properties"][name]["type"] == "string"
+    for name in (
+        "previous_expected",
+        "expected_delta",
+        "recorded_received",
+        "recorded_outstanding",
+    ):
+        assert {value["type"] for value in account["properties"][name]["anyOf"]} == {
+            "string",
+            "null",
+        }
 
 
 def test_recorded_reconciliation_contract_preserves_exact_unverified_values() -> None:

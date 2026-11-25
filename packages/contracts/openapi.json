@@ -283,6 +283,124 @@
         "title": "AccountCreate",
         "type": "object"
       },
+      "AccountEstimate": {
+        "additionalProperties": false,
+        "description": "Explicit hypothetical values, not persisted or confirmed tax, fees, or FX.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "fee": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee"
+          },
+          "fee_currency": {
+            "anyOf": [
+              {
+                "enum": [
+                  "HKD",
+                  "USD"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Currency"
+          },
+          "fee_rate_event": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Rate Event"
+          },
+          "fee_rate_source": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[^\\x00]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Rate Source"
+          },
+          "fx_rate_hkd": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Rate Hkd"
+          },
+          "fx_source": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[^\\x00]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Source"
+          },
+          "tax_rate": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Rate"
+          }
+        },
+        "required": [
+          "account_id",
+          "tax_rate",
+          "fee",
+          "fee_currency",
+          "fee_rate_event",
+          "fee_rate_source",
+          "fx_rate_hkd",
+          "fx_source"
+        ],
+        "title": "AccountEstimate",
+        "type": "object"
+      },
       "AccountUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -8044,6 +8162,551 @@
         "title": "PortfolioUpdate",
         "type": "object"
       },
+      "PreviewAccount": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "account_status": {
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ],
+            "title": "Account Status",
+            "type": "string"
+          },
+          "account_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Account Version",
+            "type": "string"
+          },
+          "active_receipts": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Active Receipts",
+            "type": "string"
+          },
+          "broker_id": {
+            "format": "uuid",
+            "title": "Broker Id",
+            "type": "string"
+          },
+          "broker_status": {
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ],
+            "title": "Broker Status",
+            "type": "string"
+          },
+          "broker_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Broker Version",
+            "type": "string"
+          },
+          "comparison_quality": {
+            "anyOf": [
+              {
+                "enum": [
+                  "OK",
+                  "MISSING_QUOTE",
+                  "MISSING_FX",
+                  "NOT_COMPUTABLE",
+                  "NEEDS_REVIEW"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison Quality"
+          },
+          "creation_audit_scope": {
+            "enum": [
+              "NO_RECORDED_CREATION_GAP_REVIEW",
+              "CREATION_GAP_REVIEWED_UNVERIFIED"
+            ],
+            "title": "Creation Audit Scope",
+            "type": "string"
+          },
+          "eligibility_reasons": {
+            "items": {
+              "enum": [
+                "ELIGIBILITY_RULE_REQUIRES_REVIEW",
+                "UNALLOCATED_ACTION",
+                "SPLIT_FRACTIONAL_RESIDUE"
+              ],
+              "type": "string"
+            },
+            "title": "Eligibility Reasons",
+            "type": "array"
+          },
+          "eligibility_state": {
+            "enum": [
+              "RECORDED_PRE_EX_DATE",
+              "UPCOMING_RECORDED_HOLDINGS",
+              "NEEDS_REVIEW"
+            ],
+            "title": "Eligibility State",
+            "type": "string"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/AccountEstimate"
+          },
+          "expected_delta": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Delta"
+          },
+          "pending_action_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Pending Action Ids",
+            "type": "array"
+          },
+          "portfolio_data_revision": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Portfolio Data Revision",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "portfolio_version": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Portfolio Version",
+            "type": "string"
+          },
+          "previous_as_of": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous As Of"
+          },
+          "previous_currency": {
+            "anyOf": [
+              {
+                "enum": [
+                  "HKD",
+                  "USD"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Currency"
+          },
+          "previous_expected": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Expected"
+          },
+          "previous_projection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Projection Id"
+          },
+          "previous_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Revision Id"
+          },
+          "proposed_amounts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectionAmounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_outstanding": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Outstanding"
+          },
+          "recorded_quantity": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Quantity"
+          },
+          "recorded_received": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Received"
+          },
+          "retired_trade_scope": {
+            "enum": [
+              "NO_RETIRED_TRADES",
+              "RETIRED_TRADE_HISTORY_UNVERIFIED",
+              "RETIRED_TRADE_HASHES_MATCHED"
+            ],
+            "title": "Retired Trade Scope",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "EVENT_BASIS_REVIEW",
+              "LEDGER_AUDIT_REVIEW",
+              "ELIGIBILITY_REVIEW",
+              "NO_RECORDED_POSITION",
+              "NO_RECORDED_POSITION_CASH_REVIEW",
+              "ESTIMATES_UNAVAILABLE",
+              "FEE_FX_UNAVAILABLE",
+              "CASH_LINK_UNAVAILABLE",
+              "NO_RECORDED_ACTIVE_RECEIPTS",
+              "CURRENCY_REVIEW",
+              "RECORDED_PARTIAL",
+              "RECORDED_RECEIVED",
+              "RECORDED_OVER_RECEIVED",
+              "RECORDED_NEEDS_REVIEW"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "unavailable_cash_links": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Unavailable Cash Links",
+            "type": "string"
+          },
+          "unverified_origins": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Unverified Origins",
+            "type": "string"
+          },
+          "void_receipts": {
+            "maxLength": 19,
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Void Receipts",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "portfolio_id",
+          "broker_id",
+          "account_status",
+          "broker_status",
+          "account_version",
+          "broker_version",
+          "portfolio_version",
+          "portfolio_data_revision",
+          "retired_trade_scope",
+          "creation_audit_scope",
+          "eligibility_state",
+          "recorded_quantity",
+          "eligibility_reasons",
+          "pending_action_ids",
+          "estimate",
+          "previous_projection_id",
+          "previous_revision_id",
+          "previous_as_of",
+          "previous_currency",
+          "previous_expected",
+          "proposed_amounts",
+          "expected_delta",
+          "recorded_received",
+          "recorded_outstanding",
+          "active_receipts",
+          "void_receipts",
+          "unverified_origins",
+          "unavailable_cash_links",
+          "comparison_quality",
+          "state"
+        ],
+        "title": "PreviewAccount",
+        "type": "object"
+      },
+      "PreviewPage": {
+        "additionalProperties": false,
+        "description": "A bounded display of one snapshot, never a source decision or a payment grant.",
+        "properties": {
+          "current_use_scope": {
+            "const": "REVALIDATION_REQUIRED",
+            "title": "Current Use Scope",
+            "type": "string"
+          },
+          "eligibility_scope": {
+            "const": "NOT_ESTABLISHED",
+            "title": "Eligibility Scope",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "history_completeness": {
+            "const": "UNVERIFIED",
+            "title": "History Completeness",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewAccount"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_after_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next After Account Id"
+          },
+          "payment_scope": {
+            "const": "OWNER_RECORDED_NOT_VERIFIED",
+            "title": "Payment Scope",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "HYPOTHETICAL_RECORDED_COMPARISON_ONLY",
+            "title": "Scope",
+            "type": "string"
+          },
+          "security_id": {
+            "format": "uuid",
+            "title": "Security Id",
+            "type": "string"
+          },
+          "snapshot_token": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Token",
+            "type": "string"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/PreviewTerms"
+          }
+        },
+        "required": [
+          "event_id",
+          "revision_id",
+          "revision_no",
+          "security_id",
+          "terms",
+          "items",
+          "snapshot_token",
+          "next_after_account_id",
+          "scope",
+          "history_completeness",
+          "current_use_scope",
+          "eligibility_scope",
+          "payment_scope"
+        ],
+        "title": "PreviewPage",
+        "type": "object"
+      },
+      "PreviewRequest": {
+        "additionalProperties": false,
+        "description": "A cursor compares snapshots; it does not authorize a revision or a financial write.",
+        "properties": {
+          "after_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Account Id"
+          },
+          "limit": {
+            "default": 25,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/RevisionProposal"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "snapshot_token": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Token"
+          }
+        },
+        "required": [
+          "revision_id",
+          "proposal",
+          "after_account_id",
+          "snapshot_token"
+        ],
+        "title": "PreviewRequest",
+        "type": "object"
+      },
+      "PreviewTerms": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_basis": {
+            "enum": [
+              "AS_DECLARED",
+              "SPLIT_ADJUSTED",
+              "UNKNOWN"
+            ],
+            "title": "Adjustment Basis",
+            "type": "string"
+          },
+          "as_of": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "As Of",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "HKD",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "dps": {
+            "maxLength": 50,
+            "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+            "title": "Dps",
+            "type": "string"
+          },
+          "eligibility_rule": {
+            "enum": [
+              "ORDINARY_PRE_EX_DATE",
+              "REQUIRES_REVIEW"
+            ],
+            "title": "Eligibility Rule",
+            "type": "string"
+          },
+          "ex_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Ex Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ex_date",
+          "as_of",
+          "eligibility_rule",
+          "dps",
+          "currency",
+          "adjustment_basis"
+        ],
+        "title": "PreviewTerms",
+        "type": "object"
+      },
       "ProjectionAmounts": {
         "additionalProperties": false,
         "properties": {
@@ -11849,6 +12512,73 @@
           "eligibility_scope"
         ],
         "title": "RejectionState",
+        "type": "object"
+      },
+      "RevisionProposal": {
+        "additionalProperties": false,
+        "description": "Explicit proposed terms and estimates, not a source decision or grant.",
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AccountEstimate"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "adjustment_basis": {
+            "enum": [
+              "AS_DECLARED",
+              "SPLIT_ADJUSTED",
+              "UNKNOWN"
+            ],
+            "title": "Adjustment Basis",
+            "type": "string"
+          },
+          "as_of": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "As Of",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "HKD",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "dps": {
+            "maxLength": 50,
+            "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+            "title": "Dps",
+            "type": "string"
+          },
+          "eligibility_rule": {
+            "enum": [
+              "ORDINARY_PRE_EX_DATE",
+              "REQUIRES_REVIEW"
+            ],
+            "title": "Eligibility Rule",
+            "type": "string"
+          },
+          "ex_date": {
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Ex Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ex_date",
+          "as_of",
+          "eligibility_rule",
+          "dps",
+          "currency",
+          "adjustment_basis",
+          "accounts"
+        ],
+        "title": "RevisionProposal",
         "type": "object"
       },
       "Security": {
@@ -24796,6 +25526,158 @@
         "summary": "Rejection History",
         "tags": [
           "Dividend rejection decisions"
+        ]
+      }
+    },
+    "/api/v1/dividends/events/{event_id}/revision-preview": {
+      "post": {
+        "description": "Recompute every page; the cursor only detects changes to the displayed snapshot.",
+        "operationId": "preview_dividend_revision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "maxLength": 12,
+              "pattern": "^\"[1-9][0-9]{0,9}\"$",
+              "title": "If-Match",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "Revision Preview",
+        "tags": [
+          "Hypothetical dividend revision preview"
         ]
       }
     },
