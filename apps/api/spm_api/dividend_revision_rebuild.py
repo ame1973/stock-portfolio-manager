@@ -26,6 +26,14 @@ class RebuildError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class ActionReviewScope:
+    """Retained action-review rows and their audits, without verifying either."""
+
+    reviews: tuple[tuple[str | None, ...], ...] = field(repr=False)
+    audits: tuple[tuple[str | None, ...], ...] = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
 class RebuildObservation:
     """One recorded snapshot, not authorization, source verification or a write grant."""
 
@@ -36,12 +44,56 @@ class RebuildObservation:
     candidate: candidates.ReviewedCandidate | None = field(repr=False)
     rejections: tuple[rejection_service.RejectionRecord, ...] = field(repr=False)
     evidence_reviews: reviews.EvidenceReviewHistory = field(repr=False)
+    action_reviews: ActionReviewScope = field(repr=False)
     scope: Literal["RECORDED_REBUILD_OBSERVATION_ONLY"] = "RECORDED_REBUILD_OBSERVATION_ONLY"
     history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
     current_use_scope: Literal["REVALIDATION_REQUIRED"] = "REVALIDATION_REQUIRED"
     source_scope: Literal["CURRENT_SOURCE_NOT_REVALIDATED"] = "CURRENT_SOURCE_NOT_REVALIDATED"
     eligibility_scope: Literal["NOT_ESTABLISHED"] = "NOT_ESTABLISHED"
     payment_scope: Literal["NOT_ESTABLISHED"] = "NOT_ESTABLISHED"
+
+
+def _action_review_scope(con: Connection, security_id: UUID) -> ActionReviewScope:
+    """Freeze only review rows linked to the security's recorded action roots.
+
+    Action reviews affect action audit reconstruction even when recorded shares do not
+    change. This is a raw comparison, not validation of the reviews or their audits.
+    """
+    linked = """
+        EXISTS(SELECT 1 FROM corporate_actions c WHERE c.security_id=:security
+            AND c.root_id=json_extract(r.detail_json,'$.action_root_id'))
+    """
+    parameters = {"security": str(security_id)}
+    # ponytail: scan linked reviews; add a root index only if measured histories grow.
+    review_rows = con.execute(
+        text(
+            "SELECT r.id,r.portfolio_id,r.event_id,r.account_id,r.kind,r.severity,r.status,"
+            "r.reason_code,r.detail_json,r.created_at,r.resolved_at FROM review_items r "
+            f"WHERE {linked} ORDER BY r.id"
+        ),
+        parameters,
+    )
+    audit_rows = con.execute(
+        text(
+            "SELECT a.id,a.owner_id,a.entity_type,a.entity_id,a.action,a.before_sha256,"
+            "a.after_sha256,a.reason,a.request_id,a.created_at FROM audit_events a "
+            "WHERE a.entity_type='review_item' AND EXISTS(SELECT 1 FROM review_items r "
+            f"WHERE r.id=a.entity_id AND {linked}) ORDER BY a.id"
+        ),
+        parameters,
+    )
+    reviews = tuple(tuple(row) for row in review_rows)
+    audits = tuple(tuple(row) for row in audit_rows)
+    for rows in (reviews, audits):
+        if (
+            any(not isinstance(row[0], str) or not row[0] for row in rows)
+            or len({row[0] for row in rows}) != len(rows)
+            or any(
+                value is not None and not isinstance(value, str) for row in rows for value in row
+            )
+        ):
+            raise ValueError("Invalid action review rows")
+    return ActionReviewScope(reviews, audits)
 
 
 def _same_terms(
@@ -265,7 +317,14 @@ def observe(
             raise ValueError("Missing recorded comparison")
         _verify_preview(con, owner, current.record, proposal, proposed)
         return RebuildObservation(
-            owner, current, decision, proposed, candidate, rejection_history, evidence
+            owner,
+            current,
+            decision,
+            proposed,
+            candidate,
+            rejection_history,
+            evidence,
+            _action_review_scope(con, current.record.terms.security_id),
         )
     except RebuildError:
         raise

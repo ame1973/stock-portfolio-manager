@@ -2319,6 +2319,13 @@ all currently owned accounts, including archived and ledger-only accounts; histo
 and completeness remain unverified. It is not an authenticated API, an accepted revision or a
 persistent snapshot token.
 
+The observation also retains the ordered raw review rows linked by `action_root_id` to any
+recorded action root for the event's security, together with their `review_item` audit rows. The
+serialized recheck detects changes to these rows even when recorded shares and the hypothetical
+comparison are unchanged. These private rows remain in the internal observation and are not
+returned by the hypothetical-preview API. Matching them does not validate their contents or audits,
+prove complete action-review history, or establish that any review was authorized or resolved.
+
 `dividend_revision_rebuild_current.require_current` is a separate read-only fence for a
 **new** prospective operation in a true writer transaction. It checks the owner, decision and
 proposal against the frozen observation, rereads the recorded scope and returns the fresh result

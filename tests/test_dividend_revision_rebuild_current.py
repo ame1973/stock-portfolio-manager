@@ -16,9 +16,10 @@ import spm_api.dividend_candidate_service as candidates
 import spm_api.dividend_event_writer as events
 import spm_api.dividend_revision_rebuild as rebuild
 import spm_api.dividend_revision_rebuild_current as current
-from spm_api.audit import now
+from spm_api.audit import audit, now
 from spm_api.db import unit_of_work
 from tests.helpers import create, database_snapshot
+from tests.test_dividend_eligibility_service import split_body
 from tests.test_dividend_event_writer import manual, terms
 from tests.test_dividend_projection_writer import intent, prepare, save, settings
 from tests.test_dividend_reconciliation_direct import direct_receipt
@@ -239,6 +240,233 @@ async def test_final_recheck_detects_same_transaction_account_change_and_rolls_b
     assert database_snapshot(engine) == before
 
 
+@pytest.mark.parametrize(
+    "change", ["acknowledge", "resolve", "detail", "unlink", "duplicate", "audit"]
+)
+async def test_action_review_changes_stale_the_rebuild_even_when_shares_are_unchanged(
+    client: httpx.AsyncClient, engine: Engine, graph: dict[str, Any], change: str
+) -> None:
+    book = await prepare(client, engine, graph)
+    action = await create(
+        client,
+        "corporate-actions",
+        split_body(
+            graph,
+            action_type="MERGER",
+            effective_date="2026-03-01",
+            status="NEEDS_REVIEW",
+            ratio_numerator=None,
+            ratio_denominator=None,
+        ),
+    )
+    tax, fee = settings(engine, book, rate="0", fee="0")
+    save(engine, book, intent(engine, book, tax, fee), uuid4())
+    direct_receipt(engine, book, received_micro=6_000_000)
+    event = book["event"]
+    decision = manual(
+        event_id=event.event_id,
+        revision_id=uuid4(),
+        revision_no=event.revision_no + 1,
+        terms=terms(security_id=graph["security"]["id"], dps="1.1", currency="USD"),
+    )
+    proposed = proposal(graph)
+    with unit_of_work(engine) as con:
+        observed = rebuild.observe(con, book["owner"], event.event_id, decision, proposed)
+        review_id = con.exec_driver_sql(
+            "SELECT id FROM review_items WHERE json_extract(detail_json,'$.action_root_id')=?",
+            (action["root_id"],),
+        ).scalar_one()
+    assert observed is not None
+    assert len(observed.action_reviews.reviews) == 1 and observed.action_reviews.audits == ()
+    assert review_id == observed.action_reviews.reviews[0][0]
+    assert review_id not in repr(observed.action_reviews) and review_id not in repr(observed)
+    before = database_snapshot(engine)
+    with (
+        pytest.raises(rebuild.RebuildError, match="^DIVIDEND_REBUILD_SCOPE_CHANGED$"),
+        unit_of_work(engine, write=True) as con,
+    ):
+        current.require_current(con, book["owner"], decision, proposed, observed)
+        if change == "acknowledge":
+            con.exec_driver_sql(
+                "UPDATE review_items SET status='ACKNOWLEDGED' WHERE id=?", (review_id,)
+            )
+        elif change == "resolve":
+            con.exec_driver_sql(
+                "UPDATE review_items SET status='RESOLVED',resolved_at=? WHERE id=?",
+                ("2026-11-26T00:00:00.000000Z", review_id),
+            )
+        elif change == "detail":
+            con.exec_driver_sql(
+                "UPDATE review_items SET detail_json=json_set(detail_json,'$.reason',?) WHERE id=?",
+                ("Different synthetic action review reason.", review_id),
+            )
+        elif change == "unlink":
+            con.exec_driver_sql("UPDATE review_items SET detail_json='{}' WHERE id=?", (review_id,))
+        elif change == "audit":
+            audit(
+                con,
+                str(book["owner"]),
+                "review_item",
+                review_id,
+                "SYNTHETIC_ACTION_REVIEW_AUDIT",
+                after={"status": "OPEN"},
+                request_id=str(uuid4()),
+            )
+        else:
+            con.exec_driver_sql(
+                "INSERT INTO review_items(id,portfolio_id,event_id,account_id,kind,severity,"
+                "status,reason_code,detail_json,created_at,resolved_at) "
+                "SELECT ?,portfolio_id,event_id,account_id,kind,severity,status,reason_code,"
+                "detail_json,created_at,resolved_at FROM review_items WHERE id=?",
+                (str(uuid4()), review_id),
+            )
+        current.require_current(con, book["owner"], decision, proposed, observed)
+    assert database_snapshot(engine) == before
+
+
+async def test_action_review_observation_stays_in_one_wal_snapshot(
+    client: httpx.AsyncClient, engine: Engine, graph: dict[str, Any]
+) -> None:
+    book = await prepare(client, engine, graph)
+    action = await create(
+        client,
+        "corporate-actions",
+        split_body(
+            graph,
+            action_type="MERGER",
+            effective_date="2026-03-01",
+            status="NEEDS_REVIEW",
+            ratio_numerator=None,
+            ratio_denominator=None,
+        ),
+    )
+    event = book["event"]
+    decision = manual(
+        event_id=event.event_id,
+        revision_id=uuid4(),
+        revision_no=event.revision_no + 1,
+        terms=terms(security_id=graph["security"]["id"], dps="1.1", currency="USD"),
+    )
+    proposed = proposal(graph)
+    with unit_of_work(engine) as reader:
+        observed = rebuild.observe(reader, book["owner"], event.event_id, decision, proposed)
+        assert observed is not None
+        with unit_of_work(engine, write=True) as writer:
+            review_id = writer.exec_driver_sql(
+                "SELECT id FROM review_items WHERE json_extract(detail_json,'$.action_root_id')=?",
+                (action["root_id"],),
+            ).scalar_one()
+            writer.exec_driver_sql(
+                "UPDATE review_items SET status='ACKNOWLEDGED' WHERE id=?", (review_id,)
+            )
+            audit(
+                writer,
+                str(book["owner"]),
+                "review_item",
+                review_id,
+                "SYNTHETIC_ACTION_REVIEW_AUDIT",
+                after={"status": "ACKNOWLEDGED"},
+                request_id=str(uuid4()),
+            )
+        assert (
+            rebuild.observe(reader, book["owner"], event.event_id, decision, proposed) == observed
+        )
+    before = database_snapshot(engine)
+    with unit_of_work(engine, write=True) as writer:
+        fresh = rebuild.observe(writer, book["owner"], event.event_id, decision, proposed)
+        assert fresh is not None and len(fresh.action_reviews.audits) == 1
+        assert fresh.preview == observed.preview and fresh.action_reviews != observed.action_reviews
+        with pytest.raises(rebuild.RebuildError, match="^DIVIDEND_REBUILD_SCOPE_CHANGED$"):
+            current.require_current(writer, book["owner"], decision, proposed, observed)
+    assert database_snapshot(engine) == before
+
+
+async def test_unrelated_security_action_review_does_not_change_the_observation(
+    client: httpx.AsyncClient, engine: Engine, graph: dict[str, Any], scope: dict[str, Any]
+) -> None:
+    other = await create(
+        client,
+        "securities",
+        {
+            "exchange_code": "NASDAQ",
+            "display_ticker": "OTHER",
+            "name": "Synthetic unrelated security",
+            "quote_currency": "USD",
+        },
+    )
+    await create(
+        client,
+        "corporate-actions",
+        split_body(
+            {**graph, "security": other},
+            action_type="MERGER",
+            effective_date="2026-03-01",
+            status="NEEDS_REVIEW",
+            ratio_numerator=None,
+            ratio_denominator=None,
+        ),
+    )
+    before = database_snapshot(engine)
+    with unit_of_work(engine, write=True) as con:
+        assert (
+            current.require_current(
+                con, scope["book"]["owner"], scope["decision"], scope["proposal"], scope["observed"]
+            )
+            == scope["observed"]
+        )
+    assert database_snapshot(engine) == before
+
+
+@pytest.mark.parametrize("malformed", ["null_id", "binary_id", "binary_value"])
+async def test_malformed_action_review_rows_fail_closed_without_disclosing_values(
+    client: httpx.AsyncClient, engine: Engine, graph: dict[str, Any], malformed: str
+) -> None:
+    book = await prepare(client, engine, graph)
+    action = await create(
+        client,
+        "corporate-actions",
+        split_body(
+            graph,
+            action_type="MERGER",
+            effective_date="2026-03-01",
+            status="NEEDS_REVIEW",
+            ratio_numerator=None,
+            ratio_denominator=None,
+        ),
+    )
+    event = book["event"]
+    decision = manual(
+        event_id=event.event_id,
+        revision_id=uuid4(),
+        revision_no=event.revision_no + 1,
+        terms=terms(security_id=graph["security"]["id"], dps="1.1", currency="USD"),
+    )
+    before = database_snapshot(engine)
+
+    class Rollback(Exception):
+        pass
+
+    with pytest.raises(Rollback), unit_of_work(engine, write=True) as con:
+        review_id = con.exec_driver_sql(
+            "SELECT id FROM review_items WHERE json_extract(detail_json,'$.action_root_id')=?",
+            (action["root_id"],),
+        ).scalar_one()
+        if malformed == "null_id":
+            con.exec_driver_sql("UPDATE review_items SET id=NULL WHERE id=?", (review_id,))
+        elif malformed == "binary_id":
+            con.exec_driver_sql("UPDATE review_items SET id=X'01' WHERE id=?", (review_id,))
+        else:
+            con.exec_driver_sql(
+                "UPDATE review_items SET reason_code=X'01' WHERE id=?", (review_id,)
+            )
+        with pytest.raises(
+            rebuild.RebuildError, match="^DIVIDEND_REBUILD_OBSERVATION_UNAVAILABLE$"
+        ):
+            rebuild.observe(con, book["owner"], event.event_id, decision, proposal(graph))
+        raise Rollback
+    assert database_snapshot(engine) == before
+
+
 async def test_same_transaction_review_acknowledgement_requires_a_fresh_observation(
     client: httpx.AsyncClient, engine: Engine, graph: dict[str, Any]
 ) -> None:
@@ -287,6 +515,7 @@ async def test_same_transaction_review_acknowledgement_requires_a_fresh_observat
         {"eligibility_scope": "ESTABLISHED"},
         {"payment_scope": "ESTABLISHED"},
         {"preview": None},
+        {"action_reviews": None},
     ],
 )
 async def test_forged_observation_cannot_be_used(
