@@ -18,7 +18,10 @@ import spm_api.dividend_evidence_review_integrity as review_integrity
 import spm_api.dividend_rejection_service as rejection_service
 import spm_api.dividend_revision_preview as revision_preview
 import spm_api.dividend_revision_scope as revision_scope
+from spm_api.dividend_account_scope import positive_version
 from spm_api.dividend_evidence import DividendTerms
+from spm_api.master_models import Currency, Security, SecurityStatus
+from spm_api.master_service import as_security
 
 
 class RebuildError(ValueError):
@@ -34,6 +37,23 @@ class ActionReviewScope:
 
 
 @dataclass(frozen=True, slots=True)
+class SecurityScope:
+    """Current catalogue values, not verified market identity or ownership."""
+
+    id: UUID = field(repr=False)
+    exchange_code: str
+    display_ticker: str = field(repr=False)
+    name: str = field(repr=False)
+    security_type: str
+    quote_currency: Currency
+    isin: str | None = field(repr=False)
+    status: SecurityStatus
+    verified: bool
+    version: int
+    created_at: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
 class RebuildObservation:
     """One recorded snapshot, not authorization, source verification or a write grant."""
 
@@ -45,12 +65,44 @@ class RebuildObservation:
     rejections: tuple[rejection_service.RejectionRecord, ...] = field(repr=False)
     evidence_reviews: reviews.EvidenceReviewHistory = field(repr=False)
     action_reviews: ActionReviewScope = field(repr=False)
+    security: SecurityScope = field(repr=False)
     scope: Literal["RECORDED_REBUILD_OBSERVATION_ONLY"] = "RECORDED_REBUILD_OBSERVATION_ONLY"
     history_completeness: Literal["UNVERIFIED"] = "UNVERIFIED"
     current_use_scope: Literal["REVALIDATION_REQUIRED"] = "REVALIDATION_REQUIRED"
     source_scope: Literal["CURRENT_SOURCE_NOT_REVALIDATED"] = "CURRENT_SOURCE_NOT_REVALIDATED"
     eligibility_scope: Literal["NOT_ESTABLISHED"] = "NOT_ESTABLISHED"
     payment_scope: Literal["NOT_ESTABLISHED"] = "NOT_ESTABLISHED"
+
+
+def _security_scope(con: Connection, security_id: UUID) -> SecurityScope:
+    """Bind the current catalogue row without verifying an external security identity."""
+    row = (
+        con.execute(text("SELECT * FROM securities WHERE id=:id"), {"id": str(security_id)})
+        .mappings()
+        .first()
+    )
+    if (
+        row is None
+        or row["id"] != str(security_id)
+        or type(row["verified"]) is not int
+        or row["verified"] not in (0, 1)
+        or not isinstance(row["created_at"], str)
+    ):
+        raise ValueError("Invalid current security scope")
+    positive_version(row["version"])
+    record = as_security(row)
+    expected = {name: row[name] for name in Security.model_fields}
+    expected.update(id=security_id, verified=bool(row["verified"]))
+    if (
+        not isinstance(record, Security)
+        or record.__dict__.keys() != Security.model_fields.keys()
+        or not isinstance(record.id, UUID)
+        or type(record.version) is not int
+        or type(record.verified) is not bool
+        or record.model_dump(warnings="error") != expected
+    ):
+        raise ValueError("Inconsistent current security scope")
+    return SecurityScope(**record.model_dump(warnings="error"), created_at=row["created_at"])
 
 
 def _action_review_scope(con: Connection, security_id: UUID) -> ActionReviewScope:
@@ -325,6 +377,7 @@ def observe(
             rejection_history,
             evidence,
             _action_review_scope(con, current.record.terms.security_id),
+            _security_scope(con, current.record.terms.security_id),
         )
     except RebuildError:
         raise

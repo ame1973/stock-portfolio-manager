@@ -2319,6 +2319,12 @@ all currently owned accounts, including archived and ledger-only accounts; histo
 and completeness remain unverified. It is not an authenticated API, an accepted revision or a
 persistent snapshot token.
 
+The observation freezes the event's current catalogue security identity, metadata, version and
+creation timestamp. The serialized recheck catches changes even when the portfolio revision and
+recorded shares are unchanged. This is a catalogue-scope pin, not proof of market identity,
+ownership or an authenticated verification; the security's quote currency is not substituted for
+an explicit dividend currency. The pin remains internal and does not itself validate source history.
+
 The observation also retains the ordered raw review rows linked by `action_root_id` to any
 recorded action root for the event's security, together with their `review_item` audit rows. The
 serialized recheck detects changes to these rows even when recorded shares and the hypothetical
