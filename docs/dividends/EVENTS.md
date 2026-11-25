@@ -2333,6 +2333,25 @@ security, all affected financial histories and final scope, and commit revision,
 projections, reconciliation tasks, audits, invalidations and idempotency together. No event or
 missing-origin fence is relaxed, and neither helper may be used as authorization to write.
 
+## Internal recorded revision impact
+
+`dividend_revision_impact.inspect` requires the serialized recheck above and classifies every
+currently owned account, not only accounts already linked to the event. Retained entitlements,
+projections, receipts or origins—including void receipts—require a replacement or explicit review.
+Unresolved inputs and upcoming ex-dates also remain in scope. The `NO_RECORDED_IMPACT`
+disposition is limited to a recorded past-ex-date zero with no retained financial history and no
+comparison review; it is **not** a claim of confirmed zero ownership or complete history.
+
+The result retains current account/broker pins and archived status, counts recorded histories and
+unverified origins, and separately lists portfolio identities actually present in retained
+projection or receipt origins. Missing legacy origins do not acquire an invented historical
+portfolio. The potential invalidation set includes current portfolios requiring work, known
+retained portfolios and every currently owned portfolio linked to the security by trades,
+transfers or positions; the two security-scope queries must agree. This is a read-only planning
+view, not a stored manifest, authenticated decision, source validation, reconciliation task or
+financial grant. Any eventual writer must recheck the scope after all same-transaction changes
+and preserve all event, rejection and missing-origin fences until its atomic path is complete.
+
 ## Protected hypothetical revision preview
 
 `POST /api/v1/dividends/events/{event_id}/revision-preview` is a private **read**, not an event
