@@ -2352,12 +2352,25 @@ missing-origin fence is relaxed, and neither helper may be used as authorization
 
 `dividend_revision_rebuild_intent.fingerprint` separately computes a domain-labelled digest from
 an explicit owner, previous physical revision/version, successor decision, all account estimates,
-request ID and UTC operation time. It revalidates the supplied models and types; equivalent decimal
-spellings, account order and timezone representations normalize to the same digest. Unknown
-values remain distinct from explicit zero, and independent fee and HKD FX inputs stay separate.
-This pure helper neither captures the recorded ledger scope nor checks the event or a candidate's
-current source. A digest does not authenticate a caller, prove intent or permit a revision, task,
-financial write or replay; those require independent retained-history and authorization checks.
+request ID and UTC operation time. It also requires a separate, explicit successor-setting decision
+for every supplied account. Each account independently chooses whether to record and select its
+supplied tax estimate and fee estimate or leave that setting missing. A recorded estimate requires
+an explicit effective-from date no later than its independently supplied selection date; leaving a
+setting missing requires an explicit null effective-from date and a selection date. No date is
+inferred from the ex-date, as-of day or a prior revision. Supplied null estimates mean an explicitly
+unknown setting when recorded, not zero; leaving a setting missing is a distinct decision. A
+hypothetical value for a setting left missing is not an authorized recorded estimate and must not
+be used as a selected value. The future writer must independently check these decisions, stored
+setting selections and the resulting projection after the successor exists.
+
+The helper revalidates supplied models and types; equivalent decimal spellings, account order and
+timezone representations normalize to the same digest. Unknown values remain distinct from
+explicit zero, and independent fee and HKD FX inputs stay separate. The account IDs in the setting
+decisions must exactly match the proposed accounts, but this alone does not establish that the list
+matches current ownership. This pure helper neither captures the recorded ledger scope nor checks
+the event or a candidate's current source. A digest and a confirmation label do not authenticate a
+caller, prove intent or permit a revision, setting, task, financial write or replay; those require
+independent retained-history and authorization checks.
 
 ## Internal recorded revision impact
 

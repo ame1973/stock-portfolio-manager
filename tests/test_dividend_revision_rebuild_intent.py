@@ -33,7 +33,28 @@ def inputs() -> dict[str, Any]:
 
 
 def fingerprint(value: dict[str, Any]) -> str:
-    return intent.fingerprint(**value)
+    settings = intent.RebuildSettings.model_validate(
+        {
+            "confirmation": "EXPLICIT_SUCCESSOR_SETTINGS_ONLY",
+            "accounts": [
+                {
+                    "account_id": item.account_id,
+                    "tax": {
+                        "mode": "RECORD_SUPPLIED",
+                        "effective_from": "2026-01-01",
+                        "select_on": "2026-01-08",
+                    },
+                    "fee": {
+                        "mode": "RECORD_SUPPLIED",
+                        "effective_from": "2026-01-02",
+                        "select_on": "2026-01-09",
+                    },
+                }
+                for item in value["proposal"].accounts
+            ],
+        }
+    )
+    return intent.fingerprint(**value, settings=settings)
 
 
 def test_fingerprint_normalizes_decimal_spelling_account_order_and_utc() -> None:
