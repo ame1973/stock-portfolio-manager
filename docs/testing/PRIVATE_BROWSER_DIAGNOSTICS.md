@@ -296,8 +296,15 @@ Before the financial scenario, the fixture separately creates an incomplete synt
 resolves that review through a successor, and creates another incomplete successor. Authenticated
 real-socket reads check both bounded no-store evidence-review pages, original and immediate
 successor identities, unverified/no-grant labels and an empty filtered result; an anonymous request
-returns 401. The reads leave the full synthetic table snapshot unchanged. This is an API proof,
-not a mounted review UI, verified acknowledgment or proof of complete review history.
+returns 401. The reads leave the full synthetic table snapshot unchanged. Both real pages also pass the strict
+frontend validator. The mounted event panel is then opened by keyboard at 360/768/1440 and displays
+both retained original/successor records and unverified labels with no-store reads, no horizontal
+overflow and unchanged synthetic tables/storage. A deliberate later synthetic event revision makes
+the independently read event head stale; refreshing the panel hides the records and warns without
+additional writes. The fixture then creates 24 further synthetic incomplete revisions and verifies
+actual 25-plus-one next/previous review paging over the real socket; the page reads leave the new
+synthetic table snapshot unchanged. Neither the API nor the panel verifies acknowledgment or
+complete review history.
 
 The authenticated Chromium request context also requests the hypothetical revision preview over
 the real socket. It supplies both current accounts and explicit estimates, reads two no-store pages

@@ -18,6 +18,7 @@ import { usePageState } from "../settings/data";
 import { SourceLink, SourceReadState, SourceValues } from "../sources/details";
 import { CandidateEventMatchForm } from "./CandidateEventMatchForm";
 import { DividendEstimatePanel } from "./DividendEstimatePanel";
+import { DividendEvidenceReviewPanel } from "./DividendEvidenceReviewPanel";
 import { DividendProjectionPanel } from "./DividendProjectionPanel";
 import { DividendReceiptPanel } from "./DividendReceiptPanel";
 import { DividendRevisionPreviewPanel } from "./DividendRevisionPreviewPanel";
@@ -157,6 +158,7 @@ function EventCard({ record, disabled, associationDisabled, onOpen, onPreview, e
   const [open, setOpen] = useState(false);
   const [revisions, setRevisions] = useState(false);
   const [rejections, setRejections] = useState(false);
+  const [evidenceReviews, setEvidenceReviews] = useState(false);
   const [estimates, setEstimates] = useState(false);
   const [projections, setProjections] = useState(false);
   const [receipts, setReceipts] = useState(false);
@@ -170,11 +172,13 @@ function EventCard({ record, disabled, associationDisabled, onOpen, onPreview, e
       <EventTerms record={record} /><RejectionState record={record} disabled={disabled} associationDisabled={associationDisabled} onOpen={onOpen} />
       <div className="flex flex-wrap gap-3"><Button variant="outline" aria-expanded={revisions} onClick={() => setRevisions(value => !value)}>{revisions ? "收合事件修訂歷史" : "查看事件修訂歷史"}</Button>
         <Button variant="outline" aria-expanded={rejections} onClick={() => setRejections(value => !value)}>{rejections ? "收合拒絕歷史" : "查看拒絕歷史"}</Button>
+        <Button variant="outline" aria-expanded={evidenceReviews} onClick={() => setEvidenceReviews(value => !value)}>{evidenceReviews ? "收合證據審核歷史" : "查看證據審核歷史"}</Button>
         <Button variant="outline" aria-expanded={estimates} onClick={() => setEstimates(value => !value)}>{estimates ? "收合帳戶稅費估算" : "查看帳戶稅費估算"}</Button>
         <Button variant="outline" aria-expanded={projections} onClick={() => setProjections(value => !value)}>{projections ? "收合帳戶投影歷史" : "查看帳戶投影歷史"}</Button>
         <Button variant="outline" aria-expanded={receipts} onClick={() => setReceipts(value => !value)}>{receipts ? "收合帳戶收款紀錄" : "查看帳戶收款紀錄"}</Button>
         <Button variant="outline" disabled={associationDisabled} onClick={event => onPreview(record, event.currentTarget)}>預覽擬議修訂</Button></div>
       {revisions && <RevisionHistory record={record} />}{rejections && <RejectionHistory record={record} />}
+      {evidenceReviews && <DividendEvidenceReviewPanel event={record} />}
       {estimates && <DividendEstimatePanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={estimateRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "estimate", target })} />}
       {projections && <DividendProjectionPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={projectionRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "projection", target })} />}
       {receipts && <DividendReceiptPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={receiptRefresh} comparisonRefresh={projectionRefresh} writeDisabled={associationDisabled}

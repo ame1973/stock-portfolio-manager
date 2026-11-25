@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { expect, request } from "@playwright/test";
+import { checkedEvidenceReviewPage } from "../../../apps/web/src/features/dividends/evidence-review-validation";
 import { checkedRevisionPreview } from "../../../apps/web/src/features/dividends/revision-preview-validation";
 import type { components } from "../../../packages/contracts/src/schema";
 import { test } from "../private-test";
@@ -55,6 +56,7 @@ test("cross-store recorded comparison stays private and does not grant payment",
   expect(reviewResponse.headers().etag).toBeUndefined();
   stage("EVIDENCE_PAGE_SCOPE");
   const reviewPage = await reviewResponse.json() as Schemas["EvidenceReviewPage"];
+  expect(checkedEvidenceReviewPage(reviewPage, evidenceCurrent, 1)).toBe(reviewPage);
   expect(reviewPage).toMatchObject({ event_id: evidenceCurrent.id, revision_id: evidenceCurrent.current_revision_id, revision_no: 3,
     scope: "RETAINED_EVIDENCE_REVIEWS_ONLY", history_completeness: "UNVERIFIED", current_use_scope: "REVALIDATION_REQUIRED",
     eligibility_scope: "NOT_ESTABLISHED", document_verification: "NOT_ESTABLISHED" });
@@ -67,6 +69,7 @@ test("cross-store recorded comparison stays private and does not grant payment",
   const olderResponse = await page.request.get(`${reviewPath}?${new URLSearchParams({ limit: "1", cursor: reviewPage.next_cursor! })}`);
   expect(olderResponse.status()).toBe(200); expect(olderResponse.headers()["cache-control"]).toBe("no-store");
   const older = await olderResponse.json() as Schemas["EvidenceReviewPage"];
+  expect(checkedEvidenceReviewPage(older, evidenceCurrent, 1)).toBe(older);
   expect(older.items).toHaveLength(1); expect(older.next_cursor).toBeNull();
   expect(older.items[0]).toMatchObject({ revision_id: evidenceFirst.current_revision_id, revision_no: 1,
     status: "RESOLVED", resolved_by_revision_id: evidenceResolution.current_revision_id, acknowledgement_scope: "NOT_ESTABLISHED" });
@@ -84,6 +87,58 @@ test("cross-store recorded comparison stays private and does not grant payment",
   stage("EVIDENCE_UNCHANGED");
   expect(JSON.stringify([reviewPage, older, empty])).not.toContain("secret=synthetic");
   expect(database()).toEqual(beforeReviews);
+  stage("EVIDENCE_UI");
+  for (const width of [360, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 }); await page.goto("/dividends");
+    const article = page.getByRole("article", { name: `股息事件 ${evidenceCurrent.id}` });
+    if (width >= 1024) await page.locator(`tr[data-record-id="${evidenceCurrent.id}"]`).getByRole("button", { name: "查看原值與操作" }).click();
+    else await article.getByRole("button", { name: "查看事件與拒絕狀態" }).click();
+    const incoming = page.waitForResponse(response => new URL(response.url()).pathname === reviewPath && response.request().method() === "GET");
+    const opener = article.getByRole("button", { name: "查看證據審核歷史" });
+    await opener.focus(); await page.keyboard.press("Enter");
+    const read = await incoming; expect(read.status()).toBe(200); expect(read.headers()["cache-control"]).toBe("no-store");
+    const panel = article.getByRole("region", { name: "股息證據審核歷史" });
+    await expect(panel.getByRole("listitem")).toHaveCount(2);
+    const open = panel.getByRole("listitem").filter({ hasText: reviewPage.items[0]!.id });
+    const closed = panel.getByRole("listitem").filter({ hasText: older.items[0]!.id });
+    await expect(open).toContainText("已記錄待核對"); await expect(open).toContainText("原事件修訂 3");
+    await expect(closed).toContainText("已記錄後繼版本處理"); await expect(closed).toContainText(evidenceResolution.current_revision_id);
+    await expect(panel).toContainText("歷史完整性未驗證"); await expect(panel).toContainText("不是文件驗證或持股資格");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await article.getByRole("button", { name: "收合證據審核歷史" }).click(); await expect(panel).toHaveCount(0);
+  }
+  expect(database()).toEqual(beforeReviews);
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  expect(await page.evaluate(() => caches.keys())).toEqual([]);
+  stage("EVIDENCE_UI_STALE");
+  const article = page.getByRole("article", { name: `股息事件 ${evidenceCurrent.id}` });
+  await article.getByRole("button", { name: "查看證據審核歷史" }).click();
+  const reviewPanel = article.getByRole("region", { name: "股息證據審核歷史" });
+  await expect(reviewPanel.getByRole("listitem")).toHaveCount(2);
+  const evidenceAdvanced = await reviseEvidence(evidenceCurrent, "AS_DECLARED");
+  const afterEvidenceAdvance = database();
+  await reviewPanel.getByRole("button", { name: "重新載入證據審核" }).click();
+  await expect(reviewPanel.getByRole("alert")).toContainText("不是同一快照");
+  await expect(reviewPanel.getByRole("listitem")).toHaveCount(0);
+  expect(database()).toEqual(afterEvidenceAdvance);
+  stage("EVIDENCE_UI_PAGING_SETUP");
+  let pagedEvent = evidenceAdvanced;
+  for (let index = 0; index < 24; index++) pagedEvent = await reviseEvidence(pagedEvent, "UNKNOWN");
+  const beforeReviewPaging = database();
+  stage("EVIDENCE_UI_PAGING");
+  await page.setViewportSize({ width: 360, height: 900 }); await page.goto("/dividends");
+  const pagedArticle = page.getByRole("article", { name: `股息事件 ${pagedEvent.id}` });
+  await pagedArticle.getByRole("button", { name: "查看事件與拒絕狀態" }).click();
+  await pagedArticle.getByRole("button", { name: "查看證據審核歷史" }).click();
+  const pagedPanel = pagedArticle.getByRole("region", { name: "股息證據審核歷史" });
+  await expect(pagedPanel.getByText(/第 1 頁/)).toBeVisible(); await expect(pagedPanel.getByRole("listitem")).toHaveCount(25);
+  const nextRead = page.waitForResponse(response => new URL(response.url()).pathname === reviewPath && response.request().method() === "GET");
+  await pagedPanel.getByRole("button", { name: "下一頁證據審核" }).click();
+  expect((await nextRead).headers()["cache-control"]).toBe("no-store");
+  await expect(pagedPanel.getByText(/第 2 頁/)).toBeVisible(); await expect(pagedPanel.getByRole("listitem")).toHaveCount(1);
+  await pagedPanel.getByRole("button", { name: "上一頁證據審核" }).click();
+  await expect(pagedPanel.getByText(/第 1 頁/)).toBeVisible(); await expect(pagedPanel.getByRole("listitem")).toHaveCount(25);
+  expect(database()).toEqual(beforeReviewPaging);
   const created = await page.request.post("/api/v1/dividends/events", { headers: await headers(page), data: {
     security_id: security.id, event_type: "SPECIAL", ex_date: "2026-11-03", dps: "1", currency: "USD", adjustment_basis: "AS_DECLARED",
     citation: "Synthetic cross-store event reference", source_url: null, reason: "Synthetic original event for comparison review.",

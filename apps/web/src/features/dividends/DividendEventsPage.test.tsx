@@ -58,6 +58,29 @@ async function openEvent() {
 }
 
 describe("dividend event workspace", () => {
+  it("reads retained evidence reviews only after explicit expansion and discards them on collapse", async () => {
+    const path = "/api/v1/dividends/events/{event_id}/evidence-reviews";
+    const review: Schemas["EvidenceReviewRecord"] = { id: "55555555-5555-4555-8555-555555555555", event_id: event.id,
+      revision_id: event.current_revision_id, revision_no: event.version, portfolio_id: null, status: "ACKNOWLEDGED", severity: "WARNING",
+      reason_code: "DIVIDEND_INCOMPLETE", conflicting_fields: [], incomplete_reasons: ["UNRESOLVED_ADJUSTMENT"], created_at: "2026-11-04T00:00:00Z",
+      resolved_at: null, resolved_by_revision_id: null, acknowledgement_scope: "NOT_ESTABLISHED", scope: "RETAINED_EVIDENCE_REVIEW_ONLY" };
+    const page: Schemas["EvidenceReviewPage"] = { event_id: event.id, revision_id: event.current_revision_id, revision_no: event.version,
+      items: [review], next_cursor: null, scope: "RETAINED_EVIDENCE_REVIEWS_ONLY", history_completeness: "UNVERIFIED",
+      current_use_scope: "REVALIDATION_REQUIRED", eligibility_scope: "NOT_ESTABLISHED", document_verification: "NOT_ESTABLISHED" };
+    const get = reads({ [path]: page }); const post = vi.spyOn(api, "POST"); const cache = renderPage(); await openEvent();
+    expect(get).not.toHaveBeenCalledWith(path, expect.anything());
+    const opener = screen.getByRole("button", { name: "查看證據審核歷史" }); fireEvent.click(opener);
+    const panel = await screen.findByRole("region", { name: "股息證據審核歷史" });
+    expect(await within(panel).findByText(/已記錄為知悉/)).toHaveTextContent("知悉未經驗證");
+    expect(panel).toHaveTextContent("歷史完整性未驗證"); expect(post).not.toHaveBeenCalled();
+    expect(cache.getQueryCache().getAll().some(query => JSON.stringify(query.queryKey).includes("evidence-reviews"))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "收合證據審核歷史" }));
+    expect(screen.queryByRole("region", { name: "股息證據審核歷史" })).not.toBeInTheDocument();
+    const calls = get.mock.calls.length; fireEvent.click(screen.getByRole("button", { name: "查看證據審核歷史" }));
+    await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(calls));
+    expect(await screen.findByText(/已記錄為知悉/)).toBeVisible();
+  });
+
   it("opens a private hypothetical preview only on explicit request", async () => {
     const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null } });
     const post = vi.spyOn(api, "POST"); const cache = renderPage(); await openEvent();

@@ -715,7 +715,24 @@ marks history completeness unverified, current use subject to revalidation, and 
 and eligibility not established. No returned or empty page proves all reviews are present, all
 problems are resolved, or an owner holds eligible shares. This read does not create or update tasks,
 change event/receipt/cash/FX/audit history, or contact providers. An ordinary idle-session heartbeat
-may still update session activity. There is no evidence-review browser UI yet.
+may still update session activity.
+
+## Evidence-review history in the browser
+
+In `/dividends`, expand an event and choose **View evidence-review history** to request its retained
+reviews. Each page is held only in the mounted component's memory and is discarded on collapse;
+closing or switching an event revision aborts an in-flight request. The browser checks the response
+shape, event/revision scope, bounded order, duplicate IDs and portfolios, original and successor
+revision linkage and timestamps before showing it. If the independently read event head differs,
+or the read fails or the connection is paused, the panel withholds the records until refreshed.
+Pages are independently read and are not a single consistent cross-page snapshot.
+
+The panel distinguishes conflict from incompleteness and displays retained reason codes, portfolio
+scope, original revision and recorded successor when present. `ACKNOWLEDGED` is visibly a stored,
+unverified status, not a verified owner action; a recorded resolution is not proof that a document
+or payment was verified. An empty page does not prove completeness or that all problems are resolved.
+This panel cannot acknowledge, resolve, reconcile, authorize eligibility or change the existing
+financial-history fences.
 
 ## Current event-source fence
 
