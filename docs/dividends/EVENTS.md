@@ -2333,6 +2333,15 @@ security, all affected financial histories and final scope, and commit revision,
 projections, reconciliation tasks, audits, invalidations and idempotency together. No event or
 missing-origin fence is relaxed, and neither helper may be used as authorization to write.
 
+`dividend_revision_rebuild_intent.fingerprint` separately computes a domain-labelled digest from
+an explicit owner, previous physical revision/version, successor decision, all account estimates,
+request ID and UTC operation time. It revalidates the supplied models and types; equivalent decimal
+spellings, account order and timezone representations normalize to the same digest. Unknown
+values remain distinct from explicit zero, and independent fee and HKD FX inputs stay separate.
+This pure helper neither captures the recorded ledger scope nor checks the event or a candidate's
+current source. A digest does not authenticate a caller, prove intent or permit a revision, task,
+financial write or replay; those require independent retained-history and authorization checks.
+
 ## Internal recorded revision impact
 
 `dividend_revision_impact.inspect` requires the serialized recheck above and classifies every
