@@ -220,8 +220,19 @@ def save_estimate(
     version: DividendEventVersionDep,
 ) -> models.TaxSettingRecord:
     expected = int(body.expected_head_no)
+    pending: (
+        tuple[
+            tax.SettingIntent,
+            tax.TaxSetting,
+            tuple[int, int],
+            tuple[str | None, ...],
+            str,
+        ]
+        | None
+    ) = None
 
     def action(con: Connection, auth: Auth) -> models.TaxSettingRecord:
+        nonlocal pending
         current = _event(con, auth.owner.id, event_id).record
         check_version(current.revision_no, version)
         if current.revision_id != body.revision_id:
@@ -245,9 +256,28 @@ def save_estimate(
             rate=body.rate,
             reason=body.reason,
         )
-        return _public(
-            tax.save(con, auth.owner.id, intent, request_id=UUID(request.state.request_id))
+        record = tax.save(con, auth.owner.id, intent, request_id=UUID(request.state.request_id))
+        if current.terms.ex_date is None:
+            raise tax.TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE")
+        from_date = min(intent.effective_from, current.terms.ex_date)
+        portfolio = tax._portfolio_scope(con, auth.owner.id, intent.portfolio_id)
+        marker = tax._invalidation(con, intent, from_date)
+        pending = (intent, record, portfolio, marker, from_date)
+        return _public(record)
+
+    def commit(con: Connection, auth: Auth, result: models.TaxSettingRecord) -> None:
+        if pending is None:
+            raise tax.TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE")
+        intent, saved, portfolio, marker, from_date = pending
+        checked = tax._require_saved(
+            con, auth.owner.id, intent, UUID(request.state.request_id), saved, body.expected_head_id
         )
+        if checked.request_id != UUID(request.state.request_id) or _public(checked) != result:
+            raise tax.TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE")
+        if tax._portfolio_scope(con, auth.owner.id, intent.portfolio_id) != portfolio:
+            raise tax.TaxSettingError("DIVIDEND_TAX_SCOPE_CHANGED")
+        if tax._invalidation(con, intent, from_date) != marker:
+            raise tax.TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE")
 
     def replay(con: Connection, auth: Auth, cached: models.TaxSettingRecord) -> None:
         settings = tax.history(con, auth.owner.id, event_id, body.revision_id, version, account_id)
@@ -282,6 +312,7 @@ def save_estimate(
             status=201,
             reauth=True,
             validate_replay=replay,
+            validate_commit=commit,
         )
     except (events.EventError, tax.TaxSettingError) as error:
         raise _failure(error) from None

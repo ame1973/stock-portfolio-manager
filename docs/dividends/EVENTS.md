@@ -986,7 +986,9 @@ snapshot. No date is guessed from ex-date, exchange, receipt date or `as_of`.
 `save` rechecks the active owner, current event source, independent rejection history
 and exact account/portfolio/broker versions inside a serialized writer. It appends a
 reasoned `ESTIMATED` or `UNKNOWN` decision, canonical audit and portfolio invalidation
-together. An explicit
+together. After invalidation it rechecks the saved setting and exact types, source,
+rejection, account/broker scope, portfolio version and exact data-revision increment,
+and the unresolved invalidation marker returned by the shared invalidator. An explicit
 zero estimate is valid. A completed identical request replays its original decision
 without writes even after later changes; a new request must pass current checks.
 A caught failure rolls back the decision, audit and invalidation; an uncertain
@@ -1034,8 +1036,12 @@ values. Writes require current session, trusted Origin, CSRF, an idempotency key
 recent password reauthentication. The short writer transaction rechecks the session,
 reauthentication, event/source, independent rejection state, account/broker versions and
 setting head, then commits the decision, audit, idempotency receipt and portfolio
-invalidation together. A new write with otherwise current pins to a rejected revision
-returns `409 DIVIDEND_REVISION_REJECTED`; an unavailable rejection history fails closed.
+invalidation together. After idempotency insertion it rechecks session, CSRF and
+reauthentication, then the saved setting, request identity, source/rejection,
+account/broker and portfolio scope, exact marker and returned response. Tax writes use
+the existing idempotency record and setting audit; unlike the fee workflow, they do not
+create a separate HTTP-intent audit. A new write with otherwise current pins to a rejected
+revision returns `409 DIVIDEND_REVISION_REJECTED`; an unavailable rejection history fails closed.
 The SQL rejection fence remains in place.
 
 An unchanged completed retry returns its original decision after current session and

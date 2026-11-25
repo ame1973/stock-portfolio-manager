@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import spm_api.dividend_event_service as events
 import spm_api.dividend_event_writer as event_writer
 import spm_api.dividend_rejection_service as rejections
+import spm_api.dividend_setting_integrity as integrity
 from spm_api.audit import audit, canonical, digest, stamp
 from spm_api.db import savepoint
 from spm_api.decimal_types import INT64_MAX, IsoDate, Rate, from_scaled, to_scaled
@@ -476,6 +477,91 @@ def require_current(
         raise TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE") from None
 
 
+def _portfolio_scope(con: Connection, owner: UUID, portfolio_id: UUID) -> tuple[int, int]:
+    try:
+        return integrity.portfolio_scope(con, owner, portfolio_id)
+    except integrity.SettingIntegrityError as error:
+        code = (
+            "DIVIDEND_TAX_SCOPE_CHANGED"
+            if str(error) == "SCOPE_CHANGED"
+            else "DIVIDEND_TAX_HISTORY_UNAVAILABLE"
+        )
+        raise TaxSettingError(code) from None
+
+
+def _invalidation(
+    con: Connection, intent: SettingIntent, from_date: str
+) -> tuple[str, str, str, str, str, str, None]:
+    try:
+        return integrity.invalidation(
+            con, intent.id, intent.portfolio_id, from_date, "DIVIDEND_TAX_SETTING_CHANGED"
+        )
+    except integrity.SettingIntegrityError:
+        raise TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE") from None
+
+
+def _require_saved(
+    con: Connection,
+    owner: UUID,
+    intent: SettingIntent,
+    request_id: UUID,
+    saved: TaxSetting,
+    previous_id: UUID | None,
+) -> TaxSetting:
+    selected = require_current(
+        con,
+        owner,
+        intent.event_id,
+        intent.revision_id,
+        intent.revision_no,
+        intent.account_id,
+        effective_on=date.fromisoformat(intent.effective_from),
+        expected_setting_no=intent.expected_setting_no + 1,
+        expected_head_id=intent.id,
+    )
+    try:
+        actual = integrity.exact_record(TaxSetting, saved, selected.selected)
+    except integrity.SettingIntegrityError:
+        raise TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE") from None
+    if (
+        saved.id,
+        saved.owner_id,
+        saved.event_id,
+        saved.revision_id,
+        saved.revision_no,
+        saved.account_id,
+        saved.portfolio_id,
+        saved.broker_id,
+        saved.account_version,
+        saved.broker_version,
+        saved.setting_no,
+        saved.previous_id,
+        saved.effective_from,
+        saved.rate,
+        saved.reason,
+        saved.request_id,
+    ) != (
+        intent.id,
+        owner,
+        intent.event_id,
+        intent.revision_id,
+        intent.revision_no,
+        intent.account_id,
+        intent.portfolio_id,
+        intent.broker_id,
+        intent.account_version,
+        intent.broker_version,
+        intent.expected_setting_no + 1,
+        previous_id,
+        intent.effective_from,
+        intent.rate,
+        intent.reason,
+        request_id,
+    ):
+        raise TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE")
+    return actual
+
+
 def save(con: Connection, owner: UUID, intent: SettingIntent, *, request_id: UUID) -> TaxSetting:
     """Append an audited estimate and invalidate its portfolio; caller must authenticate."""
     try:
@@ -489,7 +575,17 @@ def _save(con: Connection, owner: UUID, intent: SettingIntent, *, request_id: UU
     try:
         if not isinstance(intent, SettingIntent) or not isinstance(request_id, UUID):
             raise ValueError
-        intent = SettingIntent.model_validate(intent.model_dump(warnings="error"))
+        validated = SettingIntent.model_validate(intent.model_dump(warnings="error"))
+        fields = SettingIntent.model_fields
+        if (
+            intent.__dict__.keys() != fields.keys()
+            or validated != intent
+            or any(
+                type(getattr(intent, name)) is not type(getattr(validated, name)) for name in fields
+            )
+        ):
+            raise ValueError
+        intent = validated
     except (ValueError, TypeError, OverflowError, PydanticSerializationError):
         raise TaxSettingError("INVALID_DIVIDEND_TAX_SCOPE") from None
     with savepoint(con):
@@ -544,6 +640,7 @@ def _save(con: Connection, owner: UUID, intent: SettingIntent, *, request_id: UU
                 raise TaxSettingError("DIVIDEND_TAX_NOT_FOUND")
             if not _matches_account(intent, account):
                 raise TaxSettingError("DIVIDEND_TAX_SCOPE_CHANGED")
+            portfolio_version, data_revision = _portfolio_scope(con, owner, intent.portfolio_id)
             previous = settings[-1] if settings else None
             values: dict[str, Any] = {
                 "id": str(intent.id),
@@ -600,14 +697,25 @@ def _save(con: Connection, owner: UUID, intent: SettingIntent, *, request_id: UU
             ex_date = event.record.terms.ex_date
             if ex_date is None:
                 raise TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE")
-            invalidate_portfolio(
+            from_date = min(intent.effective_from, ex_date)
+            marker = invalidate_portfolio(
                 con,
                 str(intent.portfolio_id),
                 str(intent.id),
                 "DIVIDEND_TAX_SETTING_CHANGED",
-                min(intent.effective_from, ex_date),
+                from_date,
             )
-            return updated[-1]
+            saved = _require_saved(
+                con, owner, intent, request_id, updated[-1], previous.id if previous else None
+            )
+            if _portfolio_scope(con, owner, intent.portfolio_id) != (
+                portfolio_version,
+                data_revision + 1,
+            ):
+                raise TaxSettingError("DIVIDEND_TAX_SCOPE_CHANGED")
+            if _invalidation(con, intent, from_date) != marker:
+                raise TaxSettingError("DIVIDEND_TAX_HISTORY_UNAVAILABLE")
+            return saved
         except TaxSettingError:
             raise
         except (ValueError, TypeError, KeyError, OverflowError, SQLAlchemyError):

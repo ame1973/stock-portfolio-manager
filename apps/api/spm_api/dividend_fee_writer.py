@@ -13,6 +13,7 @@ import spm_api.dividend_event_service as events
 import spm_api.dividend_event_writer as event_writer
 import spm_api.dividend_fee_service as fees
 import spm_api.dividend_rejection_service as rejections
+import spm_api.dividend_setting_integrity as integrity
 from spm_api.audit import audit, now, stamp
 from spm_api.db import savepoint
 from spm_api.decimal_types import INT64_MAX, IsoDate, NonNegativeMoney, to_scaled
@@ -206,57 +207,26 @@ def _replay_matches(record: fees.FeeSetting, intent: FeeIntent, request_id: UUID
 
 
 def _portfolio_scope(con: Connection, owner: UUID, portfolio_id: UUID) -> tuple[int, int]:
-    row = con.execute(
-        text("SELECT version,data_revision FROM portfolios WHERE id=:id AND owner_id=:owner"),
-        {"id": str(portfolio_id), "owner": str(owner)},
-    ).one_or_none()
-    if row is None:
-        raise fees.FeeSettingError("DIVIDEND_FEE_SCOPE_CHANGED")
-    if (
-        type(row.version) is not int
-        or not 1 <= row.version <= INT64_MAX
-        or type(row.data_revision) is not int
-        or not 0 <= row.data_revision <= INT64_MAX
-    ):
-        raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
-    return row.version, row.data_revision
+    try:
+        return integrity.portfolio_scope(con, owner, portfolio_id)
+    except integrity.SettingIntegrityError as error:
+        code = (
+            "DIVIDEND_FEE_SCOPE_CHANGED"
+            if str(error) == "SCOPE_CHANGED"
+            else "DIVIDEND_FEE_HISTORY_UNAVAILABLE"
+        )
+        raise fees.FeeSettingError(code) from None
 
 
 def _invalidation(
     con: Connection, intent: FeeIntent, from_date: str
 ) -> tuple[str, str, str, str, str, str, None]:
-    rows = con.execute(
-        text("""
-            SELECT id,portfolio_id,from_date,reason,source_id,created_at,resolved_at
-            FROM projection_invalidations WHERE source_id=:id
-        """),
-        {"id": str(intent.id)},
-    ).all()
-    if len(rows) != 1:
-        raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
-    row = rows[0]
     try:
-        events._uuid(row.id)
-        events._time(row.created_at)
-        if (
-            row.portfolio_id != str(intent.portfolio_id)
-            or row.from_date != from_date
-            or row.reason != "DIVIDEND_FEE_SETTING_CHANGED"
-            or row.source_id != str(intent.id)
-            or row.resolved_at is not None
-        ):
-            raise ValueError
-    except (ValueError, TypeError, OverflowError):
+        return integrity.invalidation(
+            con, intent.id, intent.portfolio_id, from_date, "DIVIDEND_FEE_SETTING_CHANGED"
+        )
+    except integrity.SettingIntegrityError:
         raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE") from None
-    return (
-        row.id,
-        row.portfolio_id,
-        row.from_date,
-        row.reason,
-        row.source_id,
-        row.created_at,
-        None,
-    )
 
 
 def _require_saved(
@@ -277,27 +247,17 @@ def _require_saved(
         expected_account_version=intent.account_version,
         expected_broker_version=intent.broker_version,
     )
-    actual = selected.selected
-    if type(actual) is not fees.FeeSetting or type(saved) is not fees.FeeSetting:
-        raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
     try:
-        validated = fees.FeeSetting.model_validate(saved.model_dump(warnings="error"))
-    except (ValueError, TypeError, PydanticSerializationError):
+        actual = integrity.exact_record(fees.FeeSetting, saved, selected.selected)
+    except integrity.SettingIntegrityError:
         raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE") from None
-    fields = fees.FeeSetting.model_fields
-    if (
-        any(record.__dict__.keys() != fields.keys() for record in (saved, actual))
-        or any(
-            record != validated
-            or any(
-                type(getattr(record, name)) is not type(getattr(validated, name)) for name in fields
-            )
-            for record in (saved, actual)
-        )
-        or not _replay_matches(actual, intent, request_id)
-        or (saved.owner_id, saved.event_id, saved.revision_id, saved.revision_no, saved.account_id)
-        != (owner, intent.event_id, intent.revision_id, intent.revision_no, intent.account_id)
-    ):
+    if not _replay_matches(actual, intent, request_id) or (
+        saved.owner_id,
+        saved.event_id,
+        saved.revision_id,
+        saved.revision_no,
+        saved.account_id,
+    ) != (owner, intent.event_id, intent.revision_id, intent.revision_no, intent.account_id):
         raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
     return actual
 
