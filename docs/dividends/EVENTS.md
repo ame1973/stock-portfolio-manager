@@ -2183,6 +2183,22 @@ establish ownership or income, create an entitlement, void a receipt or reconcil
 the existing event fence remains in force. The browser form below can submit an explicitly
 selected existing entitlement.
 
+## Internal retained event-financial scope
+
+`dividend_event_financial_scope.history` reads an owned event and its linked legacy
+entitlements, projection histories, direct and legacy receipts, and known current or retained
+portfolios in one database snapshot. It validates the nested histories and fails the whole read
+if their links or current owner scope are inconsistent. Original receipt, cash, FX and audit
+records are not changed. Missing legacy receipt origins remain explicitly unverified; a void
+receipt remains part of the retained history.
+
+This internal reader is not an API, an authentication check or a complete list of accounts
+requiring a rebuild: accounts with holdings but no linked event history are not discovered, and
+legacy records may not identify a historical portfolio. Empty results do not establish zero
+holdings, payment or eligibility. Current versions and data revisions require revalidation in the
+actual writer. The existing event-revision, rejection and missing-origin void fences remain in
+force; no atomic event revision, projection rebuild or reconciliation task is created here.
+
 ## Internal recorded-reconciliation comparison
 
 `dividend_reconciliation_history.read` is an internal, read-only comparison for an explicitly
