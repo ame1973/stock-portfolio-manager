@@ -2248,6 +2248,16 @@ revision, reconciliation task, confirmed receipt or grant of eligibility. It doe
 existing fence; the eventual atomic writer must revalidate all scope, financial, authorization and
 idempotency inputs in its own transaction.
 
+`dividend_revision_preview_models` defines unregistered request and paged response models for a
+future private preview. Each displayed account retains its current portfolio, broker and version
+pins, recorded-eligibility state, explicit estimates, historical projection and receipt counts.
+The response model recalculates the hypothetical accrual from its explicit inputs and checks exact
+delta, receipt arithmetic, status, quality and unknown-value consistency. Versions and counts
+use bounded decimal strings. Model instances are revalidated before use; a page cursor and
+snapshot token are paired and cannot serve as an authorization. These models do not implement a
+route, authenticate a request, generate or verify a snapshot token, or preserve a database snapshot
+across pages. A future route must enforce those properties and no-store handling independently.
+
 ## Internal recorded-reconciliation comparison
 
 `dividend_reconciliation_history.read` is an internal, read-only comparison for an explicitly
