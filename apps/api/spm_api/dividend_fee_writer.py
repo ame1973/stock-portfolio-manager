@@ -205,6 +205,103 @@ def _replay_matches(record: fees.FeeSetting, intent: FeeIntent, request_id: UUID
     )
 
 
+def _portfolio_scope(con: Connection, owner: UUID, portfolio_id: UUID) -> tuple[int, int]:
+    row = con.execute(
+        text("SELECT version,data_revision FROM portfolios WHERE id=:id AND owner_id=:owner"),
+        {"id": str(portfolio_id), "owner": str(owner)},
+    ).one_or_none()
+    if row is None:
+        raise fees.FeeSettingError("DIVIDEND_FEE_SCOPE_CHANGED")
+    if (
+        type(row.version) is not int
+        or not 1 <= row.version <= INT64_MAX
+        or type(row.data_revision) is not int
+        or not 0 <= row.data_revision <= INT64_MAX
+    ):
+        raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
+    return row.version, row.data_revision
+
+
+def _invalidation(
+    con: Connection, intent: FeeIntent, from_date: str
+) -> tuple[str, str, str, str, str, str, None]:
+    rows = con.execute(
+        text("""
+            SELECT id,portfolio_id,from_date,reason,source_id,created_at,resolved_at
+            FROM projection_invalidations WHERE source_id=:id
+        """),
+        {"id": str(intent.id)},
+    ).all()
+    if len(rows) != 1:
+        raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
+    row = rows[0]
+    try:
+        events._uuid(row.id)
+        events._time(row.created_at)
+        if (
+            row.portfolio_id != str(intent.portfolio_id)
+            or row.from_date != from_date
+            or row.reason != "DIVIDEND_FEE_SETTING_CHANGED"
+            or row.source_id != str(intent.id)
+            or row.resolved_at is not None
+        ):
+            raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE") from None
+    return (
+        row.id,
+        row.portfolio_id,
+        row.from_date,
+        row.reason,
+        row.source_id,
+        row.created_at,
+        None,
+    )
+
+
+def _require_saved(
+    con: Connection, owner: UUID, intent: FeeIntent, request_id: UUID, saved: fees.FeeSetting
+) -> fees.FeeSetting:
+    selected = require_current(
+        con,
+        owner,
+        intent.event_id,
+        intent.revision_id,
+        intent.revision_no,
+        intent.account_id,
+        effective_on=date.fromisoformat(intent.effective_from),
+        expected_setting_no=intent.expected_setting_no + 1,
+        expected_head_id=intent.id,
+        expected_portfolio_id=intent.portfolio_id,
+        expected_broker_id=intent.broker_id,
+        expected_account_version=intent.account_version,
+        expected_broker_version=intent.broker_version,
+    )
+    actual = selected.selected
+    if type(actual) is not fees.FeeSetting or type(saved) is not fees.FeeSetting:
+        raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
+    try:
+        validated = fees.FeeSetting.model_validate(saved.model_dump(warnings="error"))
+    except (ValueError, TypeError, PydanticSerializationError):
+        raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE") from None
+    fields = fees.FeeSetting.model_fields
+    if (
+        any(record.__dict__.keys() != fields.keys() for record in (saved, actual))
+        or any(
+            record != validated
+            or any(
+                type(getattr(record, name)) is not type(getattr(validated, name)) for name in fields
+            )
+            for record in (saved, actual)
+        )
+        or not _replay_matches(actual, intent, request_id)
+        or (saved.owner_id, saved.event_id, saved.revision_id, saved.revision_no, saved.account_id)
+        != (owner, intent.event_id, intent.revision_id, intent.revision_no, intent.account_id)
+    ):
+        raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
+    return actual
+
+
 def save(con: Connection, owner: UUID, intent: FeeIntent, *, request_id: UUID) -> fees.FeeSetting:
     """Append an audited estimate and invalidate atomically; authenticate separately."""
     try:
@@ -272,6 +369,7 @@ def _save(con: Connection, owner: UUID, intent: FeeIntent, *, request_id: UUID) 
             raise fees.FeeSettingError("DIVIDEND_FEE_NOT_FOUND")
         if not _matches_account(intent, current):
             raise fees.FeeSettingError("DIVIDEND_FEE_SCOPE_CHANGED")
+        portfolio_version, data_revision = _portfolio_scope(con, owner, intent.portfolio_id)
         source = con.execute(
             text("""
             SELECT created_at FROM audit_events WHERE entity_type='dividend_event_revision'
@@ -358,11 +456,20 @@ def _save(con: Connection, owner: UUID, intent: FeeIntent, *, request_id: UUID) 
         day = event.record.terms.ex_date
         if day is None:
             raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
-        invalidate_portfolio(
+        from_date = min(intent.effective_from, day)
+        marker = invalidate_portfolio(
             con,
             str(intent.portfolio_id),
             str(intent.id),
             "DIVIDEND_FEE_SETTING_CHANGED",
-            min(intent.effective_from, day),
+            from_date,
         )
-        return updated[-1]
+        saved = _require_saved(con, owner, intent, request_id, updated[-1])
+        if _portfolio_scope(con, owner, intent.portfolio_id) != (
+            portfolio_version,
+            data_revision + 1,
+        ):
+            raise fees.FeeSettingError("DIVIDEND_FEE_SCOPE_CHANGED")
+        if _invalidation(con, intent, from_date) != marker:
+            raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
+        return saved

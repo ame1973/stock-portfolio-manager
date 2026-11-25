@@ -157,10 +157,13 @@ def _update(
         raise ApiError(412, "PRECONDITION_FAILED", "This record changed; reload before editing")
 
 
+InvalidationMarker = tuple[str, str, str, str, str, str, None]
+
+
 def invalidate_portfolio(
     con: Connection, identifier: str, source: str, reason: str, from_date: str | None = None
-) -> None:
-    """Advance the exact revision and retain its invalidation marker together."""
+) -> InvalidationMarker:
+    """Advance the revision, retain its marker and return the exact verified values."""
     if not con.in_transaction() or con.get_execution_options().get("writer") is not True:
         raise ApiError(
             503, "PORTFOLIO_INVALIDATION_UNAVAILABLE", "Portfolio invalidation unavailable"
@@ -238,6 +241,7 @@ def invalidate_portfolio(
             raise ApiError(
                 503, "PORTFOLIO_INVALIDATION_UNAVAILABLE", "Portfolio invalidation unavailable"
             )
+        return (values["key"], identifier, from_date, reason, source, values["now"], None)
 
 
 def create_portfolio(

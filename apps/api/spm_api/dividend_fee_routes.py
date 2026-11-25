@@ -286,8 +286,19 @@ def save_estimate(
 ) -> models.FeeSettingRecord:
     expected = int(body.expected_head_no)
     payload = {"event_version": version, **body.model_dump(mode="json")}
+    pending: (
+        tuple[
+            writer.FeeIntent,
+            fees.FeeSetting,
+            tuple[int, int],
+            tuple[str | None, ...],
+            str,
+        ]
+        | None
+    ) = None
 
     def action(con: Connection, auth: Auth) -> models.FeeSettingRecord:
+        nonlocal pending
         event = _event(con, auth.owner.id, event_id).record
         check_version(event.revision_no, version)
         if event.revision_id != body.revision_id:
@@ -315,6 +326,11 @@ def save_estimate(
             reason=body.reason,
         )
         record = writer.save(con, auth.owner.id, intent, request_id=UUID(request.state.request_id))
+        if event.terms.ex_date is None:
+            raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
+        from_date = min(intent.effective_from, event.terms.ex_date)
+        portfolio = writer._portfolio_scope(con, auth.owner.id, intent.portfolio_id)
+        marker = writer._invalidation(con, intent, from_date)
         audit(
             con,
             str(auth.owner.id),
@@ -325,7 +341,23 @@ def save_estimate(
             after=_binding(request, headers, payload, record),
         )
         _check_intent(con, auth, request, headers, payload, record)
+        pending = (intent, record, portfolio, marker, from_date)
         return _public(record)
+
+    def commit(con: Connection, auth: Auth, result: models.FeeSettingRecord) -> None:
+        if pending is None:
+            raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
+        intent, saved, portfolio, marker, from_date = pending
+        checked = writer._require_saved(
+            con, auth.owner.id, intent, UUID(request.state.request_id), saved
+        )
+        _check_intent(con, auth, request, headers, payload, checked)
+        if _public(checked) != result:
+            raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
+        if writer._portfolio_scope(con, auth.owner.id, intent.portfolio_id) != portfolio:
+            raise fees.FeeSettingError("DIVIDEND_FEE_SCOPE_CHANGED")
+        if writer._invalidation(con, intent, from_date) != marker:
+            raise fees.FeeSettingError("DIVIDEND_FEE_HISTORY_UNAVAILABLE")
 
     def replay(con: Connection, auth: Auth, cached: models.FeeSettingRecord) -> None:
         settings = fees.history(con, auth.owner.id, event_id, body.revision_id, version, account_id)
@@ -363,6 +395,7 @@ def save_estimate(
             status=201,
             reauth=True,
             validate_replay=replay,
+            validate_commit=commit,
         )
     except (events.EventError, fees.FeeSettingError, rejections.RejectionError) as error:
         raise _failure(error) from None

@@ -1336,7 +1336,10 @@ mutation.
 revision, account, portfolio, broker, account/broker versions and exact fee-history
 head number and ID. In a serialized writer it validates the complete retained history,
 current event source and rejection state before appending the setting, correlated audit
-and affected portfolio invalidation in one safe savepoint. An estimated amount requires
+and affected portfolio invalidation in one safe savepoint. After invalidation it rechecks
+that the selected saved setting and its types, source, rejection, account/broker scope,
+portfolio version and exact data-revision increment still match. It also rereads the exact
+unresolved invalidation marker returned by the shared invalidator. An estimated amount requires
 an explicit supported currency; unknown has no amount and may retain a known currency.
 A new setting cannot predate the preceding setting or its correlated audit. A caught
 failure rolls back the whole decision; uncertain savepoint failures abort the outer
@@ -1391,9 +1394,12 @@ wire so JavaScript does not lose digits.
 The write rechecks session/CSRF/reauthentication, event version and physical revision,
 source, rejection, account/broker versions and exact fee head inside the writer. The
 fee assertion, canonical setting audit, separate HTTP-intent audit, invalidation and
-idempotency response commit together. The HTTP audit binds the route, idempotency-key
-digest, original normalized intent and physical setting identity; replay verifies the
-complete history and binding before returning the original response without new writes.
+idempotency response commit together. After recording idempotency it rechecks the session,
+CSRF and reauthentication, then the saved setting, source/rejection, account/broker and
+portfolio scope, exact invalidation marker, HTTP intent and response before commit. The HTTP
+audit binds the route, idempotency-key digest, original normalized intent and physical setting
+identity; replay verifies the complete history and binding before returning the original
+response without new writes.
 A replay after a rejection or event successor is only a historical receipt, not renewed
 current authority. Changed inputs on a reused key conflict; stale event/head pins return
 412, source/rejection/account conflicts return 409, invalid inputs return 422, and

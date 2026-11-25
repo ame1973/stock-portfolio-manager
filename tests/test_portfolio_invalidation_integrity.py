@@ -107,6 +107,25 @@ def test_last_revision_increments_exactly_and_retains_one_unresolved_marker(
     ]
 
 
+def test_invalidation_returns_the_exact_persisted_marker(
+    engine: Engine, source: dict[str, Any]
+) -> None:
+    portfolio, _ = owned_account(engine)
+    with unit_of_work(engine, write=True) as con:
+        marker = invalidate_portfolio(
+            con, portfolio, "synthetic-source", "SYNTHETIC_TEST", "2026-01-09"
+        )
+        assert isinstance(marker, tuple) and len(marker) == 7
+        persisted = con.exec_driver_sql(
+            "SELECT id,portfolio_id,from_date,reason,source_id,created_at,resolved_at "
+            "FROM projection_invalidations WHERE id=?",
+            (marker[0],),
+        ).one()
+        assert tuple(persisted) == marker
+        assert marker[1:5] == (portfolio, "2026-01-09", "SYNTHETIC_TEST", "synthetic-source")
+        assert marker[-1] is None
+
+
 def test_invalidation_without_a_day_uses_the_earliest_recorded_cash_or_today(
     engine: Engine, source: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
