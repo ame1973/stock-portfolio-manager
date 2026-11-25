@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 
+import spm_api.master_service as master
 from spm_api.db import unit_of_work
 from spm_api.decimal_types import INT64_MAX
 from spm_api.errors import ApiError
@@ -107,8 +108,14 @@ def test_last_revision_increments_exactly_and_retains_one_unresolved_marker(
 
 
 def test_invalidation_without_a_day_uses_the_earliest_recorded_cash_or_today(
-    engine: Engine, source: dict[str, Any]
+    engine: Engine, source: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> "FixedDate":
+            return cls(2026, 11, 25)
+
+    monkeypatch.setattr(master, "date", FixedDate)
     portfolio, account = owned_account(engine)
     with unit_of_work(engine, write=True) as con:
         invalidate_portfolio(con, portfolio, "synthetic-empty", "SYNTHETIC_TEST")
@@ -134,7 +141,7 @@ def test_invalidation_without_a_day_uses_the_earliest_recorded_cash_or_today(
             )
         }
     assert rows == {
-        "synthetic-empty": date.today().isoformat(),
+        "synthetic-empty": "2026-11-25",
         "synthetic-historical": "2020-01-02",
     }
 

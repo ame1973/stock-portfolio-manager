@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from spm_api import cash_models
 from spm_api.dividend_receipt_terms import (
     ReceiptComponents,
     ReceiptTerms,
@@ -183,13 +184,37 @@ def test_calculated_values_use_exact_int64_and_ignore_ambient_decimal_precision(
             "actual_hkd_reason": "Synthetic actual amount",
         },
         {"currency": "HKD", "actual_hkd": "7", "actual_hkd_reason": "Synthetic actual amount"},
-        {"received_date": (date.today() + timedelta(days=1)).isoformat()},
         {"unknown_field": "synthetic"},
     ],
 )
 def test_rejects_invalid_or_unsubstantiated_terms(changes: dict[str, Any]) -> None:
     with pytest.raises((ValidationError, FinanceError)):
         calculate_receipt(ReceiptTerms.model_validate(terms(**changes)))
+
+
+@pytest.mark.parametrize("day", ["2026-11-25", "2026-12-31", "2024-02-28", "2024-02-29"])
+def test_receipt_date_boundary_uses_the_validation_day(
+    monkeypatch: pytest.MonkeyPatch, day: str
+) -> None:
+    clock = [date.fromisoformat(day)]
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> "FixedDate":
+            current = clock[0]
+            return cls(current.year, current.month, current.day)
+
+    monkeypatch.setattr(cash_models, "date", FixedDate)
+    tomorrow = (clock[0] + timedelta(days=1)).isoformat()
+    today_booking = calculate_receipt(ReceiptTerms.model_validate(terms(received_date=day)))
+    assert today_booking.received_micro == 6_000_000
+    with pytest.raises(ValidationError):
+        ReceiptTerms.model_validate(terms(received_date=tomorrow))
+    clock[0] += timedelta(days=1)
+    next_booking = calculate_receipt(ReceiptTerms.model_validate(terms(received_date=tomorrow)))
+    assert next_booking.received_micro == 6_000_000
+    with pytest.raises(ValidationError):
+        ReceiptTerms.model_validate(terms(received_date=(clock[0] + timedelta(days=1)).isoformat()))
 
 
 @pytest.mark.parametrize(
