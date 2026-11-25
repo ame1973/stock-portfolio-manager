@@ -24,7 +24,7 @@ const result: Schemas["PreviewPage"] = {
 };
 const reply = <T,>(data: T) => ({ data, response: new Response() });
 const endpoint = "/api/v1/dividends/events/{event_id}/revision-preview";
-function mount(readAccounts: (cursor: string | undefined) => { items: Schemas["Account"][]; next_cursor: string | null } = () => ({ items: [account, other], next_cursor: null })) {
+function mount(readAccounts: (cursor: string | undefined) => { items: Schemas["Account"][]; next_cursor: string | null } = () => ({ items: [account, other], next_cursor: null }), onClose?: () => void) {
   const get = vi.spyOn(api, "GET").mockImplementation(async (request, options) => {
     if (request === "/api/v1/accounts") return reply(readAccounts((options as { params: { query: { cursor?: string } } }).params.query.cursor));
     if (request === "/api/v1/auth/csrf") return reply({ csrf_token: "synthetic-csrf-token-123456789" });
@@ -35,7 +35,7 @@ function mount(readAccounts: (cursor: string | undefined) => { items: Schemas["A
     throw new Error("Unexpected write");
   });
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const view = render(<QueryClientProvider client={cache}><DividendRevisionPreviewPanel event={event} /></QueryClientProvider>);
+  const view = render(<QueryClientProvider client={cache}><DividendRevisionPreviewPanel event={event} onClose={onClose} /></QueryClientProvider>);
   return { get, post, cache, ...view };
 }
 
@@ -52,6 +52,23 @@ async function chooseUnknowns() {
 }
 
 describe("hypothetical revision preview", () => {
+  it("allows an invalid event to be closed without reading accounts", async () => {
+    const get = vi.spyOn(api, "GET"); const close = vi.fn();
+    render(<DividendRevisionPreviewPanel event={{ ...event, version: 0 }} onClose={close} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("事件版本無法安全核對");
+    expect(screen.getByRole("heading", { name: "擬議股息修訂預覽" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "取消" })); expect(close).toHaveBeenCalledOnce(); expect(get).not.toHaveBeenCalled();
+  });
+
+  it("keeps a malformed frozen event closed to reads if later props become valid", () => {
+    const get = vi.spyOn(api, "GET");
+    const bad = { ...event, id: null as unknown as string };
+    const view = render(<DividendRevisionPreviewPanel event={bad} />);
+    view.rerender(<DividendRevisionPreviewPanel event={event} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("事件版本無法安全核對");
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it("requires explicit choices for every account and sends no invented values", async () => {
     const { post, cache } = mount();
     expect(await screen.findByRole("group", { name: `估算 ${account.name}` })).toBeVisible();
@@ -125,6 +142,18 @@ describe("hypothetical revision preview", () => {
     expect(screen.getByRole("button", { name: "計算預覽" })).toBeDisabled();
     expect(screen.queryByRole("region", { name: "擬議修訂比較結果" })).not.toBeInTheDocument();
     expect(view.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces a stale-account error with the refreshed scope warning", async () => {
+    let changed = false; const view = mount(() => ({ items: changed ? [account] : [account, other], next_cursor: null }));
+    await screen.findByRole("group", { name: `估算 ${account.name}` }); await chooseUnknowns();
+    view.post.mockImplementation(async () => ({ error: { code: "DIVIDEND_PREVIEW_ACCOUNT_SCOPE_CHANGED" }, response: new Response(null, { status: 409 }) }));
+    fireEvent.click(screen.getByRole("button", { name: "計算預覽" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("帳戶範圍已變更");
+    changed = true; fireEvent.click(screen.getByRole("button", { name: "重新讀取全部帳戶" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("帳戶清單已變更"));
+    expect(screen.getByRole("button", { name: "計算預覽" })).toBeDisabled();
+    expect(screen.getByLabelText("查閱日")).toHaveValue("2026-11-03");
   });
 
   it("keeps input across offline rereads, but discards the old comparison", async () => {
@@ -216,6 +245,17 @@ describe("hypothetical revision preview", () => {
     expect(document.body).not.toHaveTextContent("PRIVATE-ACCOUNT-EXCEPTION");
   });
 
+  it("hides an old comparison when the parent rereads the same event", async () => {
+    const view = mount(); await screen.findByRole("group", { name: `估算 ${account.name}` }); await chooseUnknowns();
+    fireEvent.click(screen.getByRole("button", { name: "計算預覽" })); await screen.findByRole("region", { name: "擬議修訂比較結果" });
+    view.rerender(<QueryClientProvider client={view.cache}><DividendRevisionPreviewPanel event={event} enabled={false} /></QueryClientProvider>);
+    expect(screen.queryByRole("region", { name: "擬議修訂比較結果" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "計算預覽" })).toBeDisabled();
+    view.rerender(<QueryClientProvider client={view.cache}><DividendRevisionPreviewPanel event={event} eventReadVersion={1} /></QueryClientProvider>);
+    expect(screen.queryByRole("region", { name: "擬議修訂比較結果" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("查閱日")).toHaveValue("2026-11-03"); expect(screen.getByRole("button", { name: "計算預覽" })).toBeEnabled();
+  });
+
   it("withholds a late preview after a manual account reread", async () => {
     const view = mount(); await screen.findByRole("group", { name: `估算 ${account.name}` }); await chooseUnknowns();
     let finish: ((value: ReturnType<typeof reply<Schemas["PreviewPage"]>>) => void) | undefined;
@@ -228,6 +268,33 @@ describe("hypothetical revision preview", () => {
     expect(screen.getByLabelText("查閱日")).toHaveValue("2026-11-03");
     fireEvent.click(screen.getByRole("button", { name: "計算預覽" }));
     expect(await screen.findByRole("region", { name: "擬議修訂比較結果" })).toBeVisible();
+  });
+
+  it.each(["DIVIDEND_PREVIEW_ACCOUNT_SCOPE_CHANGED", "DIVIDEND_PREVIEW_SNAPSHOT_CHANGED"])('requires a fresh account read after %s', async code => {
+    const view = mount(); await screen.findByRole("group", { name: `估算 ${account.name}` }); await chooseUnknowns();
+    view.post.mockImplementation(async () => ({ error: { code }, response: new Response(null, { status: 409 }) }));
+    fireEvent.click(screen.getByRole("button", { name: "計算預覽" })); await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "計算預覽" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("擬議每股股息"), { target: { value: "1.3" } });
+    expect(screen.getByRole("alert")).toBeVisible();
+    view.rerender(<QueryClientProvider client={view.cache}><DividendRevisionPreviewPanel event={event} eventReadVersion={1} /></QueryClientProvider>);
+    expect(screen.getByRole("button", { name: "計算預覽" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新讀取全部帳戶" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "計算預覽" })).toBeEnabled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument(); expect(screen.getByLabelText("擬議每股股息")).toHaveValue("1.3");
+  });
+
+  it("requires a fresh event read, not just accounts, after a version conflict", async () => {
+    const view = mount(); await screen.findByRole("group", { name: `估算 ${account.name}` }); await chooseUnknowns();
+    view.post.mockImplementation(async () => ({ error: { code: "PRECONDITION_FAILED" }, response: new Response(null, { status: 412 }) }));
+    fireEvent.click(screen.getByRole("button", { name: "計算預覽" })); await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "計算預覽" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新讀取全部帳戶" }));
+    await waitFor(() => expect(view.get.mock.calls.length).toBeGreaterThanOrEqual(3));
+    expect(screen.getByRole("button", { name: "計算預覽" })).toBeDisabled();
+    view.rerender(<QueryClientProvider client={view.cache}><DividendRevisionPreviewPanel event={event} eventReadVersion={1} /></QueryClientProvider>);
+    await waitFor(() => expect(screen.getByRole("button", { name: "計算預覽" })).toBeEnabled());
+    expect(screen.getByLabelText("查閱日")).toHaveValue("2026-11-03");
   });
 
   it("requires no invented identity rate when the proposed currency is HKD", async () => {
@@ -259,7 +326,7 @@ describe("hypothetical revision preview", () => {
   it.each([
     ["DIVIDEND_PREVIEW_ACCOUNT_SCOPE_CHANGED", "帳戶範圍已變更"],
     ["DIVIDEND_PREVIEW_SNAPSHOT_CHANGED", "比較資料已變更"],
-    ["PRECONDITION_FAILED", "紀錄已變更"],
+    ["PRECONDITION_FAILED", "事件版本已變更"],
     ["DIVIDEND_REVISION_PREVIEW_UNAVAILABLE", "無法安全核對"],
   ])("keeps input and reports a safe error for %s", async (code, message) => {
     const { post } = mount(); await screen.findByRole("group", { name: `估算 ${account.name}` }); await chooseUnknowns();
@@ -270,13 +337,13 @@ describe("hypothetical revision preview", () => {
     expect(screen.queryByRole("region", { name: "擬議修訂比較結果" })).not.toBeInTheDocument();
   });
 
-  it("aborts a pending preview on unmount", async () => {
-    const view = mount(); await screen.findByRole("group", { name: `估算 ${account.name}` }); await chooseUnknowns();
+  it("can close and abort a pending read-only preview", async () => {
+    const close = vi.fn(); const view = mount(undefined, close); await screen.findByRole("group", { name: `估算 ${account.name}` }); await chooseUnknowns();
     let signal: AbortSignal | undefined;
     view.post.mockImplementation(async (_request, options) => new Promise(() => { signal = (options as { signal: AbortSignal }).signal; }));
     fireEvent.click(screen.getByRole("button", { name: "計算預覽" }));
-    await waitFor(() => expect(signal).toBeDefined()); expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
-    view.unmount(); expect(signal?.aborted).toBe(true);
+    await waitFor(() => expect(signal).toBeDefined()); fireEvent.click(screen.getByRole("button", { name: "中止並關閉預覽" }));
+    expect(close).toHaveBeenCalledOnce(); view.unmount(); expect(signal?.aborted).toBe(true);
   });
 
   it("keeps the same token across pages and rejects a changed first page", async () => {

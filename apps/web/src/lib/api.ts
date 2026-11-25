@@ -66,7 +66,7 @@ const messages: Record<string, string> = {
   INVALID_BASIS_SCOPE: "基準日期或明確行動範圍不符；請保留輸入並逐筆核對。",
   DIVIDEND_EVENT_HISTORY_UNAVAILABLE: "股息事件歷史無法安全核對；請重新載入或檢查伺服器狀態及有效備份。",
   DIVIDEND_PREVIEW_ACCOUNT_SCOPE_CHANGED: "目前帳戶範圍已變更；請保留輸入，重新載入帳戶並逐一核對。",
-  DIVIDEND_PREVIEW_SNAPSHOT_CHANGED: "比較資料已變更；請保留輸入並重新計算，不會混合不同頁面的資料。",
+  DIVIDEND_PREVIEW_SNAPSHOT_CHANGED: "比較資料已變更；請保留輸入，重新讀取帳戶後再計算，不會混合不同頁面的資料。",
   DIVIDEND_REVISION_PREVIEW_UNAVAILABLE: "擬議修訂比較無法安全核對；請檢查歷史及有效備份，不會推定金額。",
   DIVIDEND_REJECTION_HISTORY_UNAVAILABLE: "拒絕歷史無法安全核對；請重新載入或檢查伺服器狀態及有效備份。",
   DIVIDEND_REVISION_REJECTED: "此事件版本已記錄拒絕；請保留輸入，重新載入並核對拒絕歷史，不能新增估算或投影，亦不能新增直接收款。",

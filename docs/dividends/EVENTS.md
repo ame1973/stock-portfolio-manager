@@ -2286,7 +2286,34 @@ replaying a historical response. The calculation itself changes no event, projec
 cash, FX, audit, task or portfolio data; standard authentication may update an idle session's
 last-seen timestamp. It does not establish payment, historical ownership, completeness or
 eligibility, accept proposed terms, remove the existing revision/rejection fences, or produce a
-reconciliation task. The mounted dividend workspace does not yet offer a revision-preview form.
+reconciliation task.
+
+## Hypothetical revision preview in the browser
+
+Open an event and choose **預覽擬議修訂**. The form freezes its event and reads every current
+account, including archived accounts, into component memory. The page-level form retains its input
+when responsive event cards remount or the selected event leaves the current list; calculation is
+paused until the selected event is visible and freshly read. Focus moves into the preview on open and
+returns to its opener, or to the page heading if the opener no longer exists, on close. Enter an explicit proposed ex-date,
+as-of day, holding rule, DPS, currency and amount basis. For each account, explicitly provide or
+mark unknown the tax and fee estimates and any required foreign-fee and HKD conversion rates and
+sources. Identity conversion is mathematical; missing foreign FX, tax and fees are never filled with
+zero or a default rate. Empty account or holding history is not a confirmed zero position.
+
+The form submits a private, no-store read, validates returned scope and exact decimal arithmetic,
+and displays account-specific historical projection, receipt counts, hypothetical components,
+differences and separately labelled projection/comparison quality. Page navigation recomputes the
+entire preview and binds pages to the same session token; a changed token or account-scope conflict
+requires a fresh account read before recalculation, while an event-version conflict requires a fresh
+event-list read. Rereading the event or account list hides an old result. If the observed event
+or account identities change, the form retains its input while open but disables calculation; note
+any needed input, close the preview and reopen it against the new scope. Offline, failed or pending
+reads cannot start a calculation. Closing the preview discards the in-memory form and aborts pending
+reads; no draft, cursor, estimates or snapshot token is stored in browser persistence or query caches.
+
+This is a hypothetical comparison, not a revision editor, payment verification or eligibility grant.
+It does not create a projection or task, establish history completeness, or bypass the existing
+revision, withdrawal and rejection fences.
 
 ## Internal recorded-reconciliation comparison
 

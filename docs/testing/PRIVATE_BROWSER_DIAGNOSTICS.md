@@ -299,7 +299,18 @@ projection and USD 8 receipts: delta USD 1 and recorded difference USD 4. Missin
 explicit; the empty account is not called confirmed zero. Both real responses are passed through
 the separate frontend exact-string/BigInt scope validator, which also rejects a substituted page
 token. Changing the proposed DPS while continuing the page returns 409 without database changes.
-This checks the API and validator, not a mounted preview form or accepted revision.
+Separately, the built SPA opens the actual form by keyboard, reads all accounts privately, enters
+explicit tax/fee values and unknown HKD FX, and displays the 12/11/8/4 comparison at 360/768/1440.
+It checks no-store, exact event `If-Match`, keyboard focus, the empty-account warning and unchanged
+tables; an in-progress form survives mobile/tablet/desktop viewport changes, and a held read can be
+explicitly aborted and closed without changing tables. A new
+synthetic account then makes the still-open form's account scope stale: the actual API returns 409,
+input is retained, no additional tables change and a fresh account read disables calculation until
+the preview is reopened. The fixture then adds further synthetic accounts, opens the form again,
+explicitly marks each estimate unknown and checks real next/previous navigation across 25 plus one
+account with the same session token. A later protected account rename changes the preview snapshot:
+the next page returns 409, hides the comparison and retains input without further writes. Neither
+path accepts a revision.
 
 The browser also verifies an independent comparison of 11 expected, 8 recorded and 3 difference,
 with unverified labels and

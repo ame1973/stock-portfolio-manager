@@ -58,6 +58,49 @@ async function openEvent() {
 }
 
 describe("dividend event workspace", () => {
+  it("opens a private hypothetical preview only on explicit request", async () => {
+    const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null } });
+    const post = vi.spyOn(api, "POST"); const cache = renderPage(); await openEvent();
+    expect(get).not.toHaveBeenCalledWith("/api/v1/accounts", expect.anything());
+    const opener = screen.getByRole("button", { name: "預覽擬議修訂" }); fireEvent.click(opener);
+    const panel = await screen.findByRole("region", { name: "擬議股息修訂預覽" });
+    expect(await within(panel).findByRole("group", { name: `估算 ${receiptAccount.name}` })).toBeVisible();
+    expect(within(panel).getByRole("heading", { name: "擬議股息修訂預覽" })).toHaveFocus();
+    expect(panel).toHaveTextContent("不會接受修訂或改寫收款"); expect(post).not.toHaveBeenCalled();
+    expect(cache.getQueryCache().getAll().some(query => JSON.stringify(query.queryKey).includes("revision-preview"))).toBe(false);
+    fireEvent.click(within(panel).getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("region", { name: "擬議股息修訂預覽" })).not.toBeInTheDocument();
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
+
+  it("keeps hypothetical inputs but blocks use when the event version changes", async () => {
+    reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null } });
+    const post = vi.spyOn(api, "POST"); const cache = renderPage(); await openEvent();
+    fireEvent.click(screen.getByRole("button", { name: "預覽擬議修訂" }));
+    const panel = await screen.findByRole("region", { name: "擬議股息修訂預覽" });
+    await within(panel).findByRole("group", { name: `估算 ${receiptAccount.name}` });
+    fireEvent.change(within(panel).getByLabelText("查閱日"), { target: { value: "2026-11-03" } });
+    await act(async () => cache.setQueriesData({ queryKey: ["dividends", "events"] }, { items: [{ ...event, version: 3,
+      current_revision_id: "88888888-8888-4888-8888-888888888888" }], next_cursor: null }));
+    expect(within(panel).getByLabelText("查閱日")).toHaveValue("2026-11-03");
+    expect(await within(panel).findByRole("alert")).toHaveTextContent("事件版本已變更");
+    expect(within(panel).getByRole("button", { name: "計算預覽" })).toBeDisabled(); expect(post).not.toHaveBeenCalled();
+  });
+
+  it("retains preview input when the event leaves the current list", async () => {
+    reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null } }); const cache = renderPage(); await openEvent();
+    fireEvent.click(screen.getByRole("button", { name: "預覽擬議修訂" }));
+    const panel = await screen.findByRole("region", { name: "擬議股息修訂預覽" });
+    await within(panel).findByRole("group", { name: `估算 ${receiptAccount.name}` });
+    fireEvent.change(within(panel).getByLabelText("查閱日"), { target: { value: "2026-11-03" } });
+    await act(async () => cache.setQueriesData({ queryKey: ["dividends", "events"] }, { items: [], next_cursor: null }));
+    await waitFor(() => expect(within(panel).getByRole("button", { name: "計算預覽" })).toBeDisabled());
+    expect(within(panel).getByLabelText("查閱日")).toHaveValue("2026-11-03");
+    expect(within(panel).getByRole("status")).toHaveTextContent("尚未重新核對");
+    fireEvent.click(within(panel).getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "股息事件", level: 1 })).toHaveFocus());
+  });
+
   it("opens receipt history only after an explicit account selection without writing", async () => {
     const path = "/api/v1/dividends/events/{event_id}/accounts/{account_id}/recorded-receipts";
     const get = reads({ "/api/v1/accounts": { items: [receiptAccount], next_cursor: null }, [path]: empty });

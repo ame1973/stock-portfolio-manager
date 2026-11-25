@@ -76,6 +76,8 @@ const reviewReasons: Record<Item["eligibility_reasons"][number], string> = {
 const blank = (account: Account): Values["accounts"][number] => ({ accountId: account.id, taxMode: "", taxRate: "", feeMode: "", fee: "",
   feeCurrency: "", feeRateMode: "", feeRate: "", feeSource: "", hkdMode: "", hkdRate: "", hkdSource: "" });
 
+async function invalidAccounts(): Promise<Account[]> { throw new Error("INVALID_EVENT"); }
+
 async function allAccounts(_cursor: string | undefined, signal: AbortSignal): Promise<Account[]> {
   const accounts: Account[] = []; const ids = new Set<string>(); const cursors = new Set<string>();
   let cursor: string | undefined;
@@ -124,9 +126,10 @@ function EstimateFields({ index, account, control, register, errors, currency }:
   </fieldset>;
 }
 
-type ReadPage = { value: PreviewPage; request: PreviewRequest; token: string; cursors: (string | null)[]; readVersion: number };
+type ReadPage = { value: PreviewPage; request: PreviewRequest; token: string; cursors: (string | null)[]; readVersion: string };
 
 function safeFailure(cause: unknown) {
+  if (cause instanceof ApiRequestError && cause.code === "PRECONDITION_FAILED") return "事件版本已變更；請保留輸入並使用「重新載入股息事件」核對。";
   return cause instanceof ApiRequestError || cause instanceof TypeError ? failureMessage(cause) : "資料無法安全核對；請重新載入後再試。";
 }
 
@@ -139,32 +142,56 @@ function sameAccounts(frozen: Account[], current: Account[]) {
   });
 }
 
-export function DividendRevisionPreviewPanel({ event: observed, onClose = () => {} }: { event: Event; onClose?: () => void }) {
+export function DividendRevisionPreviewPanel({ event: observed, onClose = () => {}, enabled = true, eventReadVersion = 0 }: {
+  event: Event; onClose?: () => void; enabled?: boolean; eventReadVersion?: number;
+}) {
   const [event] = useState(() => structuredClone(observed));
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { heading.current?.focus(); }, []);
   const [readVersion, setReadVersion] = useState(0);
-  const accountRead = usePrivatePage(`revision-preview:${event.id}:${event.current_revision_id}:${event.version}`, undefined, allAccounts);
+  const validEvent = validEstimateEvent(event);
+  const accountRead = usePrivatePage(`revision-preview:${event.id}:${event.current_revision_id}:${event.version}`, undefined,
+    validEvent ? allAccounts : invalidAccounts);
   const accounts = accountRead.data;
-  const available = !!accounts && !accountRead.isFetching && !accountRead.isPaused && !accountRead.isError;
-  if (!validEstimateEvent(event)) return <p role="alert" className="text-sm text-danger">事件版本無法安全核對；請重新載入。</p>;
+  const eventMatches = validEvent && validEstimateEvent(observed) && sameId(observed.id, event.id) && sameId(observed.current_revision_id, event.current_revision_id)
+    && sameId(observed.security_id, event.security_id) && observed.version === event.version && observed.ex_date === event.ex_date
+    && observed.dps === event.dps && observed.currency === event.currency && observed.adjustment_basis === event.adjustment_basis
+    && observed.workflow_status === event.workflow_status;
+  const available = !!accounts && !accountRead.isFetching && !accountRead.isPaused && !accountRead.isError && enabled && eventMatches;
+  if (!validEvent) return <section aria-label="擬議股息修訂預覽" className="grid min-w-0 gap-4">
+    <h2 ref={heading} tabIndex={-1} className="text-xl font-semibold">擬議股息修訂預覽</h2>
+    <p role="alert" className="text-sm text-danger">事件版本無法安全核對；請重新載入。</p>
+    <div><Button type="button" variant="outline" onClick={onClose}>取消</Button></div>
+  </section>;
   return <section aria-label="擬議股息修訂預覽" className="grid min-w-0 gap-4">
+    <h2 ref={heading} tabIndex={-1} className="text-xl font-semibold">擬議股息修訂預覽</h2>
     <p className="text-sm leading-7 text-secondary">固定事件版本 {event.version}／{event.current_revision_id}。這只是比較，不會接受修訂或改寫收款；不代表付款、持倉資格或收入已確認。</p>
     {accountRead.isPaused ? <p role="status" className="text-sm text-secondary">連線已暫停；重新連線後必須重新讀取帳戶。</p>
       : accountRead.isFetching ? <p role="status" className="text-sm text-secondary">正在讀取全部目前帳戶…</p> : null}
     {accountRead.isError && <p role="alert" className="text-sm text-danger">{safeFailure(accountRead.error)}</p>}
+    {!eventMatches && <p role="alert" className="text-sm text-danger">事件版本已變更；輸入仍保留。請先記下需要的內容，再關閉並重新開啟預覽。</p>}
+    {!enabled && <p role="status" className="text-sm text-secondary">事件清單或編輯狀態尚未重新核對；暫停計算。</p>}
     <div className="flex flex-wrap gap-3"><Button type="button" variant="outline" disabled={accountRead.isFetching || accountRead.isPaused}
       onClick={() => { setReadVersion(value => value + 1); accountRead.refetch(); }}>重新讀取全部帳戶</Button>
       {!accounts && <Button type="button" variant="outline" onClick={onClose}>取消</Button>}</div>
-    {accounts && <PreviewForm event={event} currentAccounts={accounts} available={available} readVersion={readVersion} onClose={onClose} />}
+    {accounts && <PreviewForm event={event} currentAccounts={accounts} available={available} accountReadVersion={readVersion}
+      eventReadVersion={eventReadVersion} onClose={onClose} />}
   </section>;
 }
 
-function PreviewForm({ event, currentAccounts, available, readVersion, onClose }: {
-  event: Event; currentAccounts: Account[]; available: boolean; readVersion: number; onClose: () => void;
+function PreviewForm({ event, currentAccounts, available, accountReadVersion, eventReadVersion, onClose }: {
+  event: Event; currentAccounts: Account[]; available: boolean; accountReadVersion: number; eventReadVersion: number; onClose: () => void;
 }) {
   const [accounts] = useState(() => structuredClone(currentAccounts));
+  const [staleAccounts, setStaleAccounts] = useState<number | null>(null);
+  const [staleEvent, setStaleEvent] = useState<number | null>(null);
   const matches = sameAccounts(accounts, currentAccounts);
-  const ready = available && matches;
-  const [preview, setPreview] = useState<ReadPage | null>(null); const [error, setError] = useState<string | null>(null);
+  const baseReady = available && matches;
+  const needsAccounts = staleAccounts === accountReadVersion;
+  const needsEvent = staleEvent === eventReadVersion;
+  const ready = baseReady && !needsAccounts && !needsEvent;
+  const readVersion = `${accountReadVersion}:${eventReadVersion}`;
+  const [preview, setPreview] = useState<ReadPage | null>(null); const [error, setError] = useState<{ message: string; readVersion: string } | null>(null);
   const [pending, setPending] = useState(false); const active = useRef<AbortController | null>(null);
   const { register, control, handleSubmit, formState: { errors } } = useForm<Values>({ resolver: zodResolver(schema),
     defaultValues: { exDate: event.ex_date, asOf: "", rule: "", dps: event.dps, currency: event.currency, basis: event.adjustment_basis,
@@ -186,13 +213,17 @@ function PreviewForm({ event, currentAccounts, available, readVersion, onClose }
         params: { path: { event_id: event.id }, header }, body, signal: controller.signal,
       }));
       if (controller.signal.aborted) return;
-      checkedRevisionPreview(value, event, accounts, body);
       if (expectedToken !== null && value.snapshot_token !== expectedToken) {
-        setPreview(null); setError("預覽已變更；請重新計算，不會混合不同快照。"); return;
+        setStaleAccounts(accountReadVersion); setPreview(null); setError({ message: "預覽已變更；請重新讀取帳戶後計算，不會混合不同快照。", readVersion }); return;
       }
+      checkedRevisionPreview(value, event, accounts, body);
       setPreview({ value, request: body, token: expectedToken ?? value.snapshot_token, cursors, readVersion });
     } catch (cause) {
-      if (!controller.signal.aborted) { setPreview(null); setError(safeFailure(cause)); }
+      if (!controller.signal.aborted) {
+        if (cause instanceof ApiRequestError && ["DIVIDEND_PREVIEW_ACCOUNT_SCOPE_CHANGED", "DIVIDEND_PREVIEW_SNAPSHOT_CHANGED"].includes(cause.code)) setStaleAccounts(accountReadVersion);
+        if (cause instanceof ApiRequestError && cause.code === "PRECONDITION_FAILED") setStaleEvent(eventReadVersion);
+        setPreview(null); setError({ message: safeFailure(cause), readVersion });
+      }
     } finally {
       if (!controller.signal.aborted) { active.current = null; setPending(false); }
     }
@@ -201,7 +232,7 @@ function PreviewForm({ event, currentAccounts, available, readVersion, onClose }
   function submit(values: Values) {
     if (!ready || pending || values.accounts.length !== accounts.length
       || values.accounts.some((item, index) => !sameId(item.accountId, accounts[index]!.id))) {
-      setError("帳戶範圍已變更；請重新載入並逐一核對。"); return;
+      setError({ message: "帳戶範圍已變更；請重新載入並逐一核對。", readVersion }); return;
     }
     const estimates: Schemas["AccountEstimate"][] = values.accounts.map(item => {
       const feeCurrency = item.feeCurrency === "UNKNOWN" || item.feeCurrency === "" ? null : item.feeCurrency;
@@ -232,7 +263,7 @@ function PreviewForm({ event, currentAccounts, available, readVersion, onClose }
   return <>
     {!matches && <p role="alert" className="text-sm text-danger">帳戶清單已變更；輸入仍保留。請先記下需要的內容，再關閉並重新開啟預覽以核對所有帳戶。</p>}
     <form aria-label="擬議修訂預覽" aria-busy={pending} className="panel grid gap-5"
-      onChange={() => { setPreview(null); setError(null); }} onSubmit={event => { void handleSubmit(submit)(event); }}>
+      onChange={() => { setPreview(null); if (!needsAccounts && !needsEvent) setError(null); }} onSubmit={event => { void handleSubmit(submit)(event); }}>
       <h3 className="text-lg font-semibold">擬議修訂預覽</h3>
       <fieldset disabled={pending} className="grid gap-5 sm:grid-cols-2">
       <Field label="擬議除淨日" type="date" {...register("exDate")} error={errors.exDate?.message} />
@@ -245,9 +276,9 @@ function PreviewForm({ event, currentAccounts, available, readVersion, onClose }
       {accounts.length === 0 && <p className="text-sm text-secondary sm:col-span-2">目前沒有帳戶；這不是已確認零持倉。</p>}
       {accounts.map((account, index) => <EstimateFields key={account.id} index={index} account={account} control={control} register={register} errors={errors} currency={currency} />)}
       </fieldset>
-      {error && <p role="alert" className="text-sm leading-6 text-danger">{error}</p>}
+      {baseReady && error && (error.readVersion === readVersion || needsAccounts || needsEvent) && <p role="alert" className="text-sm leading-6 text-danger">{error.message}</p>}
       <div className="flex flex-wrap gap-3"><Button type="submit" disabled={pending || !ready}>{pending ? "正在計算…" : "計算預覽"}</Button>
-        <Button type="button" variant="outline" disabled={pending} onClick={onClose}>取消</Button></div>
+        <Button type="button" variant="outline" onClick={onClose}>{pending ? "中止並關閉預覽" : "取消"}</Button></div>
     </form>
     {visiblePreview && <section aria-label="擬議修訂比較結果" className="grid min-w-0 gap-3 border-t border-border pt-4">
       <h4 className="font-semibold">擬議修訂比較結果</h4>

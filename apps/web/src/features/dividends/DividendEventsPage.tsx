@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, type components } from "@spm/contracts";
@@ -20,6 +20,7 @@ import { CandidateEventMatchForm } from "./CandidateEventMatchForm";
 import { DividendEstimatePanel } from "./DividendEstimatePanel";
 import { DividendProjectionPanel } from "./DividendProjectionPanel";
 import { DividendReceiptPanel } from "./DividendReceiptPanel";
+import { DividendRevisionPreviewPanel } from "./DividendRevisionPreviewPanel";
 import { ProjectionWriteForm } from "./ProjectionWriteForm";
 import { ReceiptWriteForm } from "./ReceiptWriteForm";
 import { ReceiptVoidForm } from "./ReceiptVoidForm";
@@ -151,7 +152,7 @@ function RejectionHistory({ record }: { record: Event }) {
     </article>}</RecordList></section>;
 }
 
-function EventCard({ record, disabled, associationDisabled, onOpen, estimateRefresh, projectionRefresh, receiptRefresh }: { record: Event; disabled: boolean; associationDisabled: boolean; onOpen: (editor: Editor) => void; estimateRefresh: number; projectionRefresh: number; receiptRefresh: number }) {
+function EventCard({ record, disabled, associationDisabled, onOpen, onPreview, estimateRefresh, projectionRefresh, receiptRefresh }: { record: Event; disabled: boolean; associationDisabled: boolean; onOpen: (editor: Editor) => void; onPreview: (event: Event, opener: HTMLButtonElement) => void; estimateRefresh: number; projectionRefresh: number; receiptRefresh: number }) {
   const desktop = useDesktop();
   const [open, setOpen] = useState(false);
   const [revisions, setRevisions] = useState(false);
@@ -171,7 +172,8 @@ function EventCard({ record, disabled, associationDisabled, onOpen, estimateRefr
         <Button variant="outline" aria-expanded={rejections} onClick={() => setRejections(value => !value)}>{rejections ? "收合拒絕歷史" : "查看拒絕歷史"}</Button>
         <Button variant="outline" aria-expanded={estimates} onClick={() => setEstimates(value => !value)}>{estimates ? "收合帳戶稅費估算" : "查看帳戶稅費估算"}</Button>
         <Button variant="outline" aria-expanded={projections} onClick={() => setProjections(value => !value)}>{projections ? "收合帳戶投影歷史" : "查看帳戶投影歷史"}</Button>
-        <Button variant="outline" aria-expanded={receipts} onClick={() => setReceipts(value => !value)}>{receipts ? "收合帳戶收款紀錄" : "查看帳戶收款紀錄"}</Button></div>
+        <Button variant="outline" aria-expanded={receipts} onClick={() => setReceipts(value => !value)}>{receipts ? "收合帳戶收款紀錄" : "查看帳戶收款紀錄"}</Button>
+        <Button variant="outline" disabled={associationDisabled} onClick={event => onPreview(record, event.currentTarget)}>預覽擬議修訂</Button></div>
       {revisions && <RevisionHistory record={record} />}{rejections && <RejectionHistory record={record} />}
       {estimates && <DividendEstimatePanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={estimateRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "estimate", target })} />}
       {projections && <DividendProjectionPanel key={`${record.id}:${record.current_revision_id}:${record.version}`} event={record} refresh={projectionRefresh} writeDisabled={associationDisabled} onWrite={target => onOpen({ mode: "projection", target })} />}
@@ -235,6 +237,9 @@ const initialFilters = { security_id: "", workflow_status: "" as "" | Event["wor
 export function DividendEventsPage() {
   const cache = useQueryClient();
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<Event | null>(null);
+  const previewOpener = useRef<HTMLButtonElement | null>(null);
+  const pageTitle = useRef<HTMLHeadingElement | null>(null);
   const [estimateRefresh, setEstimateRefresh] = useState(0);
   const [projectionRefresh, setProjectionRefresh] = useState(0);
   const [receiptRefresh, setReceiptRefresh] = useState(0);
@@ -248,15 +253,24 @@ export function DividendEventsPage() {
     } }, signal })),
   });
   function filter(change: Partial<typeof initialFilters>) { setFilters(previous => ({ ...previous, ...change })); page.search(page.q); }
-  const editing = editor !== null;
+  const editing = editor !== null || previewTarget !== null;
   const eventsReady = !!result.data && !result.isFetching && !result.isError && !result.isPaused;
+  const previewEvent = previewTarget && result.data?.items.find(record => record.id === previewTarget.id);
+  function closePreview() {
+    setPreviewTarget(null);
+    requestAnimationFrame(() => {
+      const opener = previewOpener.current;
+      if (opener?.isConnected && !opener.disabled) opener.focus(); else pageTitle.current?.focus();
+      previewOpener.current = null;
+    });
+  }
   function closeEditor() {
     if (editor?.mode === "estimate") setEstimateRefresh(value => value + 1);
     if (editor?.mode === "projection") setProjectionRefresh(value => value + 1);
     if (editor?.mode === "receipt" || editor?.mode === "receipt-void") setReceiptRefresh(value => value + 1);
     setEditor(null); void cache.invalidateQueries({ queryKey: ["dividends"] });
   }
-  return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 className="text-2xl font-semibold">股息事件</h1>
+  return <div className="grid min-w-0 gap-6"><header className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h1 ref={pageTitle} tabIndex={-1} className="text-2xl font-semibold">股息事件</h1>
     <p className="mt-2 text-sm leading-7 text-secondary">查看已記錄的事件決定、來源與歷史；人工接受不是文件驗證或持倉資格，這裡不確認應收或實收。未知不會補零。</p>
     <div className="flex flex-wrap gap-x-5"><Link to="/dividends/candidates" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息候選資料</Link>
       <Link to="/data-center/dividends" className="inline-flex min-h-11 items-center text-sm text-primary underline">查看股息來源觀測</Link></div></div>
@@ -267,6 +281,8 @@ export function DividendEventsPage() {
       : editor.mode === "projection" ? <ProjectionEditor target={editor.target} onCancel={closeEditor} onSaved={id => { setNotice({ id, mode: "projection" }); closeEditor(); }} />
       : editor.mode === "estimate" ? <EstimateEditor target={editor.target} onCancel={closeEditor} onSaved={id => { setNotice({ id, mode: "estimate" }); closeEditor(); }} />
         : <EventEditor editor={editor} onCancel={closeEditor} onSaved={record => { setNotice({ id: record.id, mode: editor.mode }); closeEditor(); }} />)}
+    {previewTarget && <DividendRevisionPreviewPanel key={previewTarget.id} event={previewEvent ?? previewTarget}
+      enabled={editor === null && eventsReady && !!previewEvent} eventReadVersion={result.dataUpdatedAt} onClose={closePreview} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選股息事件</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><ReferenceSelect kind="securities" activeOnly={false} label="事件證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
         <SelectField label="事件狀態" value={filters.workflow_status} onChange={event => filter({ workflow_status: event.target.value as typeof filters.workflow_status })}><option value="">全部事件狀態</option>{(Object.keys(statuses) as Event["workflow_status"][]).map(status => <option key={status} value={status}>{statuses[status]}</option>)}</SelectField>
@@ -281,6 +297,6 @@ export function DividendEventsPage() {
       { id: "dps", header: "每股事件金額，非收入", cell: ({ row }) => `${row.original.currency} ${row.original.dps}` },
       { id: "status", header: "事件決定，非拒絕狀態", cell: ({ row }) => statuses[row.original.workflow_status] },
       { id: "pay", header: "付款日", cell: ({ row }) => row.original.pay_date ?? "未知" },
-    ]}>{record => <EventCard record={record} disabled={editing} associationDisabled={editing || !eventsReady} estimateRefresh={estimateRefresh} projectionRefresh={projectionRefresh} receiptRefresh={receiptRefresh} onOpen={value => { setNotice(null); setEditor(value); }} />}</RecordList>
+    ]}>{record => <EventCard record={record} disabled={editing} associationDisabled={editing || !eventsReady} estimateRefresh={estimateRefresh} projectionRefresh={projectionRefresh} receiptRefresh={receiptRefresh} onPreview={(target, opener) => { previewOpener.current = opener; setPreviewTarget(target); }} onOpen={value => { setNotice(null); setEditor(value); }} />}</RecordList>
   </div>;
 }

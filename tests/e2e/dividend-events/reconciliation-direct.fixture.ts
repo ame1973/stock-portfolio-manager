@@ -82,7 +82,7 @@ test("cross-store recorded comparison stays private and does not grant payment",
   } });
   expect(rejection.status()).toBe(409); expect((await rejection.json() as { code: string }).code).toBe("DIVIDEND_EVENT_PROJECTION_REQUIRED");
   expect(database()).toEqual(before);
-  stage("COMPARE");
+  stage("PREVIEW_API");
   const previewUrl = `/api/v1/dividends/events/${event.id}/revision-preview`;
   const previewBody: Schemas["PreviewRequest"] = {
     revision_id: event.current_revision_id, limit: 1, after_account_id: null, snapshot_token: null,
@@ -128,7 +128,7 @@ test("cross-store recorded comparison stays private and does not grant payment",
   expect(stalePreview.status()).toBe(409); expect(stalePreview.headers()["cache-control"]).toBe("no-store");
   expect((await stalePreview.json() as { code: string }).code).toBe("DIVIDEND_PREVIEW_SNAPSHOT_CHANGED");
   expect(database()).toEqual(before);
-  stage("COMPARE");
+  stage("PREVIEW_HISTORY");
   const combinedResponse = await page.request.get(`${base}/recorded-receipts?limit=1`);
   expect(combinedResponse.status()).toBe(200); expect(combinedResponse.headers()["cache-control"]).toBe("no-store");
   const directPage = await combinedResponse.json() as Schemas["Page_CombinedRecordedReceipt_"];
@@ -194,9 +194,142 @@ test("cross-store recorded comparison stays private and does not grant payment",
     for (const amount of ["11.000000", "8.000000", "3.000000"]) await expect(panel).toContainText(`USD ${amount}`);
     await expect(panel).toContainText("不代表付款、資格或收入已確認"); await expect(panel).toContainText("收款來源稽核未核對 1 筆");
     const box = (await panel.boundingBox())!; expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
+    stage("PREVIEW_UI_OPEN");
+    const accountsResponse = page.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/accounts" && response.request().method() === "GET");
+    const previewOpen = article.getByRole("button", { name: "預覽擬議修訂" }); await previewOpen.focus(); await page.keyboard.press("Enter");
+    const accountsRead = await accountsResponse; expect(accountsRead.status()).toBe(200); expect(accountsRead.headers()["cache-control"]).toBe("no-store");
+    const preview = page.getByRole("region", { name: "擬議股息修訂預覽" });
+    await expect(preview.getByRole("heading", { name: "擬議股息修訂預覽" })).toBeFocused();
+    stage("PREVIEW_UI_INPUT");
+    await expect(preview).toContainText("不會接受修訂或改寫收款");
+    await preview.getByLabel("查閱日").fill("2026-11-03"); await preview.getByLabel("持股規則").selectOption("ORDINARY_PRE_EX_DATE");
+    await preview.getByLabel("擬議每股股息").fill("1.2"); await preview.getByLabel("擬議每股股息").focus(); await page.keyboard.press("Tab");
+    await expect(preview.getByLabel("擬議幣別")).toBeFocused();
+    for (const name of ["Synthetic cross reconciliation account", "Synthetic comparison empty account"]) {
+      const group = preview.getByRole("group", { name: `估算 ${name}` });
+      await group.getByLabel("稅率估算").selectOption("PROVIDED"); await group.getByLabel("稅率小數").fill("0");
+      await group.getByLabel("費用估算").selectOption("PROVIDED"); await group.getByLabel("估算費用").fill("0");
+      await group.getByLabel("費用幣別").selectOption("USD"); await group.getByLabel("港幣估值匯率").selectOption("UNKNOWN");
+    }
+    if (width === 360) {
+      stage("PREVIEW_UI_RESIZE");
+      for (const resizedWidth of [768, 1440, 360]) {
+        await page.setViewportSize({ width: resizedWidth, height: 900 });
+        await expect(preview.getByLabel("擬議每股股息")).toHaveValue("1.2");
+        await expect(preview.getByRole("group", { name: "估算 Synthetic cross reconciliation account" }).getByLabel("稅率小數")).toHaveValue("0");
+      }
+    }
+    stage("PREVIEW_UI_SUBMIT");
+    const previewResponse = page.waitForResponse(response => new URL(response.url()).pathname === previewUrl && response.request().method() === "POST");
+    await preview.getByRole("button", { name: "計算預覽" }).click(); const calculated = await previewResponse;
+    expect(calculated.status()).toBe(200); expect(calculated.headers()["cache-control"]).toBe("no-store");
+    expect(calculated.request().headers()["if-match"]).toBe(`"${event.version}"`);
+    stage("PREVIEW_UI_VALUES");
+    const compared = preview.getByRole("region", { name: "擬議修訂比較結果" });
+    const held = compared.getByRole("listitem").filter({ hasText: "Synthetic cross reconciliation account" });
+    await expect(held).toContainText("毛額 12.000000"); await expect(held).toContainText("淨額 12.000000");
+    await expect(held).toContainText("擬議減舊投影 1.000000"); await expect(held).toContainText("已記錄收款 8.000000");
+    await expect(held).toContainText("已記錄差額 4.000000"); await expect(held).toContainText("港幣估值 未知");
+    await expect(held).toContainText("比較品質：缺少港幣匯率");
+    await expect(compared.getByRole("listitem").filter({ hasText: "Synthetic comparison empty account" })).toContainText("沒有已記錄持倉，不代表已確認零持倉");
+    await expect(compared).toContainText("不代表付款、持倉資格或收入已確認");
+    await expect(compared.getByRole("button", { name: "下一頁預覽" })).toBeDisabled();
+    const previewBox = (await preview.boundingBox())!; expect(previewBox.x).toBeGreaterThanOrEqual(0); expect(previewBox.x + previewBox.width).toBeLessThanOrEqual(width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
-  stage("COMPARE"); expect(database()).toEqual(before);
+  stage("PREVIEW_UI_UNCHANGED"); expect(database()).toEqual(before);
+  stage("PREVIEW_UI_ABORT");
+  let releasePreview!: () => void; let previewReached!: () => void;
+  const heldRequest = new Promise<void>(resolve => { releasePreview = resolve; });
+  const reachedPreview = new Promise<void>(resolve => { previewReached = resolve; });
+  const previewRoute = `**${previewUrl}`;
+  await page.route(previewRoute, async route => {
+    const response = await route.fetch(); expect(response.status()).toBe(200); expect(response.headers()["cache-control"]).toBe("no-store");
+    previewReached(); await heldRequest; await route.abort("failed").catch(() => {});
+  });
+  let openPreview = page.getByRole("region", { name: "擬議股息修訂預覽" });
+  await openPreview.getByRole("button", { name: "計算預覽" }).click(); await reachedPreview;
+  await openPreview.getByRole("button", { name: "中止並關閉預覽" }).click(); await expect(openPreview).toHaveCount(0);
+  releasePreview(); await page.unroute(previewRoute); expect(database()).toEqual(before);
+  await page.getByRole("button", { name: "預覽擬議修訂" }).click();
+  openPreview = page.getByRole("region", { name: "擬議股息修訂預覽" });
+  await openPreview.getByLabel("查閱日").fill("2026-11-03"); await openPreview.getByLabel("持股規則").selectOption("ORDINARY_PRE_EX_DATE");
+  await openPreview.getByLabel("擬議每股股息").fill("1.2");
+  for (const name of ["Synthetic cross reconciliation account", "Synthetic comparison empty account"]) {
+    const group = openPreview.getByRole("group", { name: `估算 ${name}` });
+    await group.getByLabel("稅率估算").selectOption("PROVIDED"); await group.getByLabel("稅率小數").fill("0");
+    await group.getByLabel("費用估算").selectOption("PROVIDED"); await group.getByLabel("估算費用").fill("0");
+    await group.getByLabel("費用幣別").selectOption("USD"); await group.getByLabel("港幣估值匯率").selectOption("UNKNOWN");
+  }
+  stage("PREVIEW_UI_ACCOUNT");
+  const changedAccount = await create("accounts", { portfolio_id: portfolio.id, broker_id: broker.id, name: "Synthetic account added during preview", default_currency: "USD" });
+  expect(changedAccount.id).not.toBe(account.id); const afterChange = database(); expect(afterChange).not.toEqual(before);
+  stage("PREVIEW_UI_STALE");
+  const preview = page.getByRole("region", { name: "擬議股息修訂預覽" });
+  const staleRead = page.waitForResponse(response => new URL(response.url()).pathname === previewUrl && response.request().method() === "POST");
+  await preview.getByRole("button", { name: "計算預覽" }).click(); const stale = await staleRead;
+  expect(stale.status()).toBe(409); expect(stale.headers()["cache-control"]).toBe("no-store");
+  expect((await stale.json() as { code: string }).code).toBe("DIVIDEND_PREVIEW_ACCOUNT_SCOPE_CHANGED");
+  await expect(preview.getByRole("alert")).toContainText("帳戶範圍已變更");
+  await expect(preview.getByLabel("擬議每股股息")).toHaveValue("1.2");
+  await expect(preview.getByRole("region", { name: "擬議修訂比較結果" })).toHaveCount(0); expect(database()).toEqual(afterChange);
+  stage("PREVIEW_UI_REREAD");
+  await preview.getByRole("button", { name: "重新讀取全部帳戶" }).click();
+  await expect(preview.getByRole("alert")).toContainText("帳戶清單已變更");
+  await expect(preview.getByRole("button", { name: "計算預覽" })).toBeDisabled();
+  await expect(preview.getByLabel("擬議每股股息")).toHaveValue("1.2"); expect(database()).toEqual(afterChange);
+
+  stage("PREVIEW_UI_PAGINATION_SETUP");
+  const extraNames = Array.from({ length: 23 }, (_, index) => `Synthetic pagination account ${String(index + 1).padStart(2, "0")}`);
+  for (const name of extraNames) await create("accounts", { portfolio_id: portfolio.id, broker_id: broker.id, name, default_currency: "HKD" });
+  const beforePagination = database();
+  await preview.getByRole("button", { name: "取消" }).click();
+  await page.getByRole("button", { name: "預覽擬議修訂" }).click();
+  const pagedPreview = page.getByRole("region", { name: "擬議股息修訂預覽" });
+  await pagedPreview.getByLabel("查閱日").fill("2026-11-03");
+  await pagedPreview.getByLabel("持股規則").selectOption("ORDINARY_PRE_EX_DATE");
+  await pagedPreview.getByLabel("擬議幣別").selectOption("HKD");
+  for (const name of ["Synthetic cross reconciliation account", "Synthetic comparison empty account", "Synthetic account added during preview", ...extraNames]) {
+    const group = pagedPreview.getByRole("group", { name: `估算 ${name}` });
+    await group.getByLabel("稅率估算").selectOption("UNKNOWN"); await group.getByLabel("費用估算").selectOption("UNKNOWN");
+    await group.getByLabel("費用幣別").selectOption("UNKNOWN");
+  }
+  stage("PREVIEW_UI_PAGINATION");
+  const nextResponse = () => page.waitForResponse(response => new URL(response.url()).pathname === previewUrl && response.request().method() === "POST");
+  let responsePromise = nextResponse(); await pagedPreview.getByRole("button", { name: "計算預覽" }).click();
+  const pageOneResponse = await responsePromise; expect(pageOneResponse.status()).toBe(200); expect(pageOneResponse.headers()["cache-control"]).toBe("no-store");
+  const pageOne = await pageOneResponse.json() as Schemas["PreviewPage"];
+  expect(pageOne.items).toHaveLength(25); expect(pageOne.next_after_account_id).not.toBeNull();
+  const pageOneView = pagedPreview.getByRole("region", { name: "擬議修訂比較結果" }); await expect(pageOneView).toContainText("第 1 頁");
+  responsePromise = nextResponse(); await pageOneView.getByRole("button", { name: "下一頁預覽" }).click();
+  const pageTwoResponse = await responsePromise; expect(pageTwoResponse.status()).toBe(200); expect(pageTwoResponse.headers()["cache-control"]).toBe("no-store");
+  const continuedBody = pageTwoResponse.request().postDataJSON() as Schemas["PreviewRequest"];
+  expect(continuedBody.after_account_id).toBe(pageOne.next_after_account_id); expect(continuedBody.snapshot_token).toBe(pageOne.snapshot_token);
+  const pageTwo = await pageTwoResponse.json() as Schemas["PreviewPage"];
+  expect(pageTwo.items).toHaveLength(1); expect(pageTwo.snapshot_token).toBe(pageOne.snapshot_token);
+  await expect(pageOneView).toContainText("第 2 頁");
+  responsePromise = nextResponse(); await pageOneView.getByRole("button", { name: "上一頁預覽" }).click();
+  const previousResponse = await responsePromise; expect(previousResponse.status()).toBe(200);
+  const previousBody = previousResponse.request().postDataJSON() as Schemas["PreviewRequest"];
+  expect(previousBody.after_account_id).toBeNull(); expect(previousBody.snapshot_token).toBeNull();
+  expect((await previousResponse.json() as Schemas["PreviewPage"]).snapshot_token).toBe(pageOne.snapshot_token);
+  await expect(pageOneView).toContainText("第 1 頁"); expect(database()).toEqual(beforePagination);
+
+  stage("PREVIEW_UI_PAGE_STALE");
+  const accountDetail = await page.request.get(`/api/v1/accounts/${account.id}`); expect(accountDetail.status()).toBe(200);
+  const accountVersion = (await accountDetail.json() as Schemas["Account"]).version;
+  const changed = await page.request.patch(`/api/v1/accounts/${account.id}`, { headers: await headers(page, accountVersion), data: { name: "Synthetic renamed account after preview" } });
+  expect(changed.status()).toBe(200); const beforeStalePage = database();
+  responsePromise = nextResponse(); await pageOneView.getByRole("button", { name: "下一頁預覽" }).click();
+  const stalePage = await responsePromise; expect(stalePage.status()).toBe(409); expect(stalePage.headers()["cache-control"]).toBe("no-store");
+  expect((await stalePage.json() as { code: string }).code).toBe("DIVIDEND_PREVIEW_SNAPSHOT_CHANGED");
+  await expect(pagedPreview.getByRole("alert")).toContainText("比較資料已變更");
+  await expect(pagedPreview.getByRole("button", { name: "計算預覽" })).toBeDisabled();
+  await expect(pagedPreview.getByLabel("查閱日")).toHaveValue("2026-11-03");
+  await expect(pagedPreview.getByRole("region", { name: "擬議修訂比較結果" })).toHaveCount(0); expect(database()).toEqual(beforeStalePage);
+  await pagedPreview.getByRole("button", { name: "重新讀取全部帳戶" }).click();
+  await expect(pagedPreview.getByRole("alert")).toContainText("帳戶清單已變更");
+  await expect(pagedPreview.getByRole("button", { name: "計算預覽" })).toBeDisabled(); expect(database()).toEqual(beforeStalePage);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0); expect(await page.evaluate(() => caches.keys())).toEqual([]);
   stage("FINAL");
 });
