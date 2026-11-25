@@ -681,6 +681,23 @@ not a lookup for current or historical event evidence links. An event may retain
 link even though the source/review payload is not itself an event. No internal decision
 invokes a provider, reads credential files or verifies a cited document.
 
+## Internal retained evidence-review history
+
+`dividend_evidence_review_history.history` reads an explicitly owned event and its retained
+`DIVIDEND_EVIDENCE` review rows in one caller-owned database snapshot. It follows each row to
+its original audited event revision and assessment, reconstructs the canonical conflict or
+incompleteness detail, checks owned portfolio scope and the unique creation audit, and verifies a
+resolved row against the immediate successor and its resolution audit. Duplicate scope, malformed
+rows, foreign portfolios and inconsistent audits fail closed without repairing data. Both open and
+resolved rows retain their original revision; repeated incomplete revisions remain separate.
+
+`ACKNOWLEDGED` is reported only as a stored value: its actor and acknowledgment are not verified.
+The result is `RETAINED_EVIDENCE_REVIEWS_ONLY` with `history_completeness=UNVERIFIED` and no
+eligibility grant. An empty result does not prove that no review ever existed or that all evidence
+is complete. This internal reader does not authenticate an HTTP caller, expose an endpoint, change
+review status, create a receipt-reconciliation task, accept an event revision or alter any financial
+fence.
+
 ## Current event-source fence
 
 The internal `dividend_event_writer.require_current_source` rechecks one active
