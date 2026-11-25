@@ -2220,6 +2220,34 @@ or change any event/rejection/missing-origin fence. It is internal only: there i
 reconciliation task, event change or projection rebuild. Any eventual writer must revalidate the
 entire scope and its financial/security pins within its serialized transaction.
 
+## Internal hypothetical revision comparison
+
+`dividend_revision_preview.read` evaluates explicit proposed ex-date, as-of day, DPS, currency,
+adjustment basis and one explicit tax/fee/FX estimate per currently owned account. All estimate
+fields are required even when their value is explicitly unknown. This calculation reads the
+recorded revision scope and both receipt stores in one WAL snapshot, independently checks event,
+portfolio and account identity alignment, and does not persist the proposal, estimates or result.
+HKD identity is mathematical; foreign fee-to-event FX and event-to-HKD FX are separate. A missing
+fee, tax or required foreign fee rate is not converted to zero, and missing HKD FX stays missing.
+
+The comparison uses only the latest retained projection for the prior recorded expectation and
+counts each active legacy or direct receipt once under the stable event/account. It does not add
+old projection versions, subtract actual withholding or fees twice, or net different currencies.
+A delta against the old recorded expectation is shown only when its physical revision, as-of day
+and currency match the comparison scope. Even then it is only a difference from an unverified
+recorded snapshot, not a current economic P&L adjustment. A missing cash link, mixed currencies,
+no receipt, no recorded position, unresolved basis or eligibility, and unverified trade audit
+history retain distinct states. Recorded zero holdings and upcoming recorded holdings do not
+establish ownership; projection quality and receipt-comparison quality remain separate.
+
+For example, an existing recorded projection of USD 10 and a recorded receipt of USD 6 can be
+compared with an explicitly proposed USD 11 estimate: the hypothetical delta is USD 1 and the
+recorded outstanding difference is USD 5. The actual event revision, original cash/FX and receipt
+are unchanged. This internal calculation is not an authenticated API, source decision, accepted
+revision, reconciliation task, confirmed receipt or grant of eligibility. It does not lift any
+existing fence; the eventual atomic writer must revalidate all scope, financial, authorization and
+idempotency inputs in its own transaction.
+
 ## Internal recorded-reconciliation comparison
 
 `dividend_reconciliation_history.read` is an internal, read-only comparison for an explicitly
