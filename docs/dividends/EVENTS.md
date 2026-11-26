@@ -424,7 +424,16 @@ evidence-review changes, affected portfolio invalidations and idempotency respon
 together. An additional append-only audit fingerprints the normalized HTTP intent,
 route, idempotency-key digest and exact event/revision identities, so a cached response
 cannot be swapped with another otherwise identical event. These database fingerprints
-are consistency checks, not signatures or independent document evidence.
+are consistency checks, not signatures or independent document evidence. After a new
+idempotency receipt is inserted, the protected decision rechecks the session, CSRF and
+reauthentication, exact request/response, audited current head, rejection state, current
+candidate source when applicable, and the affected portfolio versions and exact unresolved
+invalidation markers. Acceptance also rechecks the candidate originally used by the
+previous revision. A late mismatch rolls back the decision and its idempotency receipt.
+For a new successor, both the internal writer and protected route recheck the financial
+history fence, including entitlements attached to older revisions, before returning.
+The internal event writer also verifies its exact portfolio-revision increments and
+invalidation markers before releasing its savepoint; neither check proves eligibility.
 
 A completed unchanged retry reauthenticates and verifies the entire retained event
 history, original unredacted reference, request binding and cached response. It returns
@@ -1147,7 +1156,9 @@ explicit rejection may refer to the retained event even after a candidate is dis
 this does not restore that candidate or assert its source is current.
 
 The writer appends the rejection and its canonical source/reference audit and
-invalidates affected portfolios from the event's ex-date in one savepoint. A caught
+invalidates affected portfolios from the event's ex-date in one savepoint. It rereads the
+current event, owner and affected-portfolio set, checks each exact revision increment and
+compares each unresolved invalidation marker to the one actually written. A caught
 body failure rolls back the whole rejection operation; an uncertain savepoint outcome
 aborts the enclosing transaction. Existing entitlements, projections, receipts, cash,
 locked FX and prior decisions are not rewritten. An exact internal retry with the same
@@ -1237,8 +1248,11 @@ observed physical `revision_id`, quoted event version in `If-Match`, an owner ci
 reason and optional `evidence_url`. It requires the active owner session, matching
 Origin, CSRF, an idempotency key and recent password confirmation, including on replay.
 The serialized writer rechecks those credentials and the exact current event revision.
-It can reject a retained decision even if its candidate was later dismissed, without
-asserting that candidate or its documents are current.
+After idempotency insertion it checks them again, along with the original request,
+audited rejection, current event head, exact affected-portfolio invalidations and
+financial history across earlier revisions. It can reject a retained decision even if
+its candidate was later dismissed, without asserting that candidate or its documents are
+current.
 
 The rejection and its canonical source/reference audit, a separate HTTP-intent audit,
 affected portfolio invalidations and the serialized idempotency response commit together.

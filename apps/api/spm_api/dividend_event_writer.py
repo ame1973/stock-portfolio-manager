@@ -1,6 +1,7 @@
 """Append owned event decisions; HTTP authority and economic projections remain external."""
 
 import json
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Self
 from uuid import UUID, uuid4
@@ -8,18 +9,20 @@ from uuid import UUID, uuid4
 from pydantic import ConfigDict, Field, model_validator
 from pydantic_core import PydanticSerializationError
 from sqlalchemy import Connection, text
+from sqlalchemy.exc import SQLAlchemyError
 
 import spm_api.dividend_candidate_service as candidates
 import spm_api.dividend_event_service as events
 import spm_api.dividend_rejection_resolution as resolutions
 import spm_api.dividend_rejection_service as rejections
+import spm_api.dividend_setting_integrity as integrity
 from spm_api.action_models import EvidenceUrl
 from spm_api.audit import audit, canonical, digest, stamp
 from spm_api.db import savepoint
 from spm_api.decimal_types import to_scaled
 from spm_api.dividend_evidence import DividendTerms, EvidenceAssessment
 from spm_api.errors import Model
-from spm_api.master_service import invalidate_portfolio
+from spm_api.master_service import InvalidationMarker, invalidate_portfolio
 from spm_api.providers.base import CitationReference
 
 
@@ -134,6 +137,15 @@ def require_current_source(
     record = reviewed.record
     if record.revision_id != revision_id or record.revision_no != version:
         raise events.EventError("DIVIDEND_EVENT_VERSION_CONFLICT")
+    _require_reviewed_source(con, owner_id, reviewed)
+    return reviewed
+
+
+def _require_reviewed_source(
+    con: Connection, owner_id: UUID, reviewed: events.ReviewedEvent
+) -> None:
+    """Recheck a previously validated event record's candidate without granting use."""
+    record = reviewed.record
     if record.decision_kind == "CANDIDATE":
         row = con.execute(
             text("SELECT candidate_id,revision_no FROM dividend_candidate_revisions WHERE id=:id"),
@@ -157,7 +169,6 @@ def require_current_source(
             or candidate.assessment != reviewed.assessment
         ):
             raise events.EventError("DIVIDEND_EVENT_SOURCE_CHANGED")
-    return reviewed
 
 
 def _replay_matches(
@@ -304,6 +315,90 @@ def _portfolios(con: Connection, owner_id: UUID, security_id: UUID) -> list[str]
             {"owner": str(owner_id), "security": str(security_id)},
         ).scalars()
     )
+
+
+@dataclass(frozen=True, slots=True)
+class InvalidationScope:
+    """Exact recorded invalidations, not proof of complete ownership or authorization."""
+
+    portfolios: tuple[tuple[str, int, int], ...] = field(repr=False)
+    markers: tuple[InvalidationMarker, ...] = field(repr=False)
+
+
+def _portfolio_pins(
+    con: Connection, owner: UUID, security: UUID
+) -> tuple[tuple[str, int, int], ...]:
+    _writer(con, owner)
+    try:
+        return tuple(
+            (identifier, *integrity.portfolio_scope(con, owner, events._uuid(identifier)))
+            for identifier in _portfolios(con, owner, security)
+        )
+    except (ValueError, TypeError, OverflowError, SQLAlchemyError):
+        raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE") from None
+
+
+def _invalidation_scope(
+    con: Connection, owner: UUID, security: UUID, source: UUID, reason: str, day: str
+) -> InvalidationScope:
+    """Read each affected portfolio and its unique exact marker in one writer snapshot."""
+    pins = _portfolio_pins(con, owner, security)
+    try:
+        rows = con.execute(
+            text(
+                "SELECT id,portfolio_id,from_date,reason,source_id,created_at,resolved_at "
+                "FROM projection_invalidations WHERE source_id=:id ORDER BY portfolio_id,id"
+            ),
+            {"id": str(source)},
+        ).all()
+        if len(rows) != len(pins):
+            raise ValueError("Invalid recorded invalidations")
+        markers: list[InvalidationMarker] = []
+        for pin, row in zip(pins, rows, strict=True):
+            events._uuid(row.id)
+            events._time(row.created_at)
+            if (
+                row.portfolio_id != pin[0]
+                or row.from_date != day
+                or row.reason != reason
+                or row.source_id != str(source)
+                or row.resolved_at is not None
+            ):
+                raise ValueError("Invalid recorded invalidation")
+            markers.append(
+                (
+                    row.id,
+                    row.portfolio_id,
+                    row.from_date,
+                    row.reason,
+                    row.source_id,
+                    row.created_at,
+                    None,
+                )
+            )
+        return InvalidationScope(pins, tuple(markers))
+    except (ValueError, TypeError, KeyError, OverflowError, SQLAlchemyError):
+        raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE") from None
+
+
+def _require_invalidation_result(
+    con: Connection,
+    owner: UUID,
+    security: UUID,
+    source: UUID,
+    reason: str,
+    day: str,
+    before: tuple[tuple[str, int, int], ...],
+    markers: tuple[InvalidationMarker, ...],
+) -> InvalidationScope:
+    actual = _invalidation_scope(con, owner, security, source, reason, day)
+    if (
+        actual.portfolios
+        != tuple((identifier, version, revision + 1) for identifier, version, revision in before)
+        or actual.markers != markers
+    ):
+        raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+    return actual
 
 
 def _review_content(
@@ -578,6 +673,8 @@ def _save(
             if at < rejected.created_at or at < events._time(rejection_audit.created_at):
                 raise events.EventError("DIVIDEND_EVENT_TIME_CONFLICT")
             resolution = events.ResolutionLink(uuid4(), rejected.id)
+    if intent.kind == "VERIFY" and current is not None:
+        _require_reviewed_source(con, owner_id, current)
     record, assessment = _record(con, owner_id, intent, at, request_id, previous)
     if previous is not None and previous.terms.security_id != record.terms.security_id:
         raise events.EventError("DIVIDEND_EVENT_SECURITY_CHANGED")
@@ -724,9 +821,40 @@ def _save(
     assert day is not None
     if previous is not None and previous.terms.ex_date is not None:
         day = min(day, previous.terms.ex_date)
-    for portfolio in portfolios:
+    before = _portfolio_pins(con, owner_id, record.terms.security_id)
+    if tuple(item[0] for item in before) != tuple(portfolios):
+        raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+    markers = tuple(
         invalidate_portfolio(con, portfolio, str(record.revision_id), "DIVIDEND_EVENT_CHANGED", day)
+        for portfolio in portfolios
+    )
     saved = events.get(con, owner_id, record.event_id, version=record.revision_no)
     if saved is None:
         raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+    current_saved = events.get(con, owner_id, record.event_id)
+    if current_saved != saved:
+        raise events.EventError("DIVIDEND_EVENT_VERSION_CONFLICT")
+    if (
+        saved.record != record
+        or saved.manual_override is not intent.manual_override
+        or (saved.resolution.rejection_id if saved.resolution else None)
+        != intent.resolve_rejection_id
+        or not _replay_matches(con, intent, saved.record, at, request_id)
+    ):
+        raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+    _require_reviewed_source(con, owner_id, saved)
+    if intent.kind == "VERIFY" and current is not None:
+        _require_reviewed_source(con, owner_id, current)
+    _require_invalidation_result(
+        con,
+        owner_id,
+        record.terms.security_id,
+        record.revision_id,
+        "DIVIDEND_EVENT_CHANGED",
+        day,
+        before,
+        markers,
+    )
+    if previous is not None and _has_financial_history(con, record.event_id):
+        raise events.EventError("DIVIDEND_EVENT_PROJECTION_REQUIRED")
     return saved

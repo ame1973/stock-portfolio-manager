@@ -167,9 +167,30 @@ def _save(
         day = reviewed.record.terms.ex_date
         if day is None:
             raise rejection.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
-        for portfolio in event_writer._portfolios(con, owner, reviewed.record.terms.security_id):
+        portfolios = event_writer._portfolios(con, owner, reviewed.record.terms.security_id)
+        before = event_writer._portfolio_pins(con, owner, reviewed.record.terms.security_id)
+        if tuple(item[0] for item in before) != tuple(portfolios):
+            raise rejection.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+        markers = tuple(
             invalidate_portfolio(con, portfolio, str(intent.id), "DIVIDEND_REVISION_REJECTED", day)
+            for portfolio in portfolios
+        )
         result = history(con, owner, intent.event_id)
         if result is None or len(result) != len(retained) + 1 or result[-1].id != intent.id:
             raise rejection.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+        current = events.get(con, owner, intent.event_id)
+        if current != reviewed:
+            raise rejection.RejectionError("DIVIDEND_REJECTION_VERSION_CONFLICT")
+        if not _replay_matches(result[-1], intent, request_id):
+            raise rejection.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+        event_writer._require_invalidation_result(
+            con,
+            owner,
+            reviewed.record.terms.security_id,
+            intent.id,
+            "DIVIDEND_REVISION_REJECTED",
+            day,
+            before,
+            markers,
+        )
         return result[-1]

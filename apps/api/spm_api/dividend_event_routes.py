@@ -1,5 +1,6 @@
 """Protected event decisions without granting present economic use."""
 
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
@@ -288,6 +289,58 @@ def _check_intent(
         raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
 
 
+def _event_effects(
+    con: Connection, owner: UUID, record: events.EventRevision
+) -> writer.InvalidationScope:
+    day = record.terms.ex_date
+    if day is None:
+        raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+    if record.revision_no > 1:
+        previous = events.get(con, owner, record.event_id, version=record.revision_no - 1)
+        if previous is None or previous.record.terms.ex_date is None:
+            raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+        day = min(day, previous.record.terms.ex_date)
+    return writer._invalidation_scope(
+        con, owner, record.terms.security_id, record.revision_id, "DIVIDEND_EVENT_CHANGED", day
+    )
+
+
+def _check_committed_decision(
+    con: Connection,
+    auth: Auth,
+    request: Request,
+    result: models.DividendEventRecord,
+    replay: Callable[[Connection, Auth, models.DividendEventRecord], None],
+    effects: list[writer.InvalidationScope],
+) -> None:
+    """Recheck a new decision after idempotency without changing historical replay."""
+    replay(con, auth, result)
+    fresh = writer.require_current_source(
+        con,
+        auth.owner.id,
+        result.id,
+        revision_id=result.current_revision_id,
+        version=result.version,
+    )
+    if (
+        type(result) is not models.DividendEventRecord
+        or result.__dict__.keys() != models.DividendEventRecord.model_fields.keys()
+        or _current(fresh).model_dump_json(warnings="error")
+        != result.model_dump_json(warnings="error")
+        or fresh.record.request_id != UUID(request.state.request_id)
+    ):
+        raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+    history = rejections.history(con, auth.owner.id, result.id)
+    if history is None:
+        raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+    if any(item.revision_id == fresh.record.revision_id for item in history):
+        raise events.EventError("DIVIDEND_REJECTION_VERSION_CONFLICT")
+    if len(effects) != 1 or _event_effects(con, auth.owner.id, fresh.record) != effects[0]:
+        raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
+    if fresh.record.revision_no > 1 and writer._has_financial_history(con, result.id):
+        raise events.EventError("DIVIDEND_EVENT_PROJECTION_REQUIRED")
+
+
 def _write_manual(
     request: Request,
     headers: WriteDep,
@@ -303,6 +356,7 @@ def _write_manual(
     resolution_pin = (
         body.resolve_rejection_id if isinstance(body, models.ManualEventRevision) else None
     )
+    effects: list[writer.InvalidationScope] = []
 
     def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
         if identifier is None:
@@ -335,6 +389,7 @@ def _write_manual(
             con, auth.owner.id, intent, at=now(), request_id=UUID(request.state.request_id)
         )
         result = _current(saved)
+        effects.append(_event_effects(con, auth.owner.id, saved.record))
         _audit_intent(con, auth, request, headers, payload, saved.record)
         return result
 
@@ -383,6 +438,9 @@ def _write_manual(
             status=201 if identifier is None else 200,
             reauth=True,
             validate_replay=replay,
+            validate_commit=lambda con, auth, result: _check_committed_decision(
+                con, auth, request, result, replay, effects
+            ),
         )
     except events.EventError as error:
         raise _write_failure(error) from None
@@ -404,6 +462,7 @@ def _write_candidate(
     resolution_pin = (
         body.resolve_rejection_id if isinstance(body, models.CandidateEventRevision) else None
     )
+    effects: list[writer.InvalidationScope] = []
 
     def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
         if identifier is None:
@@ -434,6 +493,7 @@ def _write_candidate(
             con, auth.owner.id, intent, at=now(), request_id=UUID(request.state.request_id)
         )
         result = _current(saved)
+        effects.append(_event_effects(con, auth.owner.id, saved.record))
         _audit_intent(con, auth, request, headers, payload, saved.record)
         return result
 
@@ -480,6 +540,9 @@ def _write_candidate(
             status=201 if identifier is None else 200,
             reauth=True,
             validate_replay=replay,
+            validate_commit=lambda con, auth, result: _check_committed_decision(
+                con, auth, request, result, replay, effects
+            ),
         )
     except events.EventError as error:
         raise _write_failure(error) from None
@@ -560,6 +623,31 @@ def _rejection_failure(error: rejections.RejectionError) -> ApiError:
     return _rejection_unavailable()
 
 
+def _rejection_effects(
+    con: Connection,
+    owner: UUID,
+    event: events.EventRevision,
+    record: rejections.RejectionRecord,
+) -> writer.InvalidationScope:
+    if event.terms.ex_date is None or (record.event_id, record.revision_id, record.revision_no) != (
+        event.event_id,
+        event.revision_id,
+        event.revision_no,
+    ):
+        raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+    try:
+        return writer._invalidation_scope(
+            con,
+            owner,
+            event.terms.security_id,
+            record.id,
+            "DIVIDEND_REVISION_REJECTED",
+            event.terms.ex_date,
+        )
+    except events.EventError:
+        raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE") from None
+
+
 def _write_rejection(
     request: Request,
     headers: WriteDep,
@@ -569,6 +657,7 @@ def _write_rejection(
     version: int,
 ) -> models.DividendEventRecord:
     payload = {"event_version": version, **body.model_dump(mode="json")}
+    effects: list[writer.InvalidationScope] = []
 
     def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
         observed = _observed(con, auth.owner.id, identifier, version, body.revision_id)
@@ -587,6 +676,7 @@ def _write_rejection(
         saved = rejection_writer.save(
             con, auth.owner.id, intent, request_id=UUID(request.state.request_id)
         )
+        effects.append(_rejection_effects(con, auth.owner.id, observed, saved))
         audit(
             con,
             str(auth.owner.id),
@@ -620,6 +710,28 @@ def _write_rejection(
             raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
         _check_rejection_intent(con, auth, request, headers, payload, record)
 
+    def commit(con: Connection, auth: Auth, result: models.DividendEventRecord) -> None:
+        current = _owned(con, auth.owner.id, identifier)
+        if (current.record.revision_id, current.record.revision_no) != (body.revision_id, version):
+            raise events.EventError("DIVIDEND_EVENT_VERSION_CONFLICT")
+        replay(con, auth, result)
+        history = rejections.history(con, auth.owner.id, identifier)
+        matching = [item for item in history or () if item.revision_id == body.revision_id]
+        if (
+            type(result) is not models.DividendEventRecord
+            or result.__dict__.keys() != models.DividendEventRecord.model_fields.keys()
+            or _current(current).model_dump_json(warnings="error")
+            != result.model_dump_json(warnings="error")
+            or len(matching) != 1
+            or matching[0].request_id != UUID(request.state.request_id)
+            or len(effects) != 1
+        ):
+            raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+        if _rejection_effects(con, auth.owner.id, current.record, matching[0]) != effects[0]:
+            raise rejections.RejectionError("DIVIDEND_REJECTION_HISTORY_UNAVAILABLE")
+        if writer._has_financial_history(con, identifier):
+            raise events.EventError("DIVIDEND_EVENT_PROJECTION_REQUIRED")
+
     try:
         return mutate(
             request,
@@ -629,6 +741,7 @@ def _write_rejection(
             action,
             reauth=True,
             validate_replay=replay,
+            validate_commit=commit,
         )
     except rejections.RejectionError as error:
         raise _rejection_failure(error) from None
@@ -652,6 +765,7 @@ def _write_cited_decision(
     source_url = (
         body.evidence_url if isinstance(body, models.AcceptDividendRevision) else body.source_url
     )
+    effects: list[writer.InvalidationScope] = []
 
     def action(con: Connection, auth: Auth) -> models.DividendEventRecord:
         _observed(con, auth.owner.id, identifier, version, body.revision_id)
@@ -673,6 +787,7 @@ def _write_cited_decision(
             con, auth.owner.id, intent, at=now(), request_id=UUID(request.state.request_id)
         )
         result = _current(saved)
+        effects.append(_event_effects(con, auth.owner.id, saved.record))
         _audit_intent(con, auth, request, headers, payload, saved.record)
         return result
 
@@ -700,6 +815,12 @@ def _write_cited_decision(
             raise events.EventError("DIVIDEND_EVENT_HISTORY_UNAVAILABLE")
         _check_intent(con, auth, request, headers, payload, record)
 
+    def commit(con: Connection, auth: Auth, result: models.DividendEventRecord) -> None:
+        if accepting:
+            previous = _owned(con, auth.owner.id, identifier, version=version)
+            writer._require_reviewed_source(con, auth.owner.id, previous)
+        _check_committed_decision(con, auth, request, result, replay, effects)
+
     try:
         return mutate(
             request,
@@ -709,6 +830,7 @@ def _write_cited_decision(
             action,
             reauth=True,
             validate_replay=replay,
+            validate_commit=commit,
         )
     except events.EventError as error:
         if accepting and str(error) in {
