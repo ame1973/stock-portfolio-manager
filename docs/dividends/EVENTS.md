@@ -2371,6 +2371,15 @@ ledger scope can be reread independently of the event head, but no installed ato
 performs a post-head or post-idempotency check. Retaining these rows does not authenticate or verify
 additional audit contents, establish complete history or permit a financial write.
 
+The observation also retains private, type-exact legacy entitlements, legacy and direct receipt
+rows and origins, their linked original cash entries and reversals, and related receipt, intent,
+HTTP-intent, void-intent and cash audit rows for the stable event. A newly linked audit can stale
+this observation even if its hypothetical amounts remain identical. The raw scope can be reread
+without requiring the old event head to remain current, but the installed application does not yet
+use it for a post-head or post-idempotency check. A missing legacy origin or cash link stays
+unverified; an empty row set is not proof of payment, ownership or complete history. Retaining
+these rows does not validate the additional audit contents or authorize any financial operation.
+
 `dividend_revision_rebuild_current.require_current` is a separate read-only fence for a
 **new** prospective operation in a true writer transaction. It checks the owner, decision and
 proposal against the frozen observation, rereads the recorded scope and returns the fresh result
