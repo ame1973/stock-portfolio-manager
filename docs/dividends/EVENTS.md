@@ -2380,6 +2380,13 @@ use it for a post-head or post-idempotency check. A missing legacy origin or cas
 unverified; an empty row set is not proof of payment, ownership or complete history. Retaining
 these rows does not validate the additional audit contents or authorize any financial operation.
 
+The observation additionally freezes raw projection versions, tax and fee settings, and their
+linked audit and intent rows through the observed physical revision. An independent reread of that
+historical boundary excludes later successor settings and projections; new linked historical audits
+still stale the observation even when the comparison is unchanged. These private rows do not
+validate their audits or establish estimates, eligibility or complete history. The application does
+not yet perform the separate successor or post-idempotency checks needed for an atomic rebuild.
+
 `dividend_revision_rebuild_current.require_current` is a separate read-only fence for a
 **new** prospective operation in a true writer transaction. It checks the owner, decision and
 proposal against the frozen observation, rereads the recorded scope and returns the fresh result
