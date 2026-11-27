@@ -2391,8 +2391,10 @@ not yet perform the separate successor or post-idempotency checks needed for an 
 **new** prospective operation in a true writer transaction. It checks the owner, decision and
 proposal against the frozen observation, rereads the recorded scope and returns the fresh result
 only if its nested values and types match. Floating-point values cannot impersonate integer pins or
-exact financial values. Any same-transaction change requires another check. Historical replay
-must be handled separately before this current-scope check; it cannot adopt an unrelated operation.
+exact financial values. A same-connection write during the reread fails closed, including an
+unrelated or rolled-back write; changes after a completed check require another check. Historical
+replay must be handled separately before this current-scope check; it cannot adopt an unrelated
+operation.
 
 `dividend_revision_rebuild_current.require_preserved` independently rereads the frozen catalogue,
 action-review, raw ledger, receipt/cash and historical projection/setting scopes in a writer

@@ -49,6 +49,16 @@ def _exact(left: Any, right: Any) -> bool:
     return bool(left == right)
 
 
+def _sqlite(con: Connection) -> sqlite3.Connection:
+    try:
+        raw = con.connection.driver_connection
+        if type(raw) is not sqlite3.Connection:
+            raise ValueError("Unsupported recorded scope connection")
+        return raw
+    except (ValueError, TypeError, AttributeError, SQLAlchemyError):
+        raise rebuild.RebuildError("DIVIDEND_REBUILD_SCOPE_CHANGED") from None
+
+
 def require_current(
     con: Connection,
     owner: UUID,
@@ -77,8 +87,11 @@ def require_current(
         or observed.preview.proposal != proposal
     ):
         raise rebuild.RebuildError("DIVIDEND_REBUILD_SCOPE_CHANGED")
+    raw = _sqlite(con)
+    # A reentrant callback can write after an earlier row was read in this transaction.
+    changes = raw.total_changes
     fresh = rebuild.observe(con, owner, decision.event_id, decision, proposal)
-    if fresh is None or not _exact(fresh, observed):
+    if fresh is None or not _exact(fresh, observed) or raw.total_changes != changes:
         raise rebuild.RebuildError("DIVIDEND_REBUILD_SCOPE_CHANGED")
     return fresh
 
@@ -101,10 +114,7 @@ def require_preserved(con: Connection, owner: UUID, observed: rebuild.RebuildObs
     ):
         raise rebuild.RebuildError("DIVIDEND_REBUILD_SCOPE_CHANGED")
     try:
-        raw = con.connection.driver_connection
-        if type(raw) is not sqlite3.Connection:
-            raise ValueError("Unsupported recorded scope connection")
-        # A reentrant callback can write after an earlier row was read in this transaction.
+        raw = _sqlite(con)
         changes = raw.total_changes
         record = observed.event.record
         security = record.terms.security_id
