@@ -16552,7 +16552,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -16796,7 +16797,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -17178,7 +17180,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -18704,7 +18707,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -18842,7 +18846,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -19402,7 +19407,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -19656,7 +19662,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -20189,7 +20196,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -20443,7 +20451,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -20984,7 +20993,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -21238,7 +21248,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -28027,7 +28038,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -28281,7 +28293,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -29433,7 +29446,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -29932,7 +29946,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -30092,7 +30107,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -31479,7 +31495,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -31925,7 +31942,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -32371,7 +32389,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -32901,7 +32920,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -33155,7 +33175,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -33926,7 +33947,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -34604,7 +34626,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }
@@ -34858,7 +34881,8 @@
             "name": "If-Match",
             "required": true,
             "schema": {
-              "pattern": "^\"[1-9][0-9]*\"$",
+              "maxLength": 21,
+              "pattern": "^\"[1-9][0-9]{0,18}\"$",
               "title": "If-Match",
               "type": "string"
             }

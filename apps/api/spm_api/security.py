@@ -137,8 +137,10 @@ WriteDep = Annotated[WriteHeaders, Depends(write_headers)]
 
 
 def matching_version(
-    value: Annotated[str, Header(alias="If-Match", pattern=r'^"[1-9][0-9]*"$')],
+    value: Annotated[str, Header(alias="If-Match", max_length=21, pattern=r'^"[1-9][0-9]{0,18}"$')],
 ) -> int:
+    if re.fullmatch(r'"[1-9][0-9]{0,18}"', value) is None:
+        raise ApiError(422, "INVALID_VERSION", "The record version is invalid")
     return int(value[1:-1])
 
 
