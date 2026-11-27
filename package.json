@@ -39,6 +39,7 @@
     "test:e2e:direct-receipt-write": "node tests/e2e/credentials/check.mjs --direct-receipt-write",
     "test:e2e:projection-write": "node tests/e2e/credentials/check.mjs --projection-write",
     "test:e2e:reconciliation-direct": "node tests/e2e/credentials/check.mjs --reconciliation-direct",
+    "test:e2e:evidence-filters": "node tests/e2e/credentials/check.mjs --evidence-filters",
     "generate:contracts": "uv run python scripts/export_openapi.py && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",
     "check:contracts": "uv run python scripts/export_openapi.py --check && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts --check"
   },

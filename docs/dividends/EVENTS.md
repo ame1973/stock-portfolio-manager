@@ -712,10 +712,13 @@ private `Cache-Control: no-store` responses. It verifies the complete retained e
 scope before filtering or paging, in the same WAL read snapshot as the event head. Missing or
 foreign events return 404; inconsistent retained history returns a fixed
 `DIVIDEND_EVIDENCE_REVIEW_UNAVAILABLE` 503 without repairing it or returning its private detail.
-The bounded `limit` is 1–100 (default 25); `q` is a literal search over review ID and reason code,
-and `cursor` continues in descending creation-time/ID order. Each page is a new snapshot, not a
-cross-page consistency guarantee. Re-read from the beginning after changes rather than assuming a
-multi-page response describes one instant.
+The bounded `limit` is 1–100 (default 25); `q` is a literal search over review ID and reason code.
+Optional `status` filters `OPEN`, `ACKNOWLEDGED` or `RESOLVED`, and `severity` filters `INFO`,
+`WARNING` or `CRITICAL`. Retained evidence reviews currently use `WARNING` only; these filters do
+not include other kinds of review. Same-connection writes during the read fail closed, including a
+write later rolled back. `cursor` continues in descending creation-time/ID order. Each page is a
+new snapshot, not a cross-page consistency guarantee. Re-read from the beginning after changes rather
+than assuming a multi-page response describes one instant.
 
 Each record identifies its original event revision and, when resolved, the immediate successor.
 `ACKNOWLEDGED` remains only a stored state with `acknowledgement_scope=NOT_ESTABLISHED`; a resolved
@@ -734,7 +737,11 @@ closing or switching an event revision aborts an in-flight request. The browser 
 shape, event/revision scope, bounded order, duplicate IDs and portfolios, original and successor
 revision linkage and timestamps before showing it. If the independently read event head differs,
 or the read fails or the connection is paused, the panel withholds the records until refreshed.
-Pages are independently read and are not a single consistent cross-page snapshot.
+Pages are independently read and are not a single consistent cross-page snapshot. Status and severity
+filters apply only to retained evidence reviews; changing either returns to the first page and aborts
+the previous request. The browser rejects records that do not match the selected filters. Only
+`WARNING` is currently recorded for this review kind; an empty filtered page does not describe other
+review kinds.
 
 The panel distinguishes conflict from incompleteness and displays retained reason codes, portfolio
 scope, original revision and recorded successor when present. `ACKNOWLEDGED` is visibly a stored,

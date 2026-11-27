@@ -1,11 +1,12 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { api, type components } from "@spm/contracts";
+import { SelectField } from "../../components/forms/fields";
 import { Button } from "../../components/ui/button";
 import { ApiRequestError, checked } from "../../lib/api";
 import { usePageState } from "../settings/data";
 import { validEstimateEvent } from "./estimate-validation";
 import { termLabels } from "./event-labels";
-import { checkedEvidenceReviewPage } from "./evidence-review-validation";
+import { checkedEvidenceReviewPage, type EvidenceReviewFilters } from "./evidence-review-validation";
 import { sameId } from "./receipt-validation";
 import { usePrivatePage } from "./use-private-page";
 
@@ -16,6 +17,7 @@ type Review = Schemas["EvidenceReviewRecord"];
 function ReviewItem({ value }: { value: Review }) {
   return <li className="grid min-w-0 gap-2 rounded-md border border-border p-4 text-sm leading-7">
     <h4 className="font-semibold">{value.reason_code === "DIVIDEND_SOURCE_CONFLICT" ? "來源條款衝突" : "資料不完整"}</h4>
+    <p>嚴重度：警告。</p>
     <p>{value.status === "OPEN" ? "已記錄待核對。" : value.status === "ACKNOWLEDGED"
       ? "已記錄為知悉；知悉未經驗證，不代表問題已處理。" : "已記錄後繼版本處理；不是文件驗證或股息對帳。"}</p>
     <p className="break-all">審核識別碼 {value.id}；原事件修訂 {value.revision_no}／{value.revision_id}。</p>
@@ -28,12 +30,14 @@ function ReviewItem({ value }: { value: Review }) {
 
 function History({ event }: { event: Event }) {
   const page = usePageState();
+  const [status, setStatus] = useState<"" | Review["status"]>("");
+  const [severity, setSeverity] = useState<"" | NonNullable<EvidenceReviewFilters["severity"]>>("");
   const load = useCallback(async (cursor: string | undefined, signal: AbortSignal) => checkedEvidenceReviewPage(checked(await api.GET(
     "/api/v1/dividends/events/{event_id}/evidence-reviews", {
-      params: { path: { event_id: event.id }, query: { cursor, limit: 25 } }, signal,
+      params: { path: { event_id: event.id }, query: { cursor, limit: 25, status: status || undefined, severity: severity || undefined } }, signal,
     }
-  )), event), [event]);
-  const result = usePrivatePage(`evidence-reviews:${event.id}:${event.current_revision_id}:${event.version}`, page.cursor, load);
+  )), event, 25, { status: status || undefined, severity: severity || undefined }), [event, status, severity]);
+  const result = usePrivatePage(`evidence-reviews:${event.id}:${event.current_revision_id}:${event.version}:${status}:${severity}`, page.cursor, load);
   const value = result.data;
   const headChanged = !!value && (!sameId(value.revision_id, event.current_revision_id) || value.revision_no !== event.version);
   const ready = !!value && !result.isFetching && !result.isPaused && !result.isError && !headChanged;
@@ -43,6 +47,15 @@ function History({ event }: { event: Event }) {
     <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">股息證據審核歷史</h3>
       <Button type="button" variant="outline" disabled={result.isFetching || result.isPaused} onClick={() => result.refetch()}>重新載入證據審核</Button></div>
     <p className="text-sm leading-7 text-secondary">只顯示保留的審核記錄；歷史完整性未驗證，這不是文件驗證或持股資格。每頁獨立讀取，不保證屬於同一快照。</p>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <SelectField label="證據審核狀態" value={status} onChange={event => { setStatus(event.target.value as typeof status); page.reset(); }}>
+        <option value="">全部狀態</option><option value="OPEN">待核對</option><option value="ACKNOWLEDGED">已記錄知悉（未驗證）</option><option value="RESOLVED">已記錄後繼修訂處理</option>
+      </SelectField>
+      <SelectField label="證據審核嚴重度" value={severity} onChange={event => { setSeverity(event.target.value as typeof severity); page.reset(); }}
+        help="目前證據審核只記錄為警告；其他類型不在此清單。">
+        <option value="">全部嚴重度</option><option value="INFO">資訊</option><option value="WARNING">警告</option><option value="CRITICAL">嚴重</option>
+      </SelectField>
+    </div>
     {result.isPaused ? <p role="status" className="text-sm text-secondary">連線已暫停；請重新連線後再核對，本頁不顯示舊資料。</p>
       : result.isFetching ? <p role="status" className="text-sm text-secondary">正在核對證據審核歷史…</p> : null}
     {result.isError && <div role="alert" className="grid gap-3 text-sm text-danger"><p>{error}</p>

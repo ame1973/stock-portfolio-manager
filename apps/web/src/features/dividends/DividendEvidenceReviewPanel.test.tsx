@@ -110,6 +110,76 @@ describe("retained evidence reviews", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
+  it("filters recorded status and severity without caching or retaining the previous result", async () => {
+    const { get, cache } = mount();
+    expect(await screen.findByText(/已記錄待核對/)).toBeVisible();
+    let release: ((value: ReturnType<typeof reply<Page>>) => void) | undefined;
+    get.mockImplementation(async (_request, options) => {
+      const query = (options as { params: { query: { status?: string; severity?: string } } }).params.query;
+      if (query.severity === "INFO") return reply({ ...page, items: [], next_cursor: null });
+      return new Promise(resolve => { release = resolve; });
+    });
+    fireEvent.change(screen.getByLabelText("證據審核狀態"), { target: { value: "RESOLVED" } });
+    await waitFor(() => expect(release).toBeDefined());
+    expect(screen.queryByText(/已記錄待核對/)).not.toBeInTheDocument();
+    act(() => release?.(reply({ ...page, items: [resolved] })));
+    expect(await screen.findByText(/已記錄後繼版本處理/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("證據審核嚴重度"), { target: { value: "INFO" } });
+    expect(await screen.findByText(/此頁沒有已記錄的證據審核/)).toHaveTextContent("不代表歷史完整或問題已處理");
+    expect(get).toHaveBeenLastCalledWith(path, expect.objectContaining({ params: expect.objectContaining({
+      query: expect.objectContaining({ status: "RESOLVED", severity: "INFO", limit: 25 }),
+    }) }));
+    expect(cache.getQueryCache().getAll()).toHaveLength(0);
+    expect(localStorage.length + sessionStorage.length).toBe(0);
+  });
+
+  it("aborts a pending filtered read when the selection changes", async () => {
+    const { get } = mount();
+    expect(await screen.findByText(/已記錄待核對/)).toBeVisible();
+    let signal: AbortSignal | undefined;
+    get.mockImplementation(async (_request, options) => {
+      const input = options as { signal: AbortSignal; params: { query: { status?: string } } };
+      if (input.params.query.status === "OPEN") return new Promise(() => { signal = input.signal; });
+      return reply({ ...page, items: [resolved] });
+    });
+    fireEvent.change(screen.getByLabelText("證據審核狀態"), { target: { value: "OPEN" } });
+    await waitFor(() => expect(signal).toBeDefined());
+    fireEvent.change(screen.getByLabelText("證據審核狀態"), { target: { value: "RESOLVED" } });
+    expect(signal?.aborted).toBe(true);
+    expect(await screen.findByText(/已記錄後繼版本處理/)).toBeVisible();
+  });
+
+  it("returns to the first page when a filter changes", async () => {
+    const many = Array.from({ length: 25 }, (_, index) => ({ ...review,
+      id: `a1111111-1111-4111-8111-${String(25 - index).padStart(12, "0")}`,
+      portfolio_id: `b1111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}` }));
+    const first = { ...page, items: many, next_cursor: "opaque" };
+    const second = { ...page, items: [resolved], next_cursor: null };
+    const { get } = mount(first);
+    expect(await screen.findByText(/第 1 頁/)).toBeVisible();
+    get.mockImplementation(async (_request, options) => {
+      const query = (options as { params: { query: { status?: string; cursor?: string } } }).params.query;
+      return reply(query.status === "RESOLVED" || query.cursor ? second : first);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "下一頁證據審核" }));
+    expect(await screen.findByText(/第 2 頁/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("證據審核狀態"), { target: { value: "RESOLVED" } });
+    expect(await screen.findByText(/第 1 頁/)).toBeVisible();
+    expect(screen.getByText(/已記錄後繼版本處理/)).toBeVisible();
+    expect(get).toHaveBeenLastCalledWith(path, expect.objectContaining({ params: expect.objectContaining({
+      query: expect.objectContaining({ status: "RESOLVED", cursor: undefined }),
+    }) }));
+  });
+
+  it("hides a response whose records do not match the selected filter", async () => {
+    const { get } = mount();
+    expect(await screen.findByText(/已記錄待核對/)).toBeVisible();
+    get.mockImplementation(async () => reply({ ...page, items: [review] }));
+    fireEvent.change(screen.getByLabelText("證據審核狀態"), { target: { value: "RESOLVED" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("無法安全核對");
+    expect(screen.queryByText(/UNRESOLVED_ADJUSTMENT/)).not.toBeInTheDocument();
+  });
+
   it("uses a fixed message for unexpected errors instead of private diagnostics", async () => {
     const { get } = mount(); expect(await screen.findByText(/已記錄待核對/)).toBeVisible();
     get.mockRejectedValue(new Error("PRIVATE SYNTHETIC ERROR"));

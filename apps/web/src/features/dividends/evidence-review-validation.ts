@@ -7,6 +7,11 @@ type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
 type Review = Schemas["EvidenceReviewRecord"];
 type Page = Schemas["EvidenceReviewPage"];
+export type EvidenceReviewFilters = { status?: Review["status"]; severity?: "INFO" | "WARNING" | "CRITICAL" };
+const filterShape = z.strictObject({
+  status: z.enum(["OPEN", "ACKNOWLEDGED", "RESOLVED"]).optional(),
+  severity: z.enum(["INFO", "WARNING", "CRITICAL"]).optional(),
+});
 const id = z.uuid();
 const revision = z.int().min(1).max(2_147_483_647);
 const utc = timestamp.refine(value => value.endsWith("Z") || value.endsWith("+00:00"));
@@ -31,7 +36,7 @@ function sortedUnique(values: string[]): boolean {
   return values.every((value, index) => index === 0 || values[index - 1]! < value);
 }
 
-function consistent(page: Page, event: Event, limit: number): boolean {
+function consistent(page: Page, event: Event, limit: number, filters: EvidenceReviewFilters): boolean {
   if (!sameId(page.event_id, event.id) || (page.revision_no === event.version) !== sameId(page.revision_id, event.current_revision_id)
     || page.items.length > limit || (page.next_cursor !== null && page.items.length !== limit)) return false;
   const ids = new Set<string>(); const scopes = new Map<number, Set<string | null>>();
@@ -52,6 +57,8 @@ function consistent(page: Page, event: Event, limit: number): boolean {
     const identity = item.id.toLowerCase(); const portfolio = item.portfolio_id?.toLowerCase() ?? null;
     const prior = scopes.get(item.revision_no) ?? new Set<string | null>();
     if (!sameId(item.event_id, page.event_id) || ids.has(identity) || prior.has(portfolio)
+      || (filters.status !== undefined && item.status !== filters.status)
+      || (filters.severity !== undefined && item.severity !== filters.severity)
       || (prior.size > 0 && (portfolio === null || prior.has(null))) || !bindRevision(item.revision_no, item.revision_id)
       || !bindTime(item.revision_no, item.created_at) || !sortedUnique(item.conflicting_fields) || !sortedUnique(item.incomplete_reasons)
       || (item.reason_code === "DIVIDEND_SOURCE_CONFLICT") !== (item.conflicting_fields.length > 0)
@@ -73,10 +80,10 @@ function consistent(page: Page, event: Event, limit: number): boolean {
   return true;
 }
 
-export function checkedEvidenceReviewPage(value: unknown, event: Event, limit = 25): Page {
+export function checkedEvidenceReviewPage(value: unknown, event: Event, limit = 25, filters: EvidenceReviewFilters = {}): Page {
   try {
-    if (!validEstimateEvent(event) || !Number.isInteger(limit) || limit < 1 || limit > 100 || !pageShape.safeParse(value).success
-      || !consistent(value as Page, event, limit)) throw new Error();
+    if (!validEstimateEvent(event) || !Number.isInteger(limit) || limit < 1 || limit > 100 || !filterShape.safeParse(filters).success
+      || !pageShape.safeParse(value).success || !consistent(value as Page, event, limit, filters)) throw new Error();
     return value as Page;
   } catch {
     throw new Error("股息證據審核範圍無法安全核對；請重新載入事件及審核歷史，或檢查有效備份。");

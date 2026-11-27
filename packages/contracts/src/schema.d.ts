@@ -14180,6 +14180,8 @@ export interface operations {
     list_dividend_evidence_reviews: {
         parameters: {
             query?: {
+                status?: ("OPEN" | "ACKNOWLEDGED" | "RESOLVED") | null;
+                severity?: ("INFO" | "WARNING" | "CRITICAL") | null;
                 limit?: number;
                 cursor?: string | null;
                 q?: string;

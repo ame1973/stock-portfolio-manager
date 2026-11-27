@@ -37,6 +37,15 @@ describe("retained evidence review page checks", () => {
     expect(checkedEvidenceReviewPage({ ...page, items: [item] }, event).items[0]).toBe(item);
   });
 
+  it("checks returned rows against the selected filters without treating empty results as proof", () => {
+    const openPage = { ...page, items: [active] };
+    expect(checkedEvidenceReviewPage(openPage, event, 25, { status: "OPEN", severity: "WARNING" })).toBe(openPage);
+    expect(checkedEvidenceReviewPage({ ...page, items: [] }, event, 25, { severity: "INFO" }).items).toEqual([]);
+    expect(() => checkedEvidenceReviewPage(page, event, 25, { status: "OPEN" })).toThrow(/無法安全核對/);
+    expect(() => checkedEvidenceReviewPage(openPage, event, 25, { severity: "CRITICAL" })).toThrow(/無法安全核對/);
+    expect(() => checkedEvidenceReviewPage(openPage, event, 25, { status: "DISMISSED" } as never)).toThrow(/無法安全核對/);
+  });
+
   it("accepts a changed head only for an explicit independent-read warning", () => {
     const value = { ...page, revision_id: nextHead, revision_no: 4,
       items: [{ ...active, revision_id: nextHead, revision_no: 4 }, resolved] };
