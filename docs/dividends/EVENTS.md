@@ -2394,7 +2394,17 @@ only if its nested values and types match. Floating-point values cannot imperson
 exact financial values. Any same-transaction change requires another check. Historical replay
 must be handled separately before this current-scope check; it cannot adopt an unrelated operation.
 
-Neither helper authenticates a session, verifies current candidate/source use or establishes
+`dividend_revision_rebuild_current.require_preserved` independently rereads the frozen catalogue,
+action-review, raw ledger, receipt/cash and historical projection/setting scopes in a writer
+transaction, without requiring the old event head to remain current. Expected successor projection
+and setting rows are outside its historical boundary; additions to linked old evidence still fail
+the comparison. A change on the same SQLite connection during the reread also fails closed, even if
+an earlier captured row or an unrelated table was changed. This is only a retained-input comparison:
+it does not check the current account
+set or versions, successor results, current source or rejection, or authentication. A caller must
+check those separately; this helper is not a historical-replay check or permission to publish.
+
+None of these helpers authenticates a session, verifies current candidate/source use or establishes
 payment or eligibility. They do not prove the complete raw ledger is unchanged merely because a
 captured comparison matches. The eventual writer must independently validate current sources,
 security, all affected financial histories and final scope, and commit revision, replacement

@@ -1,15 +1,21 @@
 """Revalidate a recorded revision observation inside a serialized writer."""
 
+import sqlite3
 from dataclasses import fields, is_dataclass
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy import Connection
+from sqlalchemy.exc import SQLAlchemyError
 
+import spm_api.dividend_event_service as event_service
 import spm_api.dividend_event_writer as events
+import spm_api.dividend_revision_ledger_scope as ledger_scope
 import spm_api.dividend_revision_preview as preview
+import spm_api.dividend_revision_projection_scope as projection_scope
 import spm_api.dividend_revision_rebuild as rebuild
+import spm_api.dividend_revision_receipt_scope as receipt_scope
 
 
 def _exact(left: Any, right: Any) -> bool:
@@ -75,3 +81,52 @@ def require_current(
     if fresh is None or not _exact(fresh, observed):
         raise rebuild.RebuildError("DIVIDEND_REBUILD_SCOPE_CHANGED")
     return fresh
+
+
+def require_preserved(con: Connection, owner: UUID, observed: rebuild.RebuildObservation) -> None:
+    """Compare retained raw inputs after a possible head change, not successor authority.
+
+    This read-only check does not validate the new head, account set, source, rejection,
+    replacement results or actor. It must not be used for historical replay or as a grant.
+    """
+    if not con.in_transaction() or con.get_execution_options().get("writer") is not True:
+        raise rebuild.RebuildError("WRITE_UNIT_OF_WORK_REQUIRED")
+    if not isinstance(owner, UUID) or not isinstance(observed, rebuild.RebuildObservation):
+        raise rebuild.RebuildError("INVALID_DIVIDEND_REBUILD_SCOPE")
+    if (
+        not isinstance(observed.event, event_service.ReviewedEvent)
+        or not isinstance(observed.event.record, event_service.EventRevision)
+        or observed.owner_id != owner
+        or observed.event.record.owner_id != owner
+    ):
+        raise rebuild.RebuildError("DIVIDEND_REBUILD_SCOPE_CHANGED")
+    try:
+        raw = con.connection.driver_connection
+        if type(raw) is not sqlite3.Connection:
+            raise ValueError("Unsupported recorded scope connection")
+        # A reentrant callback can write after an earlier row was read in this transaction.
+        changes = raw.total_changes
+        record = observed.event.record
+        security = record.terms.security_id
+        actual = (
+            rebuild._security_scope(con, security),
+            rebuild._action_review_scope(con, security),
+            ledger_scope.read(con, owner, security, observed.ledger.portfolio_ids),
+            receipt_scope.read(con, owner, record.event_id),
+            projection_scope.read(
+                con, owner, record.event_id, record.revision_id, record.revision_no
+            ),
+        )
+        expected = (
+            observed.security,
+            observed.action_reviews,
+            observed.ledger,
+            observed.receipts,
+            observed.projections,
+        )
+        if not _exact(actual, expected) or raw.total_changes != changes:
+            raise rebuild.RebuildError("DIVIDEND_REBUILD_SCOPE_CHANGED")
+    except rebuild.RebuildError:
+        raise
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError, SQLAlchemyError):
+        raise rebuild.RebuildError("DIVIDEND_REBUILD_SCOPE_CHANGED") from None
