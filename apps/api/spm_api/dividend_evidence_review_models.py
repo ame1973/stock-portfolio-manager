@@ -109,3 +109,79 @@ class EvidenceReviewPage(Model):
             elif (item.revision_id, item.revision_no) != (self.revision_id, self.revision_no):
                 raise ValueError("Inconsistent active review revision")
         return self
+
+
+class EvidenceReviewQueueRecord(EvidenceReviewRecord):
+    """A retained review and the head observed for its event in this snapshot."""
+
+    current_revision_id: UUID = Field(repr=False)
+    current_revision_no: Version
+
+
+class EvidenceReviewQueuePage(Model):
+    """A selected cross-event page, not a complete or authenticated review inventory."""
+
+    model_config = ConfigDict(revalidate_instances="always")
+
+    items: Annotated[list[EvidenceReviewQueueRecord], Field(max_length=100)] = Field(repr=False)
+    next_cursor: Cursor | None = Field(repr=False)
+    scope: Literal["RETAINED_EVIDENCE_REVIEW_QUEUE_ONLY"]
+    history_completeness: Literal["UNVERIFIED"]
+    current_use_scope: Literal["REVALIDATION_REQUIRED"]
+    eligibility_scope: Literal["NOT_ESTABLISHED"]
+    document_verification: Literal["NOT_ESTABLISHED"]
+
+    @model_validator(mode="after")
+    def consistent_queue(self) -> Self:
+        try:
+            self.items = [
+                EvidenceReviewQueueRecord.model_validate(item.model_dump(warnings="error"))
+                for item in self.items
+            ]
+        except PydanticSerializationError:
+            raise ValueError("Invalid retained review queue") from None
+        identifiers = [item.id for item in self.items]
+        order = [(item.created_at, item.id.int) for item in self.items]
+        if (
+            len(identifiers) != len(set(identifiers))
+            or order != sorted(order, reverse=True)
+            or (self.next_cursor is not None and not self.items)
+        ):
+            raise ValueError("Inconsistent retained review queue")
+        heads: dict[UUID, tuple[UUID, int]] = {}
+        grouped: dict[UUID, list[EvidenceReviewRecord]] = {}
+        revision_events: dict[UUID, UUID] = {}
+        for item in self.items:
+            for revision_id in (
+                item.revision_id,
+                item.current_revision_id,
+                item.resolved_by_revision_id,
+            ):
+                if (
+                    revision_id is not None
+                    and revision_events.setdefault(revision_id, item.event_id) != item.event_id
+                ):
+                    raise ValueError("Revision is linked to multiple events")
+            head = (item.current_revision_id, item.current_revision_no)
+            if heads.setdefault(item.event_id, head) != head:
+                raise ValueError("Inconsistent selected event head")
+            grouped.setdefault(item.event_id, []).append(
+                EvidenceReviewRecord.model_validate(
+                    item.model_dump(exclude={"current_revision_id", "current_revision_no"})
+                )
+            )
+        for event_id, items in grouped.items():
+            revision_id, revision_no = heads[event_id]
+            EvidenceReviewPage(
+                event_id=event_id,
+                revision_id=revision_id,
+                revision_no=revision_no,
+                items=items,
+                next_cursor=None,
+                scope="RETAINED_EVIDENCE_REVIEWS_ONLY",
+                history_completeness="UNVERIFIED",
+                current_use_scope="REVALIDATION_REQUIRED",
+                eligibility_scope="NOT_ESTABLISHED",
+                document_verification="NOT_ESTABLISHED",
+            )
+        return self

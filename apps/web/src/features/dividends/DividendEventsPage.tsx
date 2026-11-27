@@ -19,6 +19,7 @@ import { SourceLink, SourceReadState, SourceValues } from "../sources/details";
 import { CandidateEventMatchForm } from "./CandidateEventMatchForm";
 import { DividendEstimatePanel } from "./DividendEstimatePanel";
 import { DividendEvidenceReviewPanel } from "./DividendEvidenceReviewPanel";
+import { DividendEvidenceReviewQueue } from "./DividendEvidenceReviewQueue";
 import { DividendProjectionPanel } from "./DividendProjectionPanel";
 import { DividendReceiptPanel } from "./DividendReceiptPanel";
 import { DividendRevisionPreviewPanel } from "./DividendRevisionPreviewPanel";
@@ -242,6 +243,7 @@ export function DividendEventsPage() {
   const cache = useQueryClient();
   const [editor, setEditor] = useState<Editor | null>(null);
   const [previewTarget, setPreviewTarget] = useState<Event | null>(null);
+  const [reviewQueueOpen, setReviewQueueOpen] = useState(false);
   const previewOpener = useRef<HTMLButtonElement | null>(null);
   const pageTitle = useRef<HTMLHeadingElement | null>(null);
   const [estimateRefresh, setEstimateRefresh] = useState(0);
@@ -260,6 +262,13 @@ export function DividendEventsPage() {
   const editing = editor !== null || previewTarget !== null;
   const eventsReady = !!result.data && !result.isFetching && !result.isError && !result.isPaused;
   const previewEvent = previewTarget && result.data?.items.find(record => record.id === previewTarget.id);
+  function openQueueEvent(eventId: string) {
+    if (editing) return;
+    setFilters(initialFilters);
+    page.search(eventId);
+    setReviewQueueOpen(false);
+    requestAnimationFrame(() => pageTitle.current?.focus());
+  }
   function closePreview() {
     setPreviewTarget(null);
     requestAnimationFrame(() => {
@@ -287,6 +296,9 @@ export function DividendEventsPage() {
         : <EventEditor editor={editor} onCancel={closeEditor} onSaved={record => { setNotice({ id: record.id, mode: editor.mode }); closeEditor(); }} />)}
     {previewTarget && <DividendRevisionPreviewPanel key={previewTarget.id} event={previewEvent ?? previewTarget}
       enabled={editor === null && eventsReady && !!previewEvent} eventReadVersion={result.dataUpdatedAt} onClose={closePreview} />}
+    <div><Button type="button" variant="outline" disabled={editing} aria-expanded={reviewQueueOpen} onClick={() => setReviewQueueOpen(value => !value)}>
+      {reviewQueueOpen ? "收合跨事件證據審核" : "查看跨事件證據審核"}</Button></div>
+    {reviewQueueOpen && <DividendEvidenceReviewQueue disabled={editing} onOpenEvent={openQueueEvent} />}
     <details className="rounded-lg border border-border bg-surface p-4"><summary className="flex min-h-11 cursor-pointer items-center font-medium">篩選股息事件</summary>
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><ReferenceSelect kind="securities" activeOnly={false} label="事件證券" value={filters.security_id} registration={{ onChange: event => filter({ security_id: event.target.value }) }} clearSelection={() => filter({ security_id: "" })} />
         <SelectField label="事件狀態" value={filters.workflow_status} onChange={event => filter({ workflow_status: event.target.value as typeof filters.workflow_status })}><option value="">全部事件狀態</option>{(Object.keys(statuses) as Event["workflow_status"][]).map(status => <option key={status} value={status}>{statuses[status]}</option>)}</SelectField>

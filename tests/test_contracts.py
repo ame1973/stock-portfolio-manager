@@ -65,6 +65,7 @@ def test_executable_openapi_is_generated_and_matches_implemented_baseline() -> N
         ("/api/v1/dividends/events/{event_id}/withdraw", "post"): "withdraw_dividend_event",
         ("/api/v1/dividends/events/{event_id}", "get"): "get_dividend_event",
         ("/api/v1/dividends/events/{event_id}", "patch"): "revise_dividend_event",
+        ("/api/v1/dividends/evidence-reviews", "get"): "list_dividend_evidence_review_queue",
         (
             "/api/v1/dividends/events/{event_id}/revisions",
             "get",

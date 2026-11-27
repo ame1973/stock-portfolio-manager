@@ -7,6 +7,8 @@ type Schemas = components["schemas"];
 type Event = Schemas["DividendEventRecord"];
 type Review = Schemas["EvidenceReviewRecord"];
 type Page = Schemas["EvidenceReviewPage"];
+type EventHead = Pick<Event, "id" | "current_revision_id" | "version">;
+type QueuePage = Schemas["EvidenceReviewQueuePage"];
 export type EvidenceReviewFilters = { status?: Review["status"]; severity?: "INFO" | "WARNING" | "CRITICAL" };
 const filterShape = z.strictObject({
   status: z.enum(["OPEN", "ACKNOWLEDGED", "RESOLVED"]).optional(),
@@ -31,12 +33,18 @@ const pageShape = z.strictObject({
   history_completeness: z.literal("UNVERIFIED"), current_use_scope: z.literal("REVALIDATION_REQUIRED"),
   eligibility_scope: z.literal("NOT_ESTABLISHED"), document_verification: z.literal("NOT_ESTABLISHED"),
 });
+const queueShape = z.strictObject({
+  items: z.array(itemShape.extend({ current_revision_id: id, current_revision_no: revision })).max(100),
+  next_cursor: z.string().min(1).max(1500).nullable(), scope: z.literal("RETAINED_EVIDENCE_REVIEW_QUEUE_ONLY"),
+  history_completeness: z.literal("UNVERIFIED"), current_use_scope: z.literal("REVALIDATION_REQUIRED"),
+  eligibility_scope: z.literal("NOT_ESTABLISHED"), document_verification: z.literal("NOT_ESTABLISHED"),
+});
 
 function sortedUnique(values: string[]): boolean {
   return values.every((value, index) => index === 0 || values[index - 1]! < value);
 }
 
-function consistent(page: Page, event: Event, limit: number, filters: EvidenceReviewFilters): boolean {
+function consistent(page: Page, event: EventHead, limit: number, filters: EvidenceReviewFilters): boolean {
   if (!sameId(page.event_id, event.id) || (page.revision_no === event.version) !== sameId(page.revision_id, event.current_revision_id)
     || page.items.length > limit || (page.next_cursor !== null && page.items.length !== limit)) return false;
   const ids = new Set<string>(); const scopes = new Map<number, Set<string | null>>();
@@ -87,5 +95,45 @@ export function checkedEvidenceReviewPage(value: unknown, event: Event, limit = 
     return value as Page;
   } catch {
     throw new Error("股息證據審核範圍無法安全核對；請重新載入事件及審核歷史，或檢查有效備份。");
+  }
+}
+
+export function checkedEvidenceReviewQueue(value: unknown, limit = 25, filters: EvidenceReviewFilters = {}): QueuePage {
+  try {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !filterShape.safeParse(filters).success
+      || !queueShape.safeParse(value).success) throw new Error();
+    const queue = value as QueuePage;
+    if (queue.items.length > limit || (queue.next_cursor !== null && queue.items.length !== limit)) throw new Error();
+    const ids = new Set<string>(); const revisions = new Map<string, string>();
+    const groups = new Map<string, { head: EventHead; items: Review[] }>();
+    let previous: QueuePage["items"][number] | null = null;
+    for (const item of queue.items) {
+      const identity = item.id.toLowerCase(); const eventId = item.event_id.toLowerCase();
+      const bindRevision = (value: string) => {
+        const key = value.toLowerCase();
+        if (revisions.has(key) && revisions.get(key) !== eventId) return false;
+        revisions.set(key, eventId); return true;
+      };
+      if (ids.has(identity) || !bindRevision(item.revision_id) || !bindRevision(item.current_revision_id)
+        || (item.resolved_by_revision_id !== null && !bindRevision(item.resolved_by_revision_id))) throw new Error();
+      if (previous !== null) {
+        const time = timestampMicros(item.created_at); const preceding = timestampMicros(previous.created_at);
+        if (time > preceding || (time === preceding && identity >= previous.id.toLowerCase())) throw new Error();
+      }
+      const { current_revision_id, current_revision_no, ...review } = item;
+      const group: { head: EventHead; items: Review[] } = groups.get(eventId)
+        ?? { head: { id: item.event_id, current_revision_id, version: current_revision_no }, items: [] };
+      if (!sameId(group.head.current_revision_id, current_revision_id) || group.head.version !== current_revision_no) throw new Error();
+      group.items.push(review); groups.set(eventId, group); ids.add(identity); previous = item;
+    }
+    for (const { head, items } of groups.values()) {
+      const page: Page = { event_id: head.id, revision_id: head.current_revision_id, revision_no: head.version, items,
+        next_cursor: null, scope: "RETAINED_EVIDENCE_REVIEWS_ONLY", history_completeness: "UNVERIFIED",
+        current_use_scope: "REVALIDATION_REQUIRED", eligibility_scope: "NOT_ESTABLISHED", document_verification: "NOT_ESTABLISHED" };
+      if (!consistent(page, head, limit, filters)) throw new Error();
+    }
+    return queue;
+  } catch {
+    throw new Error("跨事件證據審核無法安全核對；請重新載入或檢查有效備份。");
   }
 }

@@ -20,7 +20,7 @@ from spm_api.pagination import PageDep, paginate, validate_time_page
 from spm_api.security import AuthDep
 
 router = APIRouter(
-    prefix="/api/v1/dividends/events/{event_id}",
+    prefix="/api/v1/dividends",
     tags=["Dividend evidence reviews"],
     responses={code: {"model": Error} for code in (401, 403, 404, 422, 503)},
 )
@@ -57,7 +57,14 @@ def _checked_rows(
     return integrity.checked_rows(con, retained)
 
 
-@router.get("/evidence-reviews", operation_id="list_dividend_evidence_reviews")
+def _sqlite(con: Connection) -> sqlite3.Connection:
+    raw = con.connection.driver_connection
+    if type(raw) is not sqlite3.Connection:
+        raise ValueError("Unsupported review history connection")
+    return raw
+
+
+@router.get("/events/{event_id}/evidence-reviews", operation_id="list_dividend_evidence_reviews")
 def evidence_reviews(
     event_id: UUID,
     request: Request,
@@ -69,9 +76,7 @@ def evidence_reviews(
     validate_time_page(page)
     try:
         with unit_of_work(request.app.state.engine) as con:
-            raw = con.connection.driver_connection
-            if type(raw) is not sqlite3.Connection:
-                raise ValueError("Unsupported review history connection")
+            raw = _sqlite(con)
             changes = raw.total_changes
             retained = _owned(con, auth.owner.id, event_id)
             records = _checked_rows(con, retained)
@@ -124,6 +129,105 @@ def evidence_reviews(
             # A callback could otherwise hide a changed row from the filtered query.
             if raw.total_changes != changes:
                 raise ValueError("Review history changed during the read")
+            return result
+    except (
+        ValueError,
+        TypeError,
+        AttributeError,
+        KeyError,
+        OverflowError,
+        SQLAlchemyError,
+        PydanticSerializationError,
+    ):
+        raise _unavailable() from None
+
+
+@router.get("/evidence-reviews", operation_id="list_dividend_evidence_review_queue")
+def evidence_review_queue(
+    request: Request,
+    auth: AuthDep,
+    page: PageDep,
+    status: Literal["OPEN", "ACKNOWLEDGED", "RESOLVED"] | None = None,
+    severity: Literal["INFO", "WARNING", "CRITICAL"] | None = None,
+) -> models.EvidenceReviewQueuePage:
+    validate_time_page(page)
+    try:
+        with unit_of_work(request.app.state.engine) as con:
+            raw = _sqlite(con)
+            changes = raw.total_changes
+            rows = (
+                con.execute(
+                    text(r"""
+                        SELECT r.id,r.event_id,r.created_at,r.status,r.severity
+                        FROM review_items r JOIN dividend_events e ON e.id=r.event_id
+                        LEFT JOIN dividend_event_controls c ON c.event_id=e.id
+                        WHERE r.kind='DIVIDEND_EVIDENCE' AND (c.owner_id=:owner OR EXISTS(
+                            SELECT 1 FROM dividend_event_revisions previous
+                            JOIN audit_events a ON a.entity_id=previous.id
+                            WHERE previous.event_id=e.id AND a.owner_id=:owner
+                              AND a.entity_type='dividend_event_revision'
+                              AND a.action='DIVIDEND_EVENT_REVISED'))
+                          AND (:status IS NULL OR r.status=:status)
+                          AND (:severity IS NULL OR r.severity=:severity)
+                          AND (r.id LIKE :search ESCAPE '\'
+                            OR r.event_id LIKE :search ESCAPE '\'
+                            OR r.reason_code LIKE :search ESCAPE '\')
+                          AND (:cursor_value IS NULL
+                            OR (r.created_at,r.id)<(:cursor_value,:cursor_id))
+                        ORDER BY r.created_at DESC,r.id DESC LIMIT :limit
+                    """),
+                    {
+                        **page.params(),
+                        "owner": str(auth.owner.id),
+                        "status": status,
+                        "severity": severity,
+                    },
+                )
+                .mappings()
+                .all()
+            )
+            histories: dict[
+                UUID, tuple[reviews.EvidenceReviewHistory, dict[str, models.EvidenceReviewRecord]]
+            ] = {}
+
+            def convert(row: RowMapping) -> models.EvidenceReviewQueueRecord:
+                identifier = events._uuid(row["event_id"])
+                if identifier not in histories:
+                    try:
+                        retained = _owned(con, auth.owner.id, identifier)
+                    except ApiError as error:
+                        if error.status != 404:
+                            raise
+                        raise ValueError("Inconsistent selected event") from None
+                    histories[identifier] = (retained, _checked_rows(con, retained))
+                retained, records = histories[identifier]
+                item = records[row["id"]]
+                if (
+                    row["created_at"] != stamp(item.created_at)
+                    or row["status"] != item.status
+                    or row["severity"] != item.severity
+                ):
+                    raise ValueError("Inconsistent selected review")
+                return models.EvidenceReviewQueueRecord(
+                    **item.model_dump(),
+                    current_revision_id=retained.revision_id,
+                    current_revision_no=retained.revision_no,
+                )
+
+            # Verify the extra row too; it determines whether a continuation is offered.
+            checked = {row["id"]: convert(row) for row in rows}
+            selected = paginate(rows, page, "created_at", lambda row: checked[row["id"]])
+            result = models.EvidenceReviewQueuePage(
+                items=selected.items,
+                next_cursor=selected.next_cursor,
+                scope="RETAINED_EVIDENCE_REVIEW_QUEUE_ONLY",
+                history_completeness="UNVERIFIED",
+                current_use_scope="REVALIDATION_REQUIRED",
+                eligibility_scope="NOT_ESTABLISHED",
+                document_verification="NOT_ESTABLISHED",
+            )
+            if raw.total_changes != changes:
+                raise ValueError("Review queue changed during the read")
             return result
     except (
         ValueError,

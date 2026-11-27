@@ -883,6 +883,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dividends/evidence-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence Review Queue */
+        get: operations["list_dividend_evidence_review_queue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dividends/observations": {
         parameters: {
             query?: never;
@@ -3986,6 +4003,111 @@ export interface components {
              * @constant
              */
             scope: "RETAINED_EVIDENCE_REVIEWS_ONLY";
+        };
+        /**
+         * EvidenceReviewQueuePage
+         * @description A selected cross-event page, not a complete or authenticated review inventory.
+         */
+        EvidenceReviewQueuePage: {
+            /**
+             * Current Use Scope
+             * @constant
+             */
+            current_use_scope: "REVALIDATION_REQUIRED";
+            /**
+             * Document Verification
+             * @constant
+             */
+            document_verification: "NOT_ESTABLISHED";
+            /**
+             * Eligibility Scope
+             * @constant
+             */
+            eligibility_scope: "NOT_ESTABLISHED";
+            /**
+             * History Completeness
+             * @constant
+             */
+            history_completeness: "UNVERIFIED";
+            /** Items */
+            items: components["schemas"]["EvidenceReviewQueueRecord"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "RETAINED_EVIDENCE_REVIEW_QUEUE_ONLY";
+        };
+        /**
+         * EvidenceReviewQueueRecord
+         * @description A retained review and the head observed for its event in this snapshot.
+         */
+        EvidenceReviewQueueRecord: {
+            /**
+             * Acknowledgement Scope
+             * @constant
+             */
+            acknowledgement_scope: "NOT_ESTABLISHED";
+            /** Conflicting Fields */
+            conflicting_fields: ("ex_date" | "announce_date" | "record_date" | "pay_date" | "event_type" | "currency" | "dps" | "adjustment_basis")[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Current Revision Id
+             * Format: uuid
+             */
+            current_revision_id: string;
+            /** Current Revision No */
+            current_revision_no: number;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incomplete Reasons */
+            incomplete_reasons: string[];
+            /** Portfolio Id */
+            portfolio_id: string | null;
+            /**
+             * Reason Code
+             * @enum {string}
+             */
+            reason_code: "DIVIDEND_SOURCE_CONFLICT" | "DIVIDEND_INCOMPLETE";
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Resolved By Revision Id */
+            resolved_by_revision_id: string | null;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision No */
+            revision_no: number;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "RETAINED_EVIDENCE_REVIEW_ONLY";
+            /**
+             * Severity
+             * @constant
+             */
+            severity: "WARNING";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
         };
         /**
          * EvidenceReviewRecord
@@ -14711,6 +14833,77 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_dividend_evidence_review_queue: {
+        parameters: {
+            query?: {
+                status?: ("OPEN" | "ACKNOWLEDGED" | "RESOLVED") | null;
+                severity?: ("INFO" | "WARNING" | "CRITICAL") | null;
+                limit?: number;
+                cursor?: string | null;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceReviewQueuePage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

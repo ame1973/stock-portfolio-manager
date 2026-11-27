@@ -729,6 +729,31 @@ problems are resolved, or an owner holds eligible shares. This read does not cre
 change event/receipt/cash/FX/audit history, or contact providers. An ordinary idle-session heartbeat
 may still update session activity.
 
+## Cross-event evidence-review queue
+
+`GET /api/v1/dividends/evidence-reviews` is an authenticated, private no-store read of retained
+`DIVIDEND_EVIDENCE` reviews across the owner's events. It accepts bounded `limit`, a descending
+creation-time/ID cursor, literal `q` over event ID, review ID or reason code, and optional status and
+severity filters with the same values as the per-event history. Each selected row carries the
+original review and the event head observed in that read snapshot. The API validates the complete
+retained evidence-review history for every selected event, including the extra row used to decide
+whether a cursor exists. A same-connection write during the read, including one later rolled back,
+fails closed; inconsistent selected history returns the fixed review-unavailable error.
+
+This is a selected page, not a verified inventory of every event or review kind. Unselected events
+are not scanned for corruption, `ACKNOWLEDGED` remains an unverified stored value, and an empty page
+does not prove that history is complete or that outstanding issues are resolved. The queue does not
+include receipt, ledger-change or rebuild reconciliation tasks, authenticate acknowledgments, verify
+source documents or grant eligibility. A later request or page is a separate snapshot; re-read before
+use rather than assuming the observed event head remains current.
+
+In `/dividends`, explicitly open **Cross-event evidence reviews** to load the queue. Filters and page
+contents stay in mounted component memory; closing or changing filters aborts obsolete reads. The
+browser checks selected filter values, global order and duplicate identities, each event's head and
+review lineage, and revision-ID reuse across events. Choosing **View this event** closes the queue,
+clears existing event filters and searches the event list for the selected stable ID. This navigation
+does not resolve an item or authorize any financial action.
+
 ## Evidence-review history in the browser
 
 In `/dividends`, expand an event and choose **View evidence-review history** to request its retained

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DividendEventsPage } from "./DividendEventsPage";
 import { account as receiptAccount } from "./projection-test-data";
 import { reconciliation } from "./reconciliation-test-data";
+import { reviewQueue } from "./evidence-review-queue-test-data";
 import { inputs as voidInputs, combinedReceipt as recordedReceipt } from "./receipt-void-test-data";
 import { inputs as directVoidInputs, receipt as directReceipt } from "./direct-receipt-void-test-data";
 
@@ -58,6 +59,27 @@ async function openEvent() {
 }
 
 describe("dividend event workspace", () => {
+  it("loads the cross-event review queue only on request and opens the chosen event", async () => {
+    const path = "/api/v1/dividends/evidence-reviews";
+    const get = reads({ [path]: reviewQueue }); const post = vi.spyOn(api, "POST"); const cache = renderPage();
+    await screen.findByRole("heading", { name: "股息事件", level: 1 });
+    fireEvent.click(screen.getByText("篩選股息事件"));
+    fireEvent.change(screen.getByLabelText("事件狀態"), { target: { value: "CONFLICT" } });
+    expect(screen.getByLabelText("事件狀態")).toHaveValue("CONFLICT");
+    expect(get).not.toHaveBeenCalledWith(path, expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "查看跨事件證據審核" }));
+    const panel = await screen.findByRole("region", { name: "跨事件證據審核" });
+    expect(await within(panel).findByText(/已記錄待核對/)).toBeVisible();
+    fireEvent.click(within(panel).getAllByRole("button", { name: "查看此事件" })[0]!);
+    expect(screen.queryByRole("region", { name: "跨事件證據審核" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("事件狀態")).toHaveValue("");
+    await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/dividends/events", expect.objectContaining({
+      params: expect.objectContaining({ query: expect.objectContaining({ q: reviewQueue.items[0]!.event_id }) }),
+    })));
+    expect(cache.getQueryCache().getAll().some(query => JSON.stringify(query.queryKey).includes("evidence-review-queue"))).toBe(false);
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("reads retained evidence reviews only after explicit expansion and discards them on collapse", async () => {
     const path = "/api/v1/dividends/events/{event_id}/evidence-reviews";
     const review: Schemas["EvidenceReviewRecord"] = { id: "55555555-5555-4555-8555-555555555555", event_id: event.id,
