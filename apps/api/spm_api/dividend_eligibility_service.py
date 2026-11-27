@@ -1,5 +1,6 @@
 """Read owned recorded dividend-share observations from a consistent ledger snapshot."""
 
+import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -558,6 +559,8 @@ def get(
 
     Callers authenticate separately. A later economic writer must re-read current
     facts in its writer transaction rather than treating this snapshot as a grant.
+    SQLite-counted row changes on this connection fail the read, including rolled-back
+    changes; this does not detect schema changes or writes on other connections.
     """
     if (
         not con.in_transaction()
@@ -570,6 +573,13 @@ def get(
         or rule not in ("ORDINARY_PRE_EX_DATE", "REQUIRES_REVIEW")
     ):
         raise EligibilityHistoryError("INVALID_ELIGIBILITY_SCOPE")
+    try:
+        raw = con.connection.driver_connection
+        if type(raw) is not sqlite3.Connection:
+            raise ValueError("Unsupported eligibility connection")
+        changes = raw.total_changes
+    except (AttributeError, TypeError, ValueError):
+        raise EligibilityHistoryError("ELIGIBILITY_HISTORY_UNAVAILABLE") from None
     if (
         con.execute(
             text("SELECT 1 FROM owners WHERE id=:id AND is_active=1"), {"id": str(owner_id)}
@@ -586,6 +596,8 @@ def get(
         .first()
     )
     if portfolio is None:
+        if raw.total_changes != changes:
+            raise EligibilityHistoryError("ELIGIBILITY_HISTORY_UNAVAILABLE")
         return None
     if (
         con.execute(text("SELECT 1 FROM securities WHERE id=:id"), {"id": str(security_id)}).first()
@@ -640,7 +652,7 @@ def get(
             if reviewed_creation_gap
             else "NO_RECORDED_CREATION_GAP_REVIEW"
         )
-        return RecordedEligibilityBook(
+        result = RecordedEligibilityBook(
             owner_id,
             portfolio_id,
             security_id,
@@ -653,5 +665,8 @@ def get(
             accounts,
             max(observed, default=None),
         )
+        if raw.total_changes != changes:
+            raise ValueError("Eligibility history changed during the read")
+        return result
     except (ValueError, TypeError, KeyError, OverflowError):
         raise EligibilityHistoryError("ELIGIBILITY_HISTORY_UNAVAILABLE") from None
