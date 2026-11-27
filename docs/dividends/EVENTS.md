@@ -2449,9 +2449,10 @@ unverified origins, and separately lists portfolio identities actually present i
 projection or receipt origins. Missing legacy origins do not acquire an invented historical
 portfolio. The potential invalidation set includes current portfolios requiring work, known
 retained portfolios and every currently owned portfolio linked to the security by trades,
-transfers or positions; the two security-scope queries must agree. This view itself is a read-only
-plan, not an authenticated decision, source validation, reconciliation task or financial grant.
-Any eventual writer must recheck the scope after all same-transaction changes and preserve all
+transfers or positions; the two security-scope queries must agree. A same-connection write during
+classification fails closed, including a write that was later rolled back. This view itself is a
+read-only plan, not an authenticated decision, source validation, reconciliation task or financial
+grant. Any eventual writer must recheck the scope after all same-transaction changes and preserve all
 event, rejection and missing-origin fences until its atomic path is complete.
 
 ## Inert revision-rebuild manifest storage

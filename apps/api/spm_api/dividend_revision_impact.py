@@ -68,6 +68,9 @@ def inspect(
     not complete ownership or eligibility. Repeat the entire check after any transaction change.
     """
     fresh = current.require_current(con, owner, decision, proposal, observed)
+    raw = current._sqlite(con)
+    # Detect callbacks that write after the current-observation recheck.
+    changes = raw.total_changes
     try:
         if not isinstance(fresh, rebuild.RebuildObservation) or not current._exact(fresh, observed):
             raise ValueError("Inconsistent current observation")
@@ -161,12 +164,17 @@ def inspect(
             or not affected <= set(portfolios)
         ):
             raise ValueError("Incomplete recorded impact")
-        return RevisionImpact(
+        result = RevisionImpact(
             snapshot.retained.event_id,
             snapshot.retained.revision_id,
             snapshot.retained.revision_no,
             tuple(accounts),
             tuple(portfolios[identifier] for identifier in sorted(affected)),
         )
+        if raw.total_changes != changes:
+            raise rebuild.RebuildError("DIVIDEND_REBUILD_SCOPE_CHANGED")
+        return result
+    except rebuild.RebuildError:
+        raise
     except (ValueError, TypeError, KeyError, OverflowError, SQLAlchemyError):
         raise rebuild.RebuildError("DIVIDEND_REBUILD_IMPACT_UNAVAILABLE") from None
