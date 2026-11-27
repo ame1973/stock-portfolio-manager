@@ -2577,9 +2577,11 @@ same WAL snapshot. It selects only the latest recorded projection, never adds ol
 amounts, and follows legacy receipts through their original entitlement revisions and direct
 receipts through their retained physical revisions to the stable event and account. It counts
 each active recorded receipt once without manufacturing an entitlement. The original receipts,
-cash entries, FX snapshots and audit records are not changed. The projection's
-as-of date applies to that projection only; the receipt side includes all retained active receipts,
-not just receipts dated on or before the projection's as-of date.
+cash entries, FX snapshots and audit records are not changed. The reader fails closed if SQLite
+counts same-connection row changes during the read, including changes later rolled back. This check
+does not detect schema changes or writes on another connection; the transaction supplies the WAL
+snapshot. The projection's as-of date applies to that projection only; the receipt side includes all
+retained active receipts, not just receipts dated on or before the projection's as-of date.
 
 Only an `EXPECTED` projection matching the event head is compared. A missing or stale projection,
 missing cash link, unavailable history, absent active receipt or mixed active receipt currencies

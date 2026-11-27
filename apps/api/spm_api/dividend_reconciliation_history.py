@@ -1,5 +1,6 @@
 """Compare recorded projections and receipt links without granting financial authority."""
 
+import sqlite3
 from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import Decimal
@@ -71,18 +72,32 @@ class RecordedReconciliation:
 def read(
     con: Connection, owner: UUID, event_id: UUID, account_id: UUID
 ) -> RecordedReconciliation | None:
-    """Read a single retained snapshot, not current authority or confirmed payment."""
+    """Read a single retained snapshot, not current authority or confirmed payment.
+
+    SQLite-counted row changes on this connection fail the read, even if rolled back;
+    this does not detect schema changes or writes on other connections.
+    """
     if not con.in_transaction() or not all(
         isinstance(value, UUID) for value in (owner, event_id, account_id)
     ):
         raise ReconciliationHistoryError("INVALID_DIVIDEND_RECONCILIATION_SCOPE")
     try:
+        raw = con.connection.driver_connection
+        if type(raw) is not sqlite3.Connection:
+            raise ValueError("Unsupported reconciliation connection")
+        changes = raw.total_changes
+
+        def checked(value: RecordedReconciliation | None) -> RecordedReconciliation | None:
+            if raw.total_changes != changes:
+                raise ValueError("Recorded reconciliation changed during the read")
+            return value
+
         event = events.get(con, owner, event_id)
         if event is None:
-            return None
+            return checked(None)
         versions = projections.history(con, owner, event_id, account_id)
         if versions is None:
-            return None
+            return checked(None)
         history = receipts.history(con, owner, event_id, account_id)
         if history is None:
             raise ValueError("Inconsistent retained scope")
@@ -145,35 +160,37 @@ def read(
             state="NO_RECORDED_PROJECTION",
         )
         if version is None:
-            return result
+            return checked(result)
         if (version.revision_id, version.revision_no) != (
             event.record.revision_id,
             event.record.revision_no,
         ):
-            return replace(result, state="STALE_RECORDED_PROJECTION")
+            return checked(replace(result, state="STALE_RECORDED_PROJECTION"))
         if version.state != "EXPECTED" or version.accrual is None:
-            return replace(result, state="PROJECTION_NOT_COMPARABLE")
+            return checked(replace(result, state="PROJECTION_NOT_COMPARABLE"))
         accrual = version.accrual
         result = replace(result, currency=accrual.currency, recorded_expected=accrual.net_local)
         if missing_cash:
-            return replace(result, state="CASH_LINK_UNAVAILABLE")
+            return checked(replace(result, state="CASH_LINK_UNAVAILABLE"))
         if not result.active_receipts:
-            return replace(result, state="NO_RECORDED_ACTIVE_RECEIPTS")
+            return checked(replace(result, state="NO_RECORDED_ACTIVE_RECEIPTS"))
         comparison = reconcile([accrual], facts)[0]
         result = replace(result, comparison_quality=comparison.quality)
         if comparison.received_local is None or comparison.outstanding_local is None:
-            return replace(result, state="CURRENCY_REVIEW")
+            return checked(replace(result, state="CURRENCY_REVIEW"))
         states: dict[str, RecordedState] = {
             "PARTIAL": "RECORDED_PARTIAL",
             "RECEIVED": "RECORDED_RECEIVED",
             "OVER_RECEIVED": "RECORDED_OVER_RECEIVED",
             "NEEDS_REVIEW": "RECORDED_NEEDS_REVIEW",
         }
-        return replace(
-            result,
-            recorded_received=comparison.received_local,
-            recorded_outstanding=comparison.outstanding_local,
-            state=states[comparison.receipt_state],
+        return checked(
+            replace(
+                result,
+                recorded_received=comparison.received_local,
+                recorded_outstanding=comparison.outstanding_local,
+                state=states[comparison.receipt_state],
+            )
         )
     except (
         events.EventError,
@@ -182,6 +199,7 @@ def read(
         FinanceError,
         ValueError,
         TypeError,
+        AttributeError,
         KeyError,
         OverflowError,
         SQLAlchemyError,
